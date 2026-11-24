@@ -383,15 +383,29 @@ export const Game = {
     const run = G.run;
     const minutes = run.time / 60;
     // Exponential in both time and stages cleared.
-    // gentler per-minute growth now that stages last up to 10 minutes
-    run.diff = Math.pow(1.045, minutes) * Math.pow(1.22, run.stagesCleared);
-    // enemies also keep up with how strong you've become (levels, items, tomes, weapons)
+    run.diff = Math.pow(1.055, minutes) * Math.pow(1.3, run.stagesCleared);
+    // Enemies keep up with YOU: their health follows your damage per second, their damage
+    // follows how much punishment you can take (HP, armor, shield). Updated twice a second.
+    run.powerT = (run.powerT || 0) - G.dt;
     const p = G.player;
-    if (p) {
-      const tomeLv = Object.values(p.tomes || {}).reduce((a, t) => a + t.level, 0);
-      const weaponLv = Object.values(p.weapons || {}).reduce((a, w) => a + w.level - 1, 0);
-      run.powerScale = 1 + 0.03 * (p.level - 1) + 0.012 * (p.itemCount || 0) + 0.004 * (tomeLv + weaponLv);
-    } else run.powerScale = 1;
+    if (p && p.stats.damage && run.powerT <= 0) {
+      run.powerT = 0.5;
+      const s = p.stats;
+      const critF = 1 + Math.min(1, s.crit) * (s.critMult - 1);
+      // what your build should deal (main weapon + extra weapons + items)...
+      const formula = s.damage * s.attackSpeed * critF * 4 * (1 + 0.05 * (p.itemCount || 0)) * (1 + 0.35 * ((p.weaponOrder?.length || 1) - 1)) * (1 + (s.projectiles || 0) * 0.5);
+      // ...and what you actually dealt recently (smoothed; capped so one big burst doesn't spike it)
+      if (run.dps > 0 && run.dps !== run.lastDpsSample) {
+        run.lastDpsSample = run.dps;
+        run.dpsAvg = run.dpsAvg ? run.dpsAvg * 0.85 + run.dps * 0.15 : run.dps;
+      }
+      const dps = Math.max(formula, Math.min(run.dpsAvg || 0, formula * 3));
+      run.playerDps = dps;
+      run.hpScale = Math.pow(Math.max(1, dps / 50), 0.75);
+      const ehp = s.maxHp * (1 + Math.max(0, s.armor) / 100) + (s.maxShield || 0);
+      run.playerEhp = ehp;
+      run.dmgScale = Math.pow(Math.max(1, ehp / 110), 0.7);
+    }
     run.coinScale = Math.pow(run.diff, 0.6);
     run.xpScale = Math.pow(run.diff, 0.65);
   },
@@ -684,7 +698,7 @@ export const Game = {
     }
     if (run.loop > 0 && Math.random() < 0.5 + run.loop * 0.2) {
       // later loops can bring an extra elite guard
-      spawnEnemy(Object.keys(run.stage.enemies)[0], pos.clone().add(_v.set(4, 0, 4)), { elite: 'overloading' });
+      spawnEnemy(Object.keys(run.stage.enemies)[0], P.pos.clone().add(_v.set(4, 0, 4)), { elite: 'overloading' });
     }
     if (G.ui) {
       G.ui.banner(def.name, def.title, true);

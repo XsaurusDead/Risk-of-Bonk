@@ -33,8 +33,8 @@ export class Director {
   }
 
   get cap() {
-    const base = G.quality === 'low' ? 55 : 100;
-    return this.t > STAGE_TIME ? base + 20 : base;
+    const base = G.quality === 'low' ? 75 : 140;
+    return this.t > STAGE_TIME ? base + 25 : base;
   }
 
   /** Overtime multiplier for new spawns: x1.35 every 30 seconds past 10:00. */
@@ -67,12 +67,12 @@ export class Director {
     }
 
     // --- steady trickle: target population grows each minute
-    const target = Math.min(this.cap, 10 + min * 7 + run.stagesCleared * 4 + run.loop * 10);
+    const target = Math.min(this.cap, 16 + min * 11 + run.stagesCleared * 9 + run.loop * 14);
     this.trickleT -= dt;
     if (this.trickleT <= 0) {
-      this.trickleT = rand(0.7, 1.3);
+      this.trickleT = rand(0.45, 0.85) / (1 + run.stagesCleared * 0.1);
       const alive = aliveCount();
-      if (alive < target) this.spawnGroup(Math.min(target - alive, 1 + Math.floor(min / 3) + Math.floor(Math.random() * 3)));
+      if (alive < target) this.spawnGroup(Math.min(target - alive, 2 + Math.floor(min / 2) + run.stagesCleared + Math.floor(Math.random() * 3)));
     }
 
     // --- huge wave: one minute of big groups arriving fast from all sides
@@ -81,7 +81,7 @@ export class Director {
       if (this.surgeT <= 0) {
         this.surgeT = rand(0.35, 0.6) / this.surgeMult;
         const room = this.cap + 45 - aliveCount();
-        const size = Math.round((4 + min * 0.6 + run.stagesCleared) * this.surgeMult + Math.random() * 3);
+        const size = Math.round((6 + min * 0.9 + run.stagesCleared * 1.5) * this.surgeMult + Math.random() * 3);
         if (room > 0) this.spawnGroup(Math.min(room, size), { far: true });
       }
       if (this.t + dt >= this.surgeUntil) G.ui?.banner('Wave survived', 'The swarm thins out… for now');

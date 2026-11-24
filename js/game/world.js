@@ -18,6 +18,12 @@ const SHRINE_GLYPH = { heal: ['D', 17], combat: ['H', 24], boss: ['K', 29], xp: 
 export const SIZE = 520;
 const SEGS = 220;
 const AREA_MULT = 3.2; // decor density scale vs. the old 260m maps
+// collision heights (at scale 1) of the procedural decoration, and which tops you can stand on
+const PROC_HEIGHT = {
+  tree: 5, pine: 5.3, rock: 1.3, ruin_pillar: 4.8, cactus: 3.6, bones: 1.2, sandstone: 3.4, obelisk: 7.6, ice_spike: 3.2,
+  giant_mushroom: 4.2, crystal: 2.2, obsidian_spike: 4, lava_rock: 1.4, dead_tree: 4, void_crystal: 3.4,
+};
+const WALKABLE = new Set(['rock', 'ruin_pillar', 'sandstone', 'lava_rock', 'bones']);
 // model decoration is bucketed into N x N map sections; sections out of range aren't drawn
 const FAR_CHUNKS = 5; // trees, rocks: culled at the fog distance
 const NEAR_CHUNKS = 8; // small ground cover: culled close to the camera
@@ -151,6 +157,14 @@ export class World {
       const dx = x - p.x, dz = z - p.z;
       if (dx * dx + dz * dz < p.r * p.r && y >= p.top - 0.8 && p.top > h) h = p.top;
     }
+    // tops of rocks, pillars and ruin walls you can stand on
+    if (y !== Infinity && this.colHash) {
+      for (const c of this.colHash.query(x, z, 3)) {
+        if (!c.walk || c.y1 <= h || y < c.y1 - 0.8) continue;
+        const dx = x - c.x, dz = z - c.z;
+        if (dx * dx + dz * dz < c.r * c.r * 0.85) h = c.y1;
+      }
+    }
     return h;
   }
 
@@ -281,10 +295,15 @@ export class World {
     this.portalPos = best || new THREE.Vector3(120, 0, 120);
   }
 
-  addCollider(x, z, r) {
-    const c = { x, z, r };
+  /**
+   * Solid round obstacle from height y0 to y1. Above its top you can jump over it (or,
+   * if `walk`, stand on it); below its bottom (e.g. under an arch) you pass freely.
+   */
+  addCollider(x, z, r, y0 = -Infinity, y1 = Infinity, walk = false) {
+    const c = { x, z, r, y0, y1, walk };
     this.colliders.push(c);
     this.colHash.insert(c, x, z);
+    return c;
   }
 
   // ---------------------------------------------------------------- structures
@@ -326,7 +345,9 @@ export class World {
     const addMerged = (kind, x, y, z, rot, scale = 1, tintOverride) => {
       const key = kind + (tintOverride || tint || '');
       if (!geoCache[key]) {
-        geoCache[key] = buildMerged(structureParts(kind, tintOverride || tint, this.rng));
+        const parts = structureParts(kind, tintOverride || tint, this.rng);
+        geoCache[key] = buildMerged(parts);
+        geoCache[key].parts = parts;
         if (geoCache[key].geo) this.disposables.push(geoCache[key].geo);
       }
       const m = new THREE.Mesh(geoCache[key].geo, MAT.vc);
@@ -343,19 +364,39 @@ export class World {
         const c = Math.cos(s.rot), sn = Math.sin(s.rot);
         const local = (lx, lz) => [s.x + lx * c - lz * sn, s.z + lx * sn + lz * c];
         addMerged('ruin_floor', s.x, s.y, s.z, s.rot);
-        // two broken walls and an arch around a paved floor
+        // two broken walls and an arch around a paved floor; colliders follow the real
+        // wall segments (missing ones stay open) and are as tall as the stones
+        const wallColliders = (wx, wz, rot) => {
+          const by = this.heightAt(wx, wz);
+          const m = addMerged('ruin_wall', wx, by, wz, rot);
+          const parts = geoCache['ruin_wall' + (tint || '')].parts;
+          const c = Math.cos(rot), sn = Math.sin(rot);
+          for (const p of parts) {
+            if (p[0] !== 'box' || p[3][1] < 1) continue; // skip the low base slab
+            const lx = p[2][0], hgt = p[3][1];
+            // two circles per 2.2 m segment so the wall has no see-through seams
+            for (const off of [-0.55, 0.55]) {
+              const x = wx + (lx + off) * c, z = wz + (lx + off) * sn * -1;
+              this.addCollider(x, z, 0.75, by - 1, by + hgt, true);
+            }
+          }
+          return m;
+        };
         const [w1x, w1z] = local(0, -8);
-        addMerged('ruin_wall', w1x, this.heightAt(w1x, w1z), w1z, s.rot);
-        for (let k = -2; k <= 2; k++) { const [x, z] = local(k * 2.2, -8); this.addCollider(x, z, 1.1); }
+        wallColliders(w1x, w1z, s.rot);
         const [w2x, w2z] = local(-8, 0);
-        addMerged('ruin_wall', w2x, this.heightAt(w2x, w2z), w2z, s.rot + Math.PI / 2);
-        for (let k = -2; k <= 2; k++) { const [x, z] = local(-8, k * 2.2); this.addCollider(x, z, 1.1); }
+        wallColliders(w2x, w2z, s.rot + Math.PI / 2);
         const [ax, az] = local(6, 6);
-        addMerged('ruin_arch', ax, this.heightAt(ax, az), az, s.rot + Math.PI / 4);
+        const ay = this.heightAt(ax, az);
+        addMerged('ruin_arch', ax, ay, az, s.rot + Math.PI / 4);
         const ca = Math.cos(s.rot + Math.PI / 4), sa = Math.sin(s.rot + Math.PI / 4);
-        this.addCollider(ax + ca * 2.6, az + sa * 2.6, 0.8);
-        this.addCollider(ax - ca * 2.6, az - sa * 2.6, 0.8);
-        this.addCollider(...local(-4.5, -4.5), 0.6);
+        // arch columns (5.2 m) with the lintel on top: you can walk through the arch
+        this.addCollider(ax + ca * 2.6, az - sa * 2.6, 0.85, ay - 1, ay + 6.1, true);
+        this.addCollider(ax - ca * 2.6, az + sa * 2.6, 0.85, ay - 1, ay + 6.1, true);
+        // the two standing columns on the floor (3 m and 1.6 m), placed with the mesh's own rotation
+        const meshPt = (lx, lz) => [s.x + lx * c + lz * sn, s.z - lx * sn + lz * c];
+        this.addCollider(...meshPt(-4.5, -4.5), 0.6, s.y - 1, s.y + 3, true);
+        this.addCollider(...meshPt(4.5, 4.5), 0.6, s.y - 1, s.y + 1.6, true);
       } else if (s.type === 'cave') {
         this.buildCave(s);
       } else if (s.type === 'island') {
@@ -388,7 +429,7 @@ export class World {
         dummy.scale.set(3.4 + this.rng(), 5 + this.rng() * 1.5, 3.4 + this.rng());
         dummy.updateMatrix();
         rocks.setMatrixAt(n++, dummy.matrix);
-        this.addCollider(x, z, 2.2);
+        this.addCollider(x, z, 2.2, s.y - 2, s.y + 6.5);
       }
     }
     rocks.count = n;
@@ -449,7 +490,9 @@ export class World {
         it.glyph = attachGlyph(built.group, SHRINE_GLYPH[kind][0], SHRINE_GLYPH[kind][1], 1.8, top + 0.2, { opacity: 0.9 });
       }
       this.interactables.push(it);
-      this.addCollider(pos.x, pos.z, kind === 'chest' ? 1 : kind === 'moai' ? 1.2 : 1.5);
+      built.group.updateMatrixWorld(true);
+      const topY = new THREE.Box3().setFromObject(built.group).max.y;
+      this.addCollider(pos.x, pos.z, kind === 'chest' ? 1 : kind === 'moai' ? 1.2 : 1.5, pos.y - 1, Math.min(topY, pos.y + 6), kind === 'chest');
       return it;
     };
     const spot = (minSep = 14) => this.randomSpot(16, 24, 50, 0.45, this.occupied(), minSep);
@@ -489,7 +532,7 @@ export class World {
     this.group.add(built.group);
     const it = { kind: 'chest', pos: p, used: false, ...built, tier, free };
     this.interactables.push(it);
-    this.addCollider(p.x, p.z, 1);
+    this.addCollider(p.x, p.z, 1, p.y - 1, p.y + 1.3, true);
     return it;
   }
 
@@ -541,7 +584,11 @@ export class World {
         col.setScalar(0.85 + this.rng() * 0.25);
         if (inst) { inst.setMatrixAt(n, dummy.matrix); inst.setColorAt(n, col); }
         if (instG) instG.setMatrixAt(n, dummy.matrix);
-        if (d.collide > 0) this.addCollider(x, z, d.collide * s);
+        if (d.collide > 0) {
+          const ht = (PROC_HEIGHT[d.type] ?? 3) * s;
+          const by = dummy.position.y;
+          this.addCollider(x, z, d.collide * s, by - 1, by + ht, WALKABLE.has(d.type));
+        }
         n++;
       }
       for (const m of [inst, instG]) {
@@ -591,7 +638,10 @@ export class World {
       const b = buckets.get(key);
       b.mats.push(dummy.matrix.clone());
       b.cols.push(col.copy(tint).multiplyScalar(0.85 + this.rng() * 0.25).clone());
-      if (d.collide > 0) this.addCollider(x, z, d.collide * s);
+      if (d.collide > 0) {
+        const by = h - 0.15 * s;
+        this.addCollider(x, z, d.collide * s, by - 1, by + variants[vi].height * s * 0.95, /Rock/.test(d.models[0]));
+      }
       placed++;
     }
     for (const b of buckets.values()) {
@@ -645,8 +695,8 @@ export class World {
     p.group.position.copy(this.portalPos);
     this.group.add(p.group);
     this.portal = { pos: this.portalPos, state: 'idle', charge: 0, ...p };
-    this.addCollider(this.portalPos.x + 2.9, this.portalPos.z, 0.6);
-    this.addCollider(this.portalPos.x - 2.9, this.portalPos.z, 0.6);
+    this.addCollider(this.portalPos.x + 2.9, this.portalPos.z, 0.6, this.portalPos.y - 1, this.portalPos.y + 5.5);
+    this.addCollider(this.portalPos.x - 2.9, this.portalPos.z, 0.6, this.portalPos.y - 1, this.portalPos.y + 5.5);
     const geo = new THREE.RingGeometry(0.97, 1, 64).rotateX(-Math.PI / 2);
     const mat = new THREE.MeshBasicMaterial({ color: 0xff3355, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide });
     const zone = new THREE.Mesh(geo, mat);
@@ -674,9 +724,11 @@ export class World {
   }
 
   // ---------------------------------------------------------------- physics
-  collide(pos, r) {
+  collide(pos, r, h = 1.8) {
     const near = this.colHash.query(pos.x, pos.z, r + 4);
     for (const c of near) {
+      // above the top (jumping over / standing on it) or below the bottom: no push
+      if (pos.y >= c.y1 - (c.walk ? 0.6 : 0.25) || pos.y + h <= c.y0) continue;
       const dx = pos.x - c.x, dz = pos.z - c.z;
       const min = r + c.r;
       const d2 = dx * dx + dz * dz;

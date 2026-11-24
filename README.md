@@ -39,7 +39,11 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 
 ## How a run works
 
-- **Difficulty:** grows ×1.045 per minute and ×1.22 per cleared stage, and enemies also scale with your power (level, items, tome and weapon levels), so the phases (Easy → Medium → Hard → …) arrive sooner.
+- **Difficulty:** grows ×1.055 per minute and ×1.3 per cleared stage. On top of that, enemies scale with **you**:
+  their health follows your damage per second (your build's expected DPS and what you actually dealt recently),
+  their damage follows how much you can take (max HP, armor, shield). More enemies spawn, faster and in bigger groups.
+- **Collision:** rocks, pillars, ruin walls, arches and caves have real heights — you can jump over low things and stand on
+  rocks, pillars and wall tops; gaps in broken walls are open and nothing blocks you high up in the air.
 - **Elites:** rare, bigger (1.5×) and much tougher versions of normal enemies with an affix (Blazing, Glacial, Overloading,
   Vampiric) and a rune floating above their head. About 2.5% of spawns at the start, slowly rising to 12% (more in overtime).
   They give 4× coins/XP, have a **5% chance to drop a random item** (rarity rolled like a small chest, legendary rarest,

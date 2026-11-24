@@ -40,9 +40,10 @@ export function spawnEnemy(id, pos, opts = {}) {
   const loopMult = 1 + run.loop * 0.5;
   const champ = !!opts.champion;
   const ot = opts.otMult || 1; // overtime scaling (after the 10 minute mark)
-  const power = run.powerScale || 1; // keeps up with the player's build
-  const hpMult = (opts.boss ? Math.pow(diff, 1.05) : diff) * loopMult * (elite ? elite.hpMult : 1) * (champ ? 28 : 1) * ot * power;
-  const dmgMult = Math.pow(diff, 0.72) * (1 + run.loop * 0.2) * (elite ? elite.dmgMult : 1) * (champ ? 2.2 : 1) * Math.pow(ot, 0.85) * Math.pow(power, 0.5);
+  // keeps up with the player's build: HP follows their DPS, damage follows their effective HP
+  const hpScale = run.hpScale || 1, dmgScale = run.dmgScale || 1;
+  const hpMult = (opts.boss ? Math.pow(diff, 1.08) : diff) * loopMult * (elite ? elite.hpMult : 1) * (champ ? 32 : 1) * ot * hpScale;
+  const dmgMult = Math.pow(diff, 0.8) * (1 + run.loop * 0.25) * (elite ? elite.dmgMult : 1) * (champ ? 2.4 : 1) * Math.pow(ot, 0.9) * dmgScale;
 
   const { geo, glow, roles } = enemyGeometry(id, def);
   const mat = MAT.vc.clone();
