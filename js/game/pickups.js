@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { G } from '../core/state.js';
 import { ITEMS, ITEM_LIST } from '../data/items.js';
 import { isItemUnlocked } from '../core/save.js';
-import { buildPickupGeo } from './models.js';
+import { buildPickupGeo, litMaterial, glowMaterial } from './models.js';
 import { particles } from './fx.js';
 import { sfx } from '../core/audio.js';
 import { weightedPick, RARITY, RARITY_ORDER } from '../core/util.js';
@@ -24,9 +24,9 @@ export function initPickups(scene, itemCallback) {
   geos = buildPickupGeo();
   onItemCollected = itemCallback;
   const mats = {
-    coin: new THREE.MeshLambertMaterial({ color: 0xffcc22, emissive: 0x664400 }),
-    xp: new THREE.MeshBasicMaterial({ color: 0x55ffcc }),
-    heal: new THREE.MeshBasicMaterial({ color: 0xff4466 }),
+    coin: litMaterial({ color: 0xffcc22, emissive: 0x553300, roughness: 0.25, metalness: 0.85 }),
+    xp: glowMaterial({ color: 0x55ffcc }),
+    heal: glowMaterial({ color: 0xff4466 }),
   };
   for (const k of ['coin', 'xp', 'heal']) {
     const m = new THREE.InstancedMesh(geos[k], mats[k], MAX[k]);
@@ -103,7 +103,7 @@ export function dropItem(pos, itemId) {
   const it = ITEMS[itemId];
   const col = RARITY[it.rarity].hex;
   const group = new THREE.Group();
-  const orb = new THREE.Mesh(geos.item, new THREE.MeshBasicMaterial({ color: col }));
+  const orb = new THREE.Mesh(geos.item, glowMaterial({ color: col }));
   const shell = new THREE.Mesh(geos.item, new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5 }));
   shell.scale.setScalar(1.35);
   const beamM = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -156,7 +156,13 @@ export function updatePickups(dt) {
         const h = w.heightAt(c.x, c.z) + 0.35;
         if (c.y <= h) {
           c.y = h;
-          c.grounded = true;
+          // bounce a couple of times before settling
+          if (c.vy < -3) {
+            c.vy = -c.vy * 0.45;
+            c.vx *= 0.6;
+            c.vz *= 0.6;
+            if (kind === 'coin' && Math.random() < 0.3) sfx('coin', 0.08);
+          } else c.grounded = true;
         }
       }
     }
@@ -182,7 +188,11 @@ export function updatePickups(dt) {
       const h = w.heightAt(it.pos.x, it.pos.z) + 1;
       if (it.pos.y <= h) {
         it.pos.y = h;
-        it.grounded = true;
+        if (it.vel.y < -3) {
+          it.vel.y = -it.vel.y * 0.4;
+          it.vel.x *= 0.5;
+          it.vel.z *= 0.5;
+        } else it.grounded = true;
       }
     }
     it.orb.rotation.y += dt * 2;

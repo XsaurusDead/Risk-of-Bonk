@@ -93,6 +93,7 @@ export const Input = {
         return;
       }
       this.mouseDown[e.button] = true;
+      if (e.button === 0) this.pressed.click = true;
       if (e.button === 2) this.pressed.ability1 = true;
     });
     window.addEventListener('mouseup', (e) => (this.mouseDown[e.button] = false));
@@ -348,6 +349,7 @@ export const Input = {
 
   endFrame() {
     for (const a of ACTIONS) this.pressed[a] = false;
+    this.pressed.click = false;
     this.look.x = this.look.y = 0;
     this.numberPressed = 0;
     for (const m in this.menu) this.menu[m] = false;

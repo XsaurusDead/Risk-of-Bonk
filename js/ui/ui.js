@@ -108,6 +108,7 @@ export const UI = {
 
   updateTouchVisibility() {
     const show = G.isTouch && (G.mode === 'playing' || G.mode === 'transition');
+    if (G.mode === 'chest') return;
     $('#touch-controls').classList.toggle('hidden', !show);
   },
 
@@ -500,9 +501,97 @@ export const UI = {
     return html;
   },
 
+  // ------------------------------------------------------------ chest roulette
+  openRoulette(winnerId, kind, onDone) {
+    const N = 56, WIN = 46;
+    const ids = Game.rouletteFiller(kind, N);
+    ids[WIN] = winnerId;
+    // a little near-miss tension: sometimes park a shiny item right next to the winner
+    if (Math.random() < 0.4) ids[WIN + (Math.random() < 0.5 ? 1 : -1)] = Game.rouletteFiller('large', 1)[0];
+    const strip = $('#rl-strip');
+    strip.innerHTML = ids.map((id, i) => {
+      const it = ITEMS[id];
+      return `<div class="rc" data-i="${i}" style="--c:${RARITY[it.rarity].color}"><div class="ic">${it.icon}</div><div class="nm">${esc(it.name)}</div><i class="bar"></i></div>`;
+    }).join('');
+    $('#rl-title').textContent = kind === 'large' ? '✨ Large Chest' : '📦 Chest';
+    $('#rl-result').classList.remove('show');
+    $('#rl-result').innerHTML = '';
+    $('#rl-hint').textContent = '';
+    $('#roulette').classList.remove('hidden');
+    $('#hud-prompt').classList.add('hidden');
+    const card = strip.firstElementChild;
+    const cardW = card.getBoundingClientRect().width;
+    const step = cardW + 8;
+    const winW = $('.rl-window').getBoundingClientRect().width;
+    // land somewhere inside the winning card (not always dead centre)
+    const inside = cardW * (0.15 + Math.random() * 0.7);
+    const target = WIN * step + inside - winW / 2;
+    this.rl = { winnerId, onDone, t: 0, dur: 4.6 + Math.random() * 0.8, target, step, winW, lastIdx: -1, done: false, doneT: 0, strip };
+    strip.style.transform = 'translateX(0px)';
+    $('#roulette').onpointerdown = () => this.skipRoulette();
+  },
+
+  skipRoulette() {
+    const r = this.rl;
+    if (!r) return;
+    if (!r.done) r.t = Math.max(r.t, r.dur - 0.05);
+    else if (r.doneT > 0.35) this.closeRoulette();
+  },
+
+  updateRoulette() {
+    const r = this.rl;
+    if (!r) return;
+    // run on wall-clock time so the spin always takes the same real duration
+    const now = performance.now();
+    const dt = Math.min(1, (now - (r.last || now)) / 1000);
+    r.last = now;
+    // ignore the key press that opened the chest; afterwards any confirm-ish input skips
+    const skip = Input.pressed.interact || Input.pressed.jump || Input.menu.confirm || Input.pressed.primary || Input.pressed.click;
+    if (skip && (r.done || r.t > 0.35)) this.skipRoulette();
+    if (!r.done) {
+      r.t = Math.min(r.dur, r.t + dt);
+      const k = r.t / r.dur;
+      const ease = 1 - Math.pow(1 - k, 4); // fast start, long satisfying slowdown
+      const x = r.target * ease;
+      r.strip.style.transform = `translateX(${-x}px)`;
+      const idx = Math.floor((x + r.winW / 2) / r.step);
+      if (idx !== r.lastIdx) {
+        r.lastIdx = idx;
+        sfx('tick', 0.02);
+      }
+      if (r.t >= r.dur) {
+        r.done = true;
+        const it = ITEMS[r.winnerId];
+        const col = RARITY[it.rarity].color;
+        r.strip.querySelector('[data-i="46"]').classList.add('win');
+        const res = $('#rl-result');
+        res.style.setProperty('--c', col);
+        res.innerHTML = `<div class="rr" style="color:${col}">${RARITY[it.rarity].name.toUpperCase()}</div><div class="nm" style="color:${col}">${it.icon} ${esc(it.name)}</div><div class="ds">${esc(it.desc)}</div>`;
+        res.classList.add('show');
+        sfx(it.rarity === 'legendary' ? 'legendary' : it.rarity === 'epic' ? 'achievement' : 'item');
+      }
+    } else {
+      r.doneT += dt;
+      if (r.doneT > 0.35) $('#rl-hint').textContent = Input.device === 'touch' ? 'Tap to continue' : Input.device === 'pad' ? 'Press A to continue' : 'Press E / Space / Click to continue';
+      if (r.doneT > 3.2) this.closeRoulette();
+    }
+  },
+
+  closeRoulette() {
+    const r = this.rl;
+    if (!r) return;
+    this.rl = null;
+    $('#roulette').classList.add('hidden');
+    r.onDone();
+  },
+
   // ------------------------------------------------------------ per-frame
   update(dt) {
     this.menuNav();
+    if (G.mode === 'chest') {
+      this.updateRoulette();
+      return;
+    }
     if (G.save.settings.showFps) {
       this.fpsAcc += dt;
       this.fpsN++;

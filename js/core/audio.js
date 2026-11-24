@@ -108,6 +108,7 @@ const SFX = {
   portal: () => {
     [262, 330, 392, 523, 659].forEach((f, i) => tone({ type: 'sine', f0: f, f1: f * 2, dur: 0.6, gain: 0.12, delay: i * 0.1 }));
   },
+  tick: () => tone({ type: 'square', f0: 2200, f1: 1800, dur: 0.025, gain: 0.06 }),
   ui: () => tone({ type: 'triangle', f0: 660, dur: 0.05, gain: 0.08 }),
   achievement: () => {
     [659, 784, 988, 1318].forEach((f, i) => tone({ type: 'triangle', f0: f, dur: 0.3, gain: 0.14, delay: i * 0.1 }));

@@ -2,6 +2,7 @@
 // into a single vertex-coloured geometry (1-2 draw calls each); characters are
 // kept as a hierarchy so limbs can animate.
 import * as THREE from 'three';
+import { G } from '../core/state.js';
 
 const PRIMS = {};
 function prim(shape) {
@@ -9,9 +10,10 @@ function prim(shape) {
   let g;
   switch (shape) {
     case 'box': g = new THREE.BoxGeometry(1, 1, 1); break;
-    case 'sphere': g = new THREE.SphereGeometry(0.5, 10, 7); break;
-    case 'cyl': g = new THREE.CylinderGeometry(0.5, 0.5, 1, 10); break;
-    case 'cone': g = new THREE.ConeGeometry(0.5, 1, 10); break;
+    case 'sphere': g = new THREE.SphereGeometry(0.5, 16, 11); break;
+    case 'cyl': g = new THREE.CylinderGeometry(0.5, 0.5, 1, 14); break;
+    case 'cone': g = new THREE.ConeGeometry(0.5, 1, 12); break;
+    case 'blade': g = new THREE.ConeGeometry(0.5, 1, 3); break;
     case 'ico': g = new THREE.IcosahedronGeometry(0.5, 0); break;
     case 'tetra': g = new THREE.TetrahedronGeometry(0.5); break;
     case 'oct': g = new THREE.OctahedronGeometry(0.5); break;
@@ -81,10 +83,59 @@ export function mergeList(list) {
   return out;
 }
 
-export const MAT = {
-  vc: new THREE.MeshLambertMaterial({ vertexColors: true }),
-  glow: new THREE.MeshBasicMaterial({ vertexColors: true }),
-};
+// Glowing parts are pushed above 1.0 (HDR) on high quality so the bloom pass
+// picks them up; on low quality there is no bloom and they stay at 1.0.
+export const GLOW_BOOST = 2.2;
+export const MAT = {};
+export function initMaterials() {
+  const high = G.quality === 'high';
+  MAT.high = high;
+  MAT.vc = litMaterial({ vertexColors: true });
+  MAT.glow = glowMaterial({ vertexColors: true });
+}
+/** PBR material on high quality, cheap Lambert on phones. */
+export function litMaterial(params = {}) {
+  if (MAT.high) return new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0.02, ...params });
+  const { roughness, metalness, ...rest } = params;
+  return new THREE.MeshLambertMaterial(rest);
+}
+export function glowMaterial(params = {}) {
+  const m = new THREE.MeshBasicMaterial(params);
+  if (MAT.high) m.color.multiplyScalar(GLOW_BOOST);
+  return m;
+}
+/** Set a glow material's colour, keeping the HDR boost for bloom. */
+export function setGlowColor(m, hex) {
+  m.color.set(hex);
+  if (MAT.high) m.color.multiplyScalar(GLOW_BOOST);
+}
+
+// Wind sway for instanced vegetation: bends vertices by their height.
+export const windUniform = { value: 0 };
+export function swayMaterial(amp) {
+  const m = MAT.vc.clone();
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = windUniform;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec3 ip = vec3(instanceMatrix[3][0], 0.0, instanceMatrix[3][2]);
+        #else
+          vec3 ip = vec3(0.0);
+        #endif
+        float hgt = max(position.y, 0.0);
+        float ph = uTime * 1.6 + ip.x * 0.21 + ip.z * 0.17;
+        float gust = 0.6 + 0.4 * sin(uTime * 0.37 + ip.x * 0.02);
+        transformed.x += sin(ph) * hgt * hgt * ${amp.toFixed(4)} * gust;
+        transformed.z += cos(ph * 0.8) * hgt * hgt * ${(amp * 0.6).toFixed(4)} * gust;`
+      );
+  };
+  m.customProgramCacheKey = () => 'sway' + amp;
+  return m;
+}
 
 const geoCache = new Map();
 /** Cached merged model for an enemy/boss definition. */
@@ -100,7 +151,7 @@ const matCache = new Map();
 function mat(color, glow = false) {
   const k = color + (glow ? 'g' : '');
   if (!matCache.has(k)) {
-    matCache.set(k, glow ? new THREE.MeshBasicMaterial({ color }) : new THREE.MeshLambertMaterial({ color }));
+    matCache.set(k, glow ? glowMaterial({ color }) : litMaterial({ color, roughness: 0.65 }));
   }
   return matCache.get(k);
 }
@@ -265,6 +316,11 @@ export function buildCharacter(id) {
 // ------------------------------------------------------------------
 // Decorations (instanced) — returns parts list for buildMerged
 // ------------------------------------------------------------------
+function shade(hex, k) {
+  const c = new THREE.Color(hex).multiplyScalar(k);
+  return c.getHex();
+}
+
 export function decorParts(type, tint) {
   const t = tint;
   switch (type) {
@@ -277,6 +333,18 @@ export function decorParts(type, tint) {
       ['cone', 0x2a5a3a, [0, 2.4, 0], [2.6, 2.4, 2.6]], ['cone', 0x2f6a42, [0, 3.6, 0], [2.0, 2.0, 2.0]], ['cone', 0xf0f6ff, [0, 4.6, 0], [1.3, 1.4, 1.3]],
     ];
     case 'rock': return [['dodeca', t || 0x8a8a8a, [0, 0.5, 0], [2, 1.5, 1.8]], ['dodeca', t || 0x9a9a9a, [0.7, 0.3, 0.5], [1, 0.8, 1]]];
+    case 'grass': {
+      // a tuft of thin blades; colour comes from the stage's ground palette
+      const c = t || 0x5fae3f;
+      const parts = [];
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2 + i;
+        const r = 0.12 + (i % 3) * 0.1;
+        const h = 0.55 + ((i * 37) % 10) / 22;
+        parts.push(['blade', i % 2 ? c : shade(c, 1.18), [Math.cos(a) * r, h / 2, Math.sin(a) * r], [0.09, h, 0.05], [Math.sin(a) * 0.35, a, Math.cos(a) * 0.35]]);
+      }
+      return parts;
+    }
     case 'flower': return [['cyl', 0x3a8a2a, [0, 0.25, 0], [0.06, 0.5, 0.06]], ['sphere', 0xffffff, [0, 0.55, 0], [0.3, 0.15, 0.3]], ['sphere', 0xffdd33, [0, 0.6, 0], [0.12, 0.08, 0.12]]];
     case 'ruin_pillar': return [
       ['box', t || 0xcfc8b8, [0, 0.2, 0], [1.6, 0.4, 1.6]], ['cyl', t || 0xd8d2c4, [0, 2.4, 0], [1.0, 4.2, 1.0]], ['box', t || 0xcfc8b8, [0, 4.6, 0], [1.4, 0.35, 1.4]],
@@ -334,7 +402,7 @@ export function buildPortal() {
   const g = new THREE.Group();
   g.add(mesh('cyl', 0x3a3a4a, [0, 0.25, 0], [7, 0.5, 7]));
   g.add(mesh('cyl', 0x55556a, [0, 0.55, 0], [5.5, 0.2, 5.5]));
-  const ringM = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.35, 8, 28), new THREE.MeshLambertMaterial({ color: 0x55556a }));
+  const ringM = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.35, 12, 40), litMaterial({ color: 0x55556a, roughness: 0.35, metalness: 0.6 }));
   ringM.position.y = 3.4;
   g.add(ringM);
   for (const sx of [-1, 1]) g.add(mesh('box', 0x44445a, [sx * 2.9, 1.6, 0], [0.7, 3.2, 0.9]));

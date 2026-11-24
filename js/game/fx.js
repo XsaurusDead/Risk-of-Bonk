@@ -2,13 +2,15 @@
 // floating damage numbers, enemy health bars and screen shake.
 import * as THREE from 'three';
 import { G } from '../core/state.js';
+import { MAT, GLOW_BOOST } from './models.js';
 
 const MAX_PARTICLES = 900;
 let pMesh, particlesArr = [];
 const pool = { ring: [], tele: [], beam: [] };
 const active = { ring: [], tele: [], beam: [] };
 let dmgLayer, dmgPool = [], dmgActive = [];
-let hpBg, hpFill;
+let hpBg, hpFill, blobs;
+const MAX_BLOBS = 160;
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _v = new THREE.Vector3();
@@ -22,7 +24,9 @@ const discGeo = new THREE.CircleGeometry(1, 48);
 const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
 
 export function initFx(scene) {
-  pMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_PARTICLES);
+  const pMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  if (MAT.high) pMat.color.setScalar(1.5); // sparks get a touch of bloom
+  pMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), pMat, MAX_PARTICLES);
   pMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   pMesh.setColorAt(0, new THREE.Color(1, 1, 1));
   pMesh.count = 0;
@@ -42,6 +46,27 @@ export function initFx(scene) {
   }
   hpFill.renderOrder = 11;
 
+  // soft round contact shadows under enemies, pickups and allies
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 64;
+  const ctx = cv.getContext('2d');
+  const grd = ctx.createRadialGradient(32, 32, 2, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(0,0,0,0.55)');
+  grd.addColorStop(0.6, 'rgba(0,0,0,0.25)');
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(cv);
+  blobs = new THREE.InstancedMesh(
+    new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
+    MAX_BLOBS
+  );
+  blobs.count = 0;
+  blobs.frustumCulled = false;
+  blobs.renderOrder = 1;
+  scene.add(blobs);
+
   dmgLayer = document.getElementById('dmg-layer');
   for (let i = 0; i < 70; i++) {
     const d = document.createElement('div');
@@ -54,11 +79,12 @@ export function initFx(scene) {
 
 /** Re-add pooled scene objects after a scene was rebuilt. */
 export function attachFx(scene) {
-  scene.add(pMesh, hpBg, hpFill);
+  scene.add(pMesh, hpBg, hpFill, blobs);
 }
 
 export function clearFx() {
   particlesArr.length = 0;
+  if (blobs) blobs.count = 0;
   for (const k of ['ring', 'tele', 'beam']) {
     for (const o of active[k]) {
       o.mesh.visible = false;
@@ -84,7 +110,7 @@ export function particles(pos, color, count = 10, speed = 5, life = 0.6, size = 
       x: pos.x, y: pos.y + 0.5, z: pos.z,
       vx: Math.cos(a) * r * sp, vy: Math.abs(u) * sp + speed * 0.3, vz: Math.sin(a) * r * sp,
       life: life * (0.6 + Math.random() * 0.4), max: life, size: size * (0.6 + Math.random() * 0.6), g: gravity,
-      c: new THREE.Color(color), rot: Math.random() * 6,
+      c: new THREE.Color(color), rot: Math.random() * 6, spin: Math.random() * 8, rest: false,
     });
   }
 }
@@ -137,6 +163,7 @@ export function beam(from, to, color = 0xffffff, width = 0.1, life = 0.1) {
     mesh: new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })),
   }));
   o.mesh.material.color.set(color);
+  if (MAT.high) o.mesh.material.color.multiplyScalar(GLOW_BOOST);
   _v.subVectors(to, from);
   const len = _v.length();
   o.mesh.position.copy(from).addScaledVector(_v, 0.5);
@@ -171,6 +198,45 @@ export function floatText(pos, text, color = '#ffffff', big = false) {
   dmgActive.push({ el, x: pos.x, y: pos.y, z: pos.z, t: 0, life: 1.3 });
 }
 
+/** Chunky debris that tumbles and bounces (enemy deaths, crates, rocks). */
+export function gibs(pos, color, count = 8, speed = 7, size = 0.35) {
+  if (G.quality === 'low') count = Math.ceil(count * 0.6);
+  for (let i = 0; i < count; i++) {
+    if (particlesArr.length >= MAX_PARTICLES) particlesArr.shift();
+    const a = Math.random() * Math.PI * 2;
+    const sp = speed * (0.4 + Math.random() * 0.6);
+    particlesArr.push({
+      x: pos.x, y: pos.y + 0.6, z: pos.z, vx: Math.cos(a) * sp, vy: 4 + Math.random() * speed, vz: Math.sin(a) * sp,
+      life: 1.6 + Math.random() * 0.8, max: 2.4, size: size * (0.6 + Math.random() * 0.8), g: 26,
+      c: new THREE.Color(color), rot: Math.random() * 6, spin: 6 + Math.random() * 10, rest: false,
+    });
+  }
+}
+
+export function updateBlobShadows() {
+  const w = G.world;
+  if (!w || !blobs) return;
+  let n = 0;
+  const add = (x, y, z, r, alpha = 1) => {
+    if (n >= MAX_BLOBS) return;
+    const gy = w.heightAt(x, z);
+    const lift = Math.max(0, y - gy);
+    const k = r * Math.max(0.35, 1 - lift * 0.08) * alpha;
+    _m.compose(_v.set(x, gy + 0.06, z), _q.identity(), _s.set(k, 1, k));
+    blobs.setMatrixAt(n++, _m);
+  };
+  const p = G.player;
+  if (p && !p.dead && !MAT.high) add(p.pos.x, p.pos.y, p.pos.z, 1.6);
+  for (const e of G.enemies) {
+    if (e.dead && e.deathT < 0.15) continue;
+    if (p && Math.abs(e.pos.x - p.pos.x) + Math.abs(e.pos.z - p.pos.z) > 90) continue;
+    add(e.pos.x, e.pos.y, e.pos.z, e.radius * e.scale * 2.4);
+  }
+  for (const m of G.minions) if (!m.dead) add(m.pos.x, m.pos.y, m.pos.z, 1.3);
+  blobs.count = n;
+  blobs.instanceMatrix.needsUpdate = true;
+}
+
 export function shake(amount) {
   if (G.save?.settings.screenShake === false) return;
   G.shake = Math.min(1.5, G.shake + amount);
@@ -187,12 +253,30 @@ export function updateFx(dt) {
       particlesArr.pop();
     }
   }
+  const w = G.world;
   for (const p of particlesArr) {
     p.vy -= p.g * dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.z += p.vz * dt;
-    p.rot += dt * 5;
+    p.rot += dt * (p.rest ? 0 : 5 + p.spin);
+    // falling debris bounces and settles on the terrain
+    if (w && p.g > 4) {
+      const gy = w.heightAt(p.x, p.z) + p.size * 0.4;
+      if (p.y < gy) {
+        p.y = gy;
+        if (p.vy < -2) {
+          p.vy = -p.vy * 0.38;
+          p.vx *= 0.65;
+          p.vz *= 0.65;
+        } else {
+          p.vy = 0;
+          p.vx *= 0.8;
+          p.vz *= 0.8;
+          p.rest = true;
+        }
+      }
+    }
     const k = p.size * Math.max(0.05, p.life / p.max);
     _q.setFromAxisAngle(UPV, p.rot);
     _m.compose(_v.set(p.x, p.y, p.z), _q, _s.set(k, k, k));
@@ -233,7 +317,7 @@ export function updateFx(dt) {
 
   // damage numbers
   const cam = G.camera;
-  const w = window.innerWidth, h = window.innerHeight;
+  const sw = window.innerWidth, shh = window.innerHeight;
   for (let i = dmgActive.length - 1; i >= 0; i--) {
     const d = dmgActive[i];
     d.t += dt;
@@ -248,7 +332,7 @@ export function updateFx(dt) {
       d.el.style.opacity = 0;
       continue;
     }
-    const sx = (_v.x * 0.5 + 0.5) * w, sy = (-_v.y * 0.5 + 0.5) * h;
+    const sx = (_v.x * 0.5 + 0.5) * sw, sy = (-_v.y * 0.5 + 0.5) * shh;
     const pop = d.t < 0.1 ? 1 + (0.1 - d.t) * 5 : 1;
     d.el.style.transform = `translate(${sx}px, ${sy}px) translate(-50%,-50%) scale(${pop})`;
     d.el.style.opacity = Math.min(1, (d.life - d.t) * 3);

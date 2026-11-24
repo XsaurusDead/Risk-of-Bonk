@@ -6,7 +6,7 @@ import { ENEMIES, BOSSES, ELITES } from '../data/enemies.js';
 import { ITEMS } from '../data/items.js';
 import { enemyGeometry, MAT } from './models.js';
 import { spawnProjectile, damagePlayer, dealDamage, spawnZone, findTargets } from './combat.js';
-import { particles, ring, telegraph, shake, floatText } from './fx.js';
+import { particles, ring, telegraph, shake, floatText, gibs } from './fx.js';
 import { dropCoins, dropXp, dropHeal } from './pickups.js';
 import { sfx } from '../core/audio.js';
 import { track } from '../core/save.js';
@@ -18,6 +18,7 @@ const near = [];
 const FROZEN = new THREE.Color(0x88ddff);
 const FLASH = new THREE.Color(0xffffff);
 const BURN = new THREE.Color(0xff5511);
+const JELLY = new Set(['slime', 'snow_slime', 'sporeling', 'void_bomber', 'spore_mother']);
 
 export function initEnemies() {
   G.enemies = [];
@@ -45,6 +46,7 @@ export function spawnEnemy(id, pos, opts = {}) {
   if (!geo) mat.emissiveIntensity = 1;
   const scale = elite ? 1.25 : 1;
   group.scale.setScalar(scale);
+  group.rotation.order = 'YXZ';
   if (elite) mat.emissive = new THREE.Color(elite.color).multiplyScalar(0.35);
   G.scene.add(group);
 
@@ -59,6 +61,9 @@ export function spawnEnemy(id, pos, opts = {}) {
     status: { burnDps: 0, burnT: 0, burnAcc: 0, slow: 0, slowT: 0, chill: 0, freeze: 0, stun: 0 },
     flash: 0, shieldHp: 0, spawnT: opts.instant ? 0 : 0.6, dead: false, vulnT: 0, lastHitT: 99,
     mesh: group, mat, bob: Math.random() * 6.28, trailT: 0, patternQueue: [], enraged: false, hitPlayer: false,
+    // spring-driven squash/stretch and flinch tilt (see updateSprings)
+    sq: 0, sqv: 0, tilt: 0, tiltv: 0, walkPh: Math.random() * 6, lastX: pos.x, lastZ: pos.z, bank: 0, pitch: 0,
+    jelly: JELLY.has(id) || def.ai === 'hopper', bodyColor: def.model[0][1],
   };
   if (elite?.shield) e.shieldHp = e.maxHp * elite.shield;
   const h = G.world.heightAt(e.pos.x, e.pos.z);
@@ -111,7 +116,39 @@ export function killEnemy(e, o = {}) {
     }
   }
   if (e.isBoss && run.onBossKilled) run.onBossKilled(e);
-  e.deathT = 0.25;
+
+  // death physics: get flung away from the player, tumble, bounce, then shrink away
+  const away = _v2.copy(e.pos).sub(p ? p.pos : e.pos).setY(0);
+  if (away.lengthSq() < 0.01) away.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+  away.normalize();
+  const heavy = Math.pow(e.mass, 0.35);
+  e.deathMax = e.isBoss ? 1.8 : o.noReward ? 0.18 : 0.9;
+  e.deathT = e.deathMax;
+  e.dvel = e.isBoss || o.noReward ? new THREE.Vector3(0, e.isBoss ? 2 : 0, 0) : away.multiplyScalar(7 / heavy).setY((6 + Math.random() * 3) / heavy);
+  e.dspin = (e.isBoss ? 0.8 : 5 + Math.random() * 6) * (Math.random() < 0.5 ? -1 : 1);
+  e.drot = 0;
+  e.flash = 0.15;
+  if (!o.noReward) {
+    const n = Math.min(16, Math.round(5 + e.radius * e.scale * 3 + (e.isBoss ? 20 : 0)));
+    gibs(e.pos, e.bodyColor, n, e.isBoss ? 12 : 7, Math.min(0.7, 0.22 + e.radius * 0.12));
+    if (e.jelly) particles(_v.copy(e.pos).setY(e.pos.y + 0.4), e.bodyColor, 12, 6, 0.7, 0.3, 20);
+  }
+}
+
+/** Called by dealDamage: squish + flinch the enemy a bit. */
+export function hitReact(e, frac, strong) {
+  const j = e.jelly ? 2 : 1;
+  e.sqv -= (1.5 + Math.min(6, frac * 30)) * j * (e.isBoss ? 0.4 : 1);
+  e.tiltv -= (2 + Math.min(6, frac * 25)) * (e.isBoss ? 0.25 : 1);
+  if (strong && !e.isBoss && !e.flying && e.pos.y <= groundY(e) + 0.1) e.vy = Math.max(e.vy, 4.5 / Math.sqrt(e.mass));
+}
+
+function updateSprings(e, dt) {
+  const k = e.jelly ? 120 : 260, c = e.jelly ? 5 : 16;
+  e.sqv += (-k * e.sq - c * e.sqv) * dt;
+  e.sq = Math.max(-0.5, Math.min(0.6, e.sq + e.sqv * dt));
+  e.tiltv += (-140 * e.tilt - 12 * e.tiltv) * dt;
+  e.tilt = Math.max(-0.7, Math.min(0.7, e.tilt + e.tiltv * dt));
 }
 
 // ------------------------------------------------------------------ update
@@ -125,8 +162,31 @@ export function updateEnemies(dt) {
     const e = G.enemies[i];
     if (e.dead) {
       e.deathT -= dt;
-      const k = Math.max(0, e.deathT / 0.25);
-      e.mesh.scale.setScalar(e.scale * k);
+      const dv = e.dvel;
+      dv.y -= 30 * dt;
+      e.pos.addScaledVector(dv, dt);
+      const gy = G.world.heightAt(e.pos.x, e.pos.z);
+      if (e.pos.y < gy) {
+        e.pos.y = gy;
+        if (dv.y < -3) {
+          dv.y *= -0.3;
+          dv.x *= 0.55;
+          dv.z *= 0.55;
+          e.dspin *= 0.5;
+          particles(e.pos, 0xbbaa99, 3, 2, 0.3, 0.25, 8);
+        } else dv.set(dv.x * 0.8, 0, dv.z * 0.8);
+      }
+      e.drot += e.dspin * dt;
+      const m = e.mesh;
+      m.position.copy(e.pos);
+      if (e.isBoss) m.position.y -= (1 - e.deathT / e.deathMax) * e.height * 0.5;
+      m.rotation.x = -e.drot;
+      m.rotation.z = e.drot * 0.35;
+      const k = Math.min(1, e.deathT / (e.deathMax * 0.35));
+      const pop = e.deathMax - e.deathT < 0.08 ? 1.15 : 1;
+      m.scale.setScalar(Math.max(0, e.scale * k * pop));
+      e.flash -= dt;
+      e.mat.emissive.setScalar(e.flash > 0 ? 0.9 : 0);
       if (e.deathT <= 0) {
         G.scene.remove(e.mesh);
         e.mat.dispose();
@@ -216,6 +276,7 @@ function updateEnemy(e, dt, p) {
       e.pos.y += e.vy * dt;
       if (e.pos.y <= gy) {
         e.pos.y = gy;
+        if (e.vy < -2) e.sqv -= Math.min(9, -e.vy * (e.jelly ? 0.7 : 0.3)); // landing squish
         if (e.ai === 'hopper' && e.vy < -1) onHopLand(e, p);
         e.vy = 0;
       }
@@ -237,12 +298,38 @@ function updateEnemy(e, dt, p) {
 
   // visuals
   const m = e.mesh;
+  updateSprings(e, dt);
+  const moved = Math.hypot(e.pos.x - e.lastX, e.pos.z - e.lastZ);
+  const vx = (e.pos.x - e.lastX) / Math.max(dt, 1e-4), vz = (e.pos.z - e.lastZ) / Math.max(dt, 1e-4);
+  e.lastX = e.pos.x;
+  e.lastZ = e.pos.z;
   m.position.copy(e.pos);
   m.rotation.y = e.yaw;
-  let squash = 1;
-  if (e.ai === 'hopper') squash = e.pos.y > gy + 0.1 ? 1.12 : 0.9 + 0.1 * Math.abs(Math.sin(e.bob));
-  if (e.state === 'windup' || e.state === 'fuse') squash = 1 + Math.sin(e.t * 40) * 0.06;
-  m.scale.set(e.scale, e.scale * squash, e.scale);
+  let sq = e.sq;
+  let roll = 0, pitch = e.tilt;
+  if (e.flying) {
+    // bank into turns and lean into the direction of travel
+    const fx = Math.sin(e.yaw), fz = Math.cos(e.yaw);
+    const fwd = vx * fx + vz * fz, side = vx * fz - vz * fx;
+    e.bank += (Math.max(-0.5, Math.min(0.5, -side * 0.06)) - e.bank) * Math.min(1, dt * 5);
+    e.pitch += (Math.max(-0.3, Math.min(0.4, fwd * 0.04)) - e.pitch) * Math.min(1, dt * 5);
+    roll = e.bank;
+    pitch += e.pitch;
+  } else if (e.ai !== 'hopper' && !e.isBoss && e.pos.y <= gy + 0.05) {
+    // waddle while walking
+    e.walkPh += moved * (2.6 / Math.max(0.6, e.radius));
+    const amt = Math.min(1, moved / Math.max(dt, 1e-4) / 4);
+    m.position.y += Math.abs(Math.sin(e.walkPh)) * 0.14 * e.scale * amt;
+    roll = Math.sin(e.walkPh) * 0.07 * amt;
+  } else if (e.isBoss && moved > 0.001) {
+    e.walkPh += moved * 0.7;
+    roll = Math.sin(e.walkPh) * 0.04;
+  }
+  if (e.state === 'windup' || e.state === 'fuse') sq += Math.sin(e.t * 40) * 0.06;
+  if (e.ai === 'hopper' && e.pos.y <= gy + 0.05 && e.aux < 0.22) sq -= (0.22 - e.aux) * 1.2; // crouch before a hop
+  m.rotation.x = pitch;
+  m.rotation.z = roll;
+  m.scale.set(e.scale * (1 - sq * 0.45), e.scale * (1 + sq), e.scale * (1 - sq * 0.45));
   if (e.flash > 0) e.flash -= dt;
   const em = e.mat.emissive;
   if (e.flash > 0) em.copy(FLASH).multiplyScalar(0.8);
@@ -503,6 +590,7 @@ function runAI(e, dt, p) {
         if (e.aux <= 0) {
           e.vy = rand(9, 12);
           e.pos.y += 0.1;
+          e.sqv += 6; // stretch on take-off
           e.auxDir.set(dx, 0, dz).normalize();
           e.aux = rand(0.9, 1.4);
         }
@@ -519,7 +607,7 @@ function runAI(e, dt, p) {
 }
 
 function onHopLand(e, p) {
-  particles(e.pos, 0xffffff, 4, 3, 0.3, 0.25);
+  particles(e.pos, e.bodyColor, 6, 3, 0.4, 0.22, 18);
   if (!p || p.dead) return;
   const range = (e.def.attackRange || 1.8) + e.radius * e.scale;
   if (e.atkCd <= 0 && hitPlayerMelee(e, p, range + 0.5)) e.atkCd = 1.0;

@@ -290,6 +290,42 @@ h3 { margin: 10px 0 6px; font-size: 18px; color: var(--accent); }
 .ach-toast .n { font-size: 20px; font-weight: 900; }
 .ach-toast .r { font-size: 13px; color: #ffe9b0; }
 
+/* ---------------- chest roulette ---------------- */
+#roulette { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: auto; background: radial-gradient(ellipse at center, rgba(10, 5, 20, 0.55), rgba(5, 2, 10, 0.85)); animation: rlIn 0.25s ease-out; }
+@keyframes rlIn { from { opacity: 0; } to { opacity: 1; } }
+.rl-box { width: min(980px, 96vw); display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.rl-title { font-size: clamp(22px, 4vw, 34px); font-weight: 900; letter-spacing: 3px; text-shadow: 0 3px 0 #000; }
+.rl-window { position: relative; width: 100%; height: 170px; overflow: hidden; border-radius: 14px; background: linear-gradient(180deg, #1a1030, #0c0618); border: 2px solid rgba(255, 255, 255, 0.15); box-shadow: inset 0 0 40px #000, 0 20px 60px #000a; }
+.rl-strip { position: absolute; left: 0; top: 15px; height: 140px; display: flex; gap: 8px; will-change: transform; }
+.rc { flex: 0 0 120px; height: 140px; border-radius: 10px; background: linear-gradient(180deg, #2a1d44, #170e2a); position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.08); }
+.rc::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--c) 35%, transparent), transparent 65%); }
+.rc .ic { font-size: 50px; position: relative; filter: drop-shadow(0 4px 4px #000); }
+.rc .nm { font-size: 12px; font-weight: 800; position: relative; text-align: center; padding: 0 6px; line-height: 1.1; }
+.rc .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: var(--c); box-shadow: 0 0 14px var(--c); }
+.rc.win { animation: rcWin 0.6s ease-out infinite alternate; border-color: var(--c); }
+@keyframes rcWin { from { box-shadow: 0 0 10px var(--c); transform: scale(1); } to { box-shadow: 0 0 40px var(--c), inset 0 0 30px var(--c); transform: scale(1.06); } }
+.rl-marker { position: absolute; left: 50%; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: #ffd23c; box-shadow: 0 0 12px #ffd23c, 0 0 2px #000; z-index: 3; }
+.rl-marker::before, .rl-marker::after { content: ''; position: absolute; left: -9px; border: 11px solid transparent; }
+.rl-marker::before { top: -2px; border-top-color: #ffd23c; }
+.rl-marker::after { bottom: -2px; border-bottom-color: #ffd23c; }
+.rl-fade { position: absolute; top: 0; bottom: 0; width: 18%; z-index: 2; pointer-events: none; }
+.rl-fade.l { left: 0; background: linear-gradient(90deg, #0c0618, transparent); }
+.rl-fade.r { right: 0; background: linear-gradient(-90deg, #0c0618, transparent); }
+.rl-result { min-height: 76px; text-align: center; opacity: 0; transform: translateY(8px); transition: opacity 0.3s, transform 0.3s; }
+.rl-result.show { opacity: 1; transform: none; }
+.rl-result .rr { font-size: 13px; letter-spacing: 3px; font-weight: 900; }
+.rl-result .nm { font-size: clamp(24px, 4vw, 34px); font-weight: 900; text-shadow: 0 0 20px var(--c), 0 3px 0 #000; }
+.rl-result .ds { font-size: 15px; color: #e6dcf5; }
+.rl-hint { font-size: 13px; color: var(--muted); min-height: 18px; }
+@media (max-height: 500px) {
+  .rl-window { height: 124px; }
+  .rl-strip { top: 10px; height: 104px; }
+  .rc { flex-basis: 90px; height: 104px; }
+  .rc .ic { font-size: 36px; }
+  .rc .nm { font-size: 10px; }
+  .rl-box { gap: 6px; }
+}
+
 #fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.5s; }
 #fade.on { opacity: 1; }
 #loading { position: absolute; inset: 0; display: grid; place-items: center; font-size: 28px; font-weight: 900; background: var(--bg); }

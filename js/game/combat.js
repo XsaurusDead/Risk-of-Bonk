@@ -6,7 +6,8 @@ import { ITEMS } from '../data/items.js';
 import { particles, ring, beam, damageNumber, floatText } from './fx.js';
 import { sfx } from '../core/audio.js';
 import { track, trackMax } from '../core/save.js';
-import { killEnemy } from './enemies.js';
+import { killEnemy, hitReact } from './enemies.js';
+import { glowMaterial } from './models.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -83,6 +84,7 @@ export function dealDamage(e, amount, o = {}) {
   e.hp -= dmg;
   e.flash = 0.1;
   e.lastHitT = 0;
+  hitReact(e, shown / e.maxHp, (o.knockback || 0) >= 8);
   damageNumber(_v.set(e.pos.x, e.pos.y + e.height * e.scale * 0.7, e.pos.z), shown, crit, typeof o.color === 'string' && !crit ? o.color : null);
   if (G.save && shown > (G.save.stats.maxHit || 0)) trackMax('maxHit', Math.floor(shown));
   if (crit && procCoef > 0) track('crits');
@@ -188,6 +190,7 @@ export function explode(pos, radius, damage, o = {}) {
     if (_v2.lengthSq() < 0.01) _v2.set(Math.random() - 0.5, 0, Math.random() - 0.5);
     dealDamage(e, damage, { ...o, dir: _v2.normalize().clone(), procCoef: o.procCoef ?? 1 });
   }
+  if (o.big && hits.length >= 3) G.hitStop = Math.max(G.hitStop || 0, 0.05);
   const col = o.color ?? 0xffaa33;
   if (o.small) {
     if (Math.random() < 0.4) particles(pos, col, 4, 4, 0.3, 0.25);
@@ -297,7 +300,7 @@ const geoms = {
 };
 const projMats = new Map();
 function projMat(color) {
-  if (!projMats.has(color)) projMats.set(color, new THREE.MeshBasicMaterial({ color }));
+  if (!projMats.has(color)) projMats.set(color, glowMaterial({ color }));
   return projMats.get(color);
 }
 

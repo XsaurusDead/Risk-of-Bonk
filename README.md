@@ -39,7 +39,7 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 ## How a run works
 
 - **Stages:** Verdant Meadows → Scorched Dunes → Frostfang Peaks → Fungal Hollow → Molten Caldera → Void Sanctum, then it loops forever (harder each loop). Each stage has its own terrain, palette, hazards (water / toxic sludge / lava / void) and enemy roster.
-- **Coins & chests:** enemies drop coins and XP. Chests are scattered randomly around the map; large chests cost more but roll better.
+- **Coins & chests:** enemies drop coins and XP. Chests are scattered randomly around the map; large chests cost more but roll better. Opening one freezes the game and spins a CS:GO-style item roulette that lands on your prize (skip with E / Space / A / tap).
   - Small chest: Common 70% · Rare 23% · Epic 6% · Legendary 1%
   - Large chest: Common 15% · Rare 55% · Epic 24% · Legendary 6%
   - Boss drop: Rare 55% · Epic 33% · Legendary 12%
@@ -47,6 +47,11 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 - **Level-ups:** Megabonk-style. Pick 1 of 3 upgrades, each rolled at its own rarity (bigger values at higher rarity).
 - **Portal & boss:** find the portal (marker on screen), interact to summon the stage boss. Stand in the ring to charge the portal, kill the boss, then enter the portal.
 - **Scaling:** difficulty = `1.085^minutes × 1.22^stagesCleared`. Enemy HP, damage, spawn credits, coin/XP drops and chest prices all scale off it, so everything grows exponentially. Elites (Blazing, Glacial, Overloading, Vampiric) show up as it rises.
+
+## Look & feel
+
+- **Graphics:** PBR materials, ACES tone mapping, gradient sky with a sun, smooth terrain with colour variation, wind-swaying grass and trees, animated water and glowing lava, bloom on glowing parts, soft contact shadows. *Graphics quality* in Settings switches phones to a lighter renderer (no bloom, Lambert shading).
+- **Physics & juice:** slimes squash on landing and wobble like jelly, enemies flinch and squish when hit, waddle while walking, and flyers bank into turns. Dead enemies get flung, tumble and bounce. Debris, coins and items bounce on the terrain. The player squashes and stretches, leans into movement and gets a FOV kick on dashes. Chest lids spring open, big hits briefly freeze the game (hit-stop), and the camera pulls in when trees block the view.
 
 ## Survivors
 

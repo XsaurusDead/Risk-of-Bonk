@@ -5,6 +5,11 @@ import { Input } from './core/input.js';
 import { loadSave } from './core/save.js';
 import { Game } from './game/game.js';
 import { UI } from './ui/ui.js';
+import { initMaterials } from './game/models.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 function showError(msg) {
   let box = document.getElementById('err-box');
@@ -38,14 +43,29 @@ function boot() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = G.quality === 'high';
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.92;
   G.renderer = renderer;
+  initMaterials();
 
   G.scene = new THREE.Scene();
   G.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 450);
   G.clock = new THREE.Clock();
 
+  // Bloom makes glowing bits (eyes, crystals, lava, projectiles) pop. High quality only.
+  if (G.quality === 'high') {
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(G.scene, G.camera));
+    const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.55, 0.45, 1.0);
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+    G.composer = composer;
+    G.bloom = bloom;
+  }
+
   window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
+    if (G.composer) G.composer.setSize(window.innerWidth, window.innerHeight);
     G.camera.aspect = window.innerWidth / window.innerHeight;
     G.camera.updateProjectionMatrix();
   });
@@ -67,7 +87,8 @@ function loop() {
   G.realTime += dt;
   Input.update(dt);
 
-  if (Input.pressed.pause) {
+  if (G.hitStop > 0) G.hitStop -= dt;
+  if (Input.pressed.pause && G.mode !== 'chest') {
     if (G.mode === 'playing') Game.pause();
     else if (G.mode === 'paused') Game.resume();
   }
@@ -77,7 +98,8 @@ function loop() {
         Game.menuUpdate(dt);
         break;
       case 'playing':
-        Game.update(dt);
+        // hit-stop: a few frames of near-freeze on huge impacts
+        Game.update(G.hitStop > 0 ? dt * 0.06 : dt);
         break;
     }
     UI.update(dt);
@@ -85,7 +107,8 @@ function loop() {
     console.error(err);
     showError(err.stack || err.message);
   }
-  G.renderer.render(G.scene, G.camera);
+  if (G.composer) G.composer.render(dt);
+  else G.renderer.render(G.scene, G.camera);
   Input.endFrame();
 }
 

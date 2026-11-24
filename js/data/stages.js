@@ -12,6 +12,7 @@ export const STAGES = [
     decor: [
       { type: 'tree', count: 120, collide: 0.8, scale: [0.8, 1.5] },
       { type: 'rock', count: 50, collide: 1.0, scale: [0.7, 1.8] },
+      { type: 'grass', count: 1600, collide: 0, scale: [0.7, 1.4], tint: 0x5fae3f },
       { type: 'flower', count: 260, collide: 0, scale: [0.6, 1.2] },
       { type: 'ruin_pillar', count: 18, collide: 1.0, scale: [0.8, 1.4] },
     ],
@@ -27,6 +28,7 @@ export const STAGES = [
     liquid: null,
     decor: [
       { type: 'cactus', count: 90, collide: 0.6, scale: [0.8, 1.6] },
+      { type: 'grass', count: 350, collide: 0, scale: [0.6, 1.1], tint: 0xc9a55a },
       { type: 'bones', count: 30, collide: 0.8, scale: [0.8, 1.5] },
       { type: 'sandstone', count: 40, collide: 1.6, scale: [0.8, 2.2] },
       { type: 'obelisk', count: 10, collide: 1.2, scale: [1, 1.6] },
@@ -43,6 +45,7 @@ export const STAGES = [
     liquid: { level: -4, color: 0x9fdcff, opacity: 0.9, emissive: 0x1a3a55, dps: 0, slow: 0.4 },
     decor: [
       { type: 'pine', count: 130, collide: 0.7, scale: [0.8, 1.8] },
+      { type: 'grass', count: 300, collide: 0, scale: [0.5, 0.9], tint: 0x8aa38a },
       { type: 'ice_spike', count: 50, collide: 0.9, scale: [0.7, 2.0] },
       { type: 'rock', count: 30, collide: 1.0, scale: [0.7, 1.6], tint: 0x9aa8b8 },
     ],
@@ -60,6 +63,7 @@ export const STAGES = [
     decor: [
       { type: 'giant_mushroom', count: 70, collide: 1.0, scale: [0.8, 2.0] },
       { type: 'glow_shroom', count: 200, collide: 0, scale: [0.6, 1.4] },
+      { type: 'grass', count: 700, collide: 0, scale: [0.6, 1.3], tint: 0x2a6a5a },
       { type: 'crystal', count: 40, collide: 0.8, scale: [0.6, 1.6], tint: 0x2fffe0 },
     ],
     enemies: { sporeling: 4, shroom_shaman: 3, cave_bat: 3, glow_beetle: 2 },
@@ -76,6 +80,7 @@ export const STAGES = [
       { type: 'obsidian_spike', count: 70, collide: 0.9, scale: [0.8, 2.2] },
       { type: 'lava_rock', count: 60, collide: 1.2, scale: [0.7, 1.8] },
       { type: 'dead_tree', count: 50, collide: 0.5, scale: [0.8, 1.5] },
+      { type: 'grass', count: 250, collide: 0, scale: [0.5, 0.9], tint: 0x3a2a22 },
     ],
     enemies: { magma_hound: 4, fire_imp: 3, obsidian_brute: 1, ember_wisp: 3 },
     boss: 'inferno_drake',
@@ -92,6 +97,7 @@ export const STAGES = [
       { type: 'void_crystal', count: 70, collide: 0.9, scale: [0.8, 2.2] },
       { type: 'ruin_pillar', count: 30, collide: 1.0, scale: [1, 1.8], tint: 0x3a2a5a },
       { type: 'floating_rock', count: 40, collide: 0, scale: [0.8, 2.5] },
+      { type: 'grass', count: 500, collide: 0, scale: [0.6, 1.2], tint: 0x5a2a8a },
     ],
     enemies: { void_reaver: 3, eye_stalker: 3, null_shade: 3, void_bomber: 3 },
     boss: 'void_herald',

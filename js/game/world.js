@@ -3,9 +3,11 @@
 import * as THREE from 'three';
 import { G } from '../core/state.js';
 import { makeNoise2D, fbm, smoothstep, mulberry32, SpatialHash, lerp, clamp } from '../core/util.js';
-import { buildMerged, decorParts, MAT, buildChest, buildPortal } from './models.js';
+import { buildMerged, decorParts, MAT, buildChest, buildPortal, litMaterial, swayMaterial, setGlowColor } from './models.js';
 
 const SIZE = 260;
+// wind sway strength per vegetation type (0 = static)
+const SWAY = { grass: 0.32, dry_grass: 0.32, flower: 0.25, tree: 0.0035, pine: 0.003, dead_tree: 0.004, giant_mushroom: 0.002, glow_shroom: 0.08, cactus: 0.0008 };
 const SEGS = 130;
 
 export class World {
@@ -107,11 +109,22 @@ export class World {
 
   // ---------------------------------------------------------------- terrain mesh
   buildTerrain() {
+    // Smooth-shaded indexed mesh; the triangle split matches heightAt().
+    const N = this.N;
     this.terrainGeo = new THREE.BufferGeometry();
-    const tris = SEGS * SEGS * 2;
-    this.terrainGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(tris * 9), 3));
-    this.terrainGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(tris * 9), 3));
-    this.terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.terrainGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * N * 3), 3));
+    this.terrainGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(N * N * 3), 3));
+    const idx = new Uint32Array(SEGS * SEGS * 6);
+    let o = 0;
+    for (let j = 0; j < SEGS; j++) {
+      for (let i = 0; i < SEGS; i++) {
+        const a = j * N + i, b = (j + 1) * N + i, c = j * N + i + 1, d = (j + 1) * N + i + 1;
+        idx[o++] = a; idx[o++] = b; idx[o++] = c;
+        idx[o++] = c; idx[o++] = b; idx[o++] = d;
+      }
+    }
+    this.terrainGeo.setIndex(new THREE.BufferAttribute(idx, 1));
+    this.terrainMat = litMaterial({ vertexColors: true, roughness: 0.96 });
     this.terrain = new THREE.Mesh(this.terrainGeo, this.terrainMat);
     this.terrain.receiveShadow = true;
     this.group.add(this.terrain);
@@ -119,58 +132,63 @@ export class World {
   }
 
   rebuildTerrainGeometry() {
-    const pos = this.terrainGeo.attributes.position.array;
-    const col = this.terrainGeo.attributes.color.array;
     const N = this.N, g = this.grid, c = this.cell, H = SIZE / 2;
+    const pos = this.terrainGeo.attributes.position.array;
+    for (let j = 0; j < N; j++) {
+      for (let i = 0; i < N; i++) {
+        const k = (j * N + i) * 3;
+        pos[k] = -H + i * c;
+        pos[k + 1] = g[j * N + i];
+        pos[k + 2] = -H + j * c;
+      }
+    }
+    this.terrainGeo.attributes.position.needsUpdate = true;
+    this.terrainGeo.computeVertexNormals();
+    this.terrainGeo.computeBoundingSphere();
+
+    // colours: height bands + slope rock + large/small noise patches for variety
+    const col = this.terrainGeo.attributes.color.array;
+    const nor = this.terrainGeo.attributes.normal.array;
     const gc = this.stage.ground;
     const cLow = new THREE.Color(gc.low), cMid = new THREE.Color(gc.mid), cHigh = new THREE.Color(gc.high);
     const cSlope = new THREE.Color(gc.slope), cPeak = new THREE.Color(gc.peak);
     const tmp = new THREE.Color();
     const amp = this.stage.terrain.amp;
-    const rng = mulberry32(this.seed + 7);
-    const a = new THREE.Vector3(), b = new THREE.Vector3(), cc = new THREE.Vector3(), n = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
-    let o = 0;
-    const tri = (x0, z0, y0, x1, z1, y1, x2, z2, y2) => {
-      a.set(x0, y0, z0); b.set(x1, y1, z1); cc.set(x2, y2, z2);
-      n.crossVectors(e1.subVectors(b, a), e2.subVectors(cc, a)).normalize();
-      if (n.y < 0) n.negate();
-      const h = (y0 + y1 + y2) / 3;
-      const t = clamp((h + amp) / (amp * 2.2), 0, 1);
+    const n = this.noise;
+    for (let v = 0; v < N * N; v++) {
+      const x = pos[v * 3], h = pos[v * 3 + 1], z = pos[v * 3 + 2];
+      const ny = nor[v * 3 + 1];
+      const patch = n(x * 0.035 + 31, z * 0.035 - 17) * 0.5 + 0.5;
+      const t = clamp((h + amp) / (amp * 2.2) + (patch - 0.5) * 0.35, 0, 1);
       if (t < 0.5) tmp.copy(cLow).lerp(cMid, t * 2);
       else tmp.copy(cMid).lerp(cHigh, (t - 0.5) * 2);
-      const steep = smoothstep(0.82, 0.62, n.y);
-      tmp.lerp(cSlope, steep);
+      tmp.lerp(cSlope, smoothstep(0.86, 0.66, ny));
       if (h > 18) tmp.lerp(cPeak, smoothstep(18, 30, h));
-      const jitter = 0.94 + rng() * 0.1;
-      for (const [x, y, z] of [[x0, y0, z0], [x1, y1, z1], [x2, y2, z2]]) {
-        pos[o] = x; pos[o + 1] = y; pos[o + 2] = z;
-        col[o] = tmp.r * jitter; col[o + 1] = tmp.g * jitter; col[o + 2] = tmp.b * jitter;
-        o += 3;
-      }
-    };
-    for (let j = 0; j < SEGS; j++) {
-      for (let i = 0; i < SEGS; i++) {
-        const x0 = -H + i * c, z0 = -H + j * c, x1 = x0 + c, z1 = z0 + c;
-        const h00 = g[j * N + i], h10 = g[j * N + i + 1], h01 = g[(j + 1) * N + i], h11 = g[(j + 1) * N + i + 1];
-        tri(x0, z0, h00, x0, z1, h01, x1, z0, h10);
-        tri(x1, z0, h10, x0, z1, h01, x1, z1, h11);
-      }
+      // darker damp ground near liquid
+      if (this.liquidLevel > -900) tmp.multiplyScalar(lerp(0.72, 1, smoothstep(this.liquidLevel, this.liquidLevel + 2.5, h)));
+      const fine = 0.9 + (n(x * 0.45, z * 0.45) * 0.5 + 0.5) * 0.18;
+      col[v * 3] = tmp.r * fine;
+      col[v * 3 + 1] = tmp.g * fine;
+      col[v * 3 + 2] = tmp.b * fine;
     }
-    this.terrainGeo.attributes.position.needsUpdate = true;
     this.terrainGeo.attributes.color.needsUpdate = true;
-    this.terrainGeo.computeVertexNormals();
-    this.terrainGeo.computeBoundingSphere();
   }
 
   buildLiquid() {
     const L = this.stage.liquid;
     if (!L) return;
-    const geo = new THREE.PlaneGeometry(SIZE + 80, SIZE + 80, 1, 1).rotateX(-Math.PI / 2);
-    const mat = new THREE.MeshLambertMaterial({ color: L.color, emissive: L.emissive, transparent: L.opacity < 1, opacity: L.opacity });
+    const segs = MAT.high ? 72 : 1;
+    const geo = new THREE.PlaneGeometry(SIZE + 80, SIZE + 80, segs, segs).rotateX(-Math.PI / 2);
+    const lava = L.dps >= 0.1;
+    const mat = litMaterial({
+      color: L.color, emissive: L.emissive, emissiveIntensity: lava ? 1.6 : 1, transparent: L.opacity < 1, opacity: L.opacity,
+      roughness: lava ? 0.6 : 0.08, metalness: lava ? 0 : 0.25,
+    });
     this.liquid = new THREE.Mesh(geo, mat);
     this.liquid.position.y = L.level;
     this.liquid.receiveShadow = true;
     this.group.add(this.liquid);
+    this.liquidWaves = segs > 1;
     this.disposables.push(geo, mat);
   }
 
@@ -237,7 +255,10 @@ export class World {
       const { geo, glow } = buildMerged(decorParts(d.type, d.tint));
       if (geo) this.disposables.push(geo);
       if (glow) this.disposables.push(glow);
-      const inst = geo ? new THREE.InstancedMesh(geo, MAT.vc, count) : null;
+      const sway = SWAY[d.type];
+      const mat = sway && geo ? swayMaterial(sway) : MAT.vc;
+      if (mat !== MAT.vc) this.disposables.push(mat);
+      const inst = geo ? new THREE.InstancedMesh(geo, mat, count) : null;
       const instG = glow ? new THREE.InstancedMesh(glow, MAT.glow, count) : null;
       let n = 0;
       for (let k = 0; k < count * 3 && n < count; k++) {
@@ -263,7 +284,7 @@ export class World {
         if (!m) continue;
         m.count = n;
         m.instanceMatrix.needsUpdate = true;
-        m.castShadow = m === inst && d.collide > 0 && G.quality !== 'low';
+        m.castShadow = m === inst && d.collide > 0 && MAT.high;
         m.receiveShadow = false;
         m.computeBoundingSphere();
         this.group.add(m);
@@ -334,9 +355,12 @@ export class World {
   update(dt) {
     this.t += dt;
     for (const c of this.chests) {
-      if (c.opened && c.openT < 1) {
-        c.openT = Math.min(1, c.openT + dt * 3);
-        c.lid.rotation.x = -c.openT * 1.9;
+      if (c.opened && c.openT < 3) {
+        // springy lid: flips open, overshoots, wobbles to rest
+        c.openT += dt;
+        c.lidV = (c.lidV || 0) + (-120 * ((c.lidA || 0) + 1.9) - 7 * (c.lidV || 0)) * dt;
+        c.lidA = (c.lidA || 0) + c.lidV * dt;
+        c.lid.rotation.x = c.lidA;
         c.glow.visible = false;
       } else if (!c.opened) {
         c.glow.scale.y = 1 + Math.sin(this.t * 3 + c.pos.x) * 0.5;
@@ -352,13 +376,31 @@ export class World {
         r.position.y = 0.9 + Math.sin(this.t * 2 + i) * 0.25;
         r.rotation.y += dt;
         const lit = P.state === 'ready' || (P.state === 'charging' && P.charge >= (i + 1) / P.runes.length);
-        r.material.color.set(lit ? 0x55ddff : 0xff3355);
+        setGlowColor(r.material, lit ? 0x55ddff : 0xff3355);
       }
       P.core.material.color.set(P.state === 'ready' ? 0x55ddff : P.state === 'charging' ? 0xffaa33 : 0xff3355);
       P.zone.visible = P.state === 'charging';
       if (P.zone.visible) P.zone.rotation.y += dt * 0.2;
     }
-    if (this.liquid) this.liquid.position.y = this.liquidLevel + Math.sin(this.t * 0.8) * 0.05;
+    if (this.liquid) {
+      this.liquid.position.y = this.liquidLevel + Math.sin(this.t * 0.8) * 0.05;
+      // gentle rolling waves (high quality only)
+      if (this.liquidWaves) {
+        this.waveT = (this.waveT || 0) - dt;
+        if (this.waveT <= 0) {
+          this.waveT = 1 / 20;
+          const a = this.liquid.geometry.attributes.position;
+          const arr = a.array;
+          const tt = this.t;
+          for (let i = 0; i < a.count; i++) {
+            const x = arr[i * 3], z = arr[i * 3 + 2];
+            arr[i * 3 + 1] = Math.sin(x * 0.18 + tt * 1.3) * 0.12 + Math.cos(z * 0.23 + tt * 0.9) * 0.1;
+          }
+          a.needsUpdate = true;
+          this.liquid.geometry.computeVertexNormals();
+        }
+      }
+    }
   }
 
   dispose() {

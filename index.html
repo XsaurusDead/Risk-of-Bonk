@@ -10,7 +10,7 @@
   <title>Risk of Bonk</title>
   <link rel="stylesheet" href="css/style.css" />
   <script type="importmap">
-    { "imports": { "three": "./vendor/three.module.min.js" } }
+    { "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/addons/" } }
   </script>
 </head>
 <body data-device="kbm">
@@ -204,6 +204,19 @@
           <button class="btn primary" id="btn-retry">↻ Try Again</button>
           <button class="btn" id="btn-menu">Main Menu</button>
         </div>
+      </div>
+    </div>
+
+    <div id="roulette" class="hidden">
+      <div class="rl-box">
+        <div class="rl-title" id="rl-title">Chest</div>
+        <div class="rl-window">
+          <div class="rl-strip" id="rl-strip"></div>
+          <div class="rl-marker"></div>
+          <div class="rl-fade l"></div><div class="rl-fade r"></div>
+        </div>
+        <div class="rl-result" id="rl-result"></div>
+        <div class="rl-hint" id="rl-hint"></div>
       </div>
     </div>
 

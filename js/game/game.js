@@ -13,10 +13,10 @@ import { Player } from './player.js';
 import { Director } from './director.js';
 import { initEnemies, updateEnemies, clearEnemies, spawnEnemy } from './enemies.js';
 import { updateCombat, clearCombat } from './combat.js';
-import { initFx, updateFx, updateHpBars, clearFx, particles, ring, shake } from './fx.js';
+import { initFx, updateFx, updateHpBars, updateBlobShadows, clearFx, particles, gibs, ring, shake } from './fx.js';
 import { initPickups, updatePickups, clearPickups, dropItem, rollRarity, rollItem, dropCoins, collectAll } from './pickups.js';
 import { updateMinions, clearMinions } from './minions.js';
-import { buildCharacter } from './models.js';
+import { buildCharacter, windUniform } from './models.js';
 import { sfx } from '../core/audio.js';
 import { track, trackMax, commitRunBests, persist } from '../core/save.js';
 import { weightedPick, shuffle, rand } from '../core/util.js';
@@ -40,6 +40,8 @@ export const Game = {
     this.sun.shadow.bias = -0.0005;
     scene.add(this.sun, this.sun.target);
     scene.fog = new THREE.Fog(0xffffff, 40, 170);
+    this.sunOffset = new THREE.Vector3(60, 55, 25);
+    this.buildSky();
 
     initFx(scene);
     initPickups(scene, (id) => this.onItemCollected(id));
@@ -47,16 +49,57 @@ export const Game = {
     this.enterMenu();
   },
 
+  buildSky() {
+    const geo = new THREE.SphereGeometry(400, 32, 16);
+    const mat = new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false, fog: false,
+      uniforms: {
+        top: { value: new THREE.Color() }, horizon: { value: new THREE.Color() }, ground: { value: new THREE.Color() },
+        sunDir: { value: this.sunOffset.clone().normalize() }, sunCol: { value: new THREE.Color() },
+      },
+      vertexShader: `varying vec3 vDir;
+        void main() {
+          vDir = normalize(position);
+          vec4 p = modelViewMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * p;
+          gl_Position.z = gl_Position.w; // always at the far plane
+        }`,
+      fragmentShader: `uniform vec3 top; uniform vec3 horizon; uniform vec3 ground; uniform vec3 sunDir; uniform vec3 sunCol;
+        varying vec3 vDir;
+        void main() {
+          vec3 d = normalize(vDir);
+          float h = d.y;
+          vec3 c = h > 0.0 ? mix(horizon, top, pow(clamp(h, 0.0, 1.0), 0.55)) : mix(horizon, ground, clamp(-h * 4.0, 0.0, 1.0));
+          float s = max(dot(d, normalize(sunDir)), 0.0);
+          c += sunCol * (pow(s, 900.0) * 2.5 + pow(s, 24.0) * 0.25 + pow(s, 4.0) * 0.06);
+          gl_FragColor = vec4(c, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+    });
+    this.sky = new THREE.Mesh(geo, mat);
+    this.sky.frustumCulled = false;
+    this.sky.renderOrder = -10;
+    G.scene.add(this.sky);
+  },
+
   applyStageLook(stage) {
-    G.scene.background = new THREE.Color(stage.sky);
+    const u = this.sky.material.uniforms;
+    const horizon = new THREE.Color(stage.fog);
+    u.horizon.value.copy(horizon);
+    u.top.value.set(stage.sky).lerp(new THREE.Color(0x0a1a4a), 0.18);
+    u.ground.value.copy(horizon).multiplyScalar(0.8);
+    u.sunCol.value.set(stage.sun);
+    G.scene.background = null;
     G.scene.fog.color.set(stage.fog);
     G.scene.fog.near = 30;
     G.scene.fog.far = stage.fogFar;
     this.hemi.color.set(stage.hemiSky);
     this.hemi.groundColor.set(stage.hemiGround);
-    this.hemi.intensity = stage.hemiInt;
+    const pbr = G.quality === 'high';
+    this.hemi.intensity = stage.hemiInt * (pbr ? 1.0 : 1);
     this.sun.color.set(stage.sun);
-    this.sun.intensity = stage.sunInt;
+    this.sun.intensity = stage.sunInt * (pbr ? 1.05 : 1);
   },
 
   // ------------------------------------------------------------ menu backdrop
@@ -100,8 +143,10 @@ export const Game = {
       r.armL.rotation.x = -Math.sin(this.menuT * 1.5) * 0.15;
     }
     w.update(dt);
-    this.sun.position.set(40, 80, 30);
+    windUniform.value += dt;
+    this.sun.position.copy(this.sunOffset);
     this.sun.target.position.set(0, 0, 0);
+    this.sky.position.copy(G.camera.position);
     updateFx(dt);
   },
 
@@ -225,8 +270,11 @@ export const Game = {
     this.updateAmbient(dt);
 
     // shadow camera follows the player
-    this.sun.position.set(p.pos.x + 40, p.pos.y + 80, p.pos.z + 30);
+    this.sun.position.copy(p.pos).add(this.sunOffset);
     this.sun.target.position.copy(p.pos);
+    this.sky.position.copy(G.camera.position);
+    windUniform.value += dt;
+    updateBlobShadows();
 
     // interaction
     this.interactable = p.dead ? null : G.world.findInteractable(p.pos);
@@ -279,11 +327,31 @@ export const Game = {
     c.opened = true;
     track('chests');
     track('coinsSpent', cost);
-    const rarity = rollRarity(c.large ? 'large' : 'small');
-    const id = rollItem(rarity);
-    dropItem(c.pos.clone().setY(c.pos.y + 1.5), id);
+    const kind = c.large ? 'large' : 'small';
+    const id = rollItem(rollRarity(kind));
     particles(c.pos, 0xffe680, 20, 6, 0.6);
+    gibs(c.pos.clone().setY(c.pos.y + 0.6), 0xffcc22, c.large ? 14 : 8, 6, 0.22); // coin shower
+    c.group.scale.set(1.15, 0.85, 1.15);
+    setTimeout(() => c.group.scale.set(1, 1, 1), 120);
     sfx('chest');
+    // Freeze the whole game while the CS:GO-style roulette spins.
+    G.mode = 'chest';
+    if (G.ui) G.ui.openRoulette(id, kind, () => this.finishChest(c, id));
+    else this.finishChest(c, id);
+  },
+
+  /** Filler items for the roulette strip, rolled with the same odds as the chest. */
+  rouletteFiller(kind, n) {
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(rollItem(rollRarity(kind)));
+    return out;
+  },
+
+  finishChest(c, id) {
+    G.mode = 'playing';
+    this.onItemCollected(id);
+    particles(G.player.pos, 0xffffff, 16, 6, 0.6);
+    Input.requestLock();
   },
 
   activatePortal() {
@@ -326,6 +394,7 @@ export const Game = {
   onBossKilled(e) {
     const run = G.run;
     run.bossDead = true;
+    G.hitStop = 0.35;
     track('bossKills');
     const rarity = rollRarity('boss');
     dropItem(e.pos.clone().setY(e.pos.y + 2), rollItem(rarity));

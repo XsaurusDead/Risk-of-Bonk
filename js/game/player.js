@@ -76,6 +76,13 @@ export class Player {
     this.animT = 0;
     this.animType = null;
     this.walkPhase = 0;
+    this.sq = 0; // squash spring
+    this.sqv = 0;
+    this.lean = 0;
+    this.leanF = 0;
+    this.camDip = 0;
+    this.camDipV = 0;
+    this.fov = 70;
 
     this.camRayOrigin = new THREE.Vector3();
     this.camRayDir = new THREE.Vector3(0, 0, -1);
@@ -283,6 +290,8 @@ export class Player {
     this.hp -= dmg;
     this.shieldDelay = 4;
     this.hurtT = 0.25;
+    if (total > this.stats.maxHp * 0.25) G.hitStop = Math.max(G.hitStop || 0, 0.07);
+    this.sqv -= 2;
     if (G.ui) G.ui.hurt(total / this.stats.maxHp);
     sfx('hurt', 0.12);
     shake(Math.min(0.4, (total / this.stats.maxHp) * 2));
@@ -401,9 +410,30 @@ export class Player {
     const cp = Math.cos(this.camPitch), sp = Math.sin(this.camPitch);
     const fx = -Math.sin(this.camYaw) * cp, fy = sp, fz = -Math.cos(this.camYaw) * cp;
     const rx = Math.cos(this.camYaw), rz = -Math.sin(this.camYaw);
-    const dist = G.isTouch ? 8 : 7;
+    const maxDist = G.isTouch ? 8 : 7;
     const shoulder = 1.1;
     const pivotY = this.pos.y + 2.2;
+    // pull the camera in when a tree/rock/pillar blocks the view to the player
+    let want = maxDist;
+    const w0 = G.world;
+    if (w0) {
+      const ex = this.pos.x - fx * maxDist + rx * shoulder, ez = this.pos.z - fz * maxDist + rz * shoulder;
+      const sx0 = this.pos.x, sz0 = this.pos.z;
+      const dx = ex - sx0, dz = ez - sz0;
+      const len2 = dx * dx + dz * dz || 1;
+      for (const c of w0.colHash.query((sx0 + ex) / 2, (sz0 + ez) / 2, maxDist / 2 + 4)) {
+        if (c.r < 0.45) continue;
+        const t = ((c.x - sx0) * dx + (c.z - sz0) * dz) / len2;
+        if (t <= 0.05 || t >= 1.05) continue;
+        const px = sx0 + dx * t - c.x, pz = sz0 + dz * t - c.z;
+        const block = c.r * 1.9 + 0.4;
+        if (px * px + pz * pz < block * block) want = Math.min(want, Math.max(2.2, t * maxDist - block * 0.8));
+      }
+    }
+    this.camDist = this.camDist ?? maxDist;
+    // snap in fast, ease back out slowly
+    this.camDist += (want - this.camDist) * Math.min(1, dt * (want < this.camDist ? 14 : 3));
+    const dist = this.camDist;
     let cx = this.pos.x - fx * dist + rx * shoulder;
     let cy = pivotY - fy * dist + 0.3;
     let cz = this.pos.z - fz * dist + rz * shoulder;
@@ -419,7 +449,17 @@ export class Player {
       sy = (Math.random() - 0.5) * G.shake * 0.6;
       G.shake = Math.max(0, G.shake - dt * 2.5);
     }
-    cam.position.set(cx + sx, cy + sy, cz);
+    // landing dip spring + FOV kick when dashing / moving fast
+    this.camDipV += (-90 * this.camDip - 11 * this.camDipV) * dt;
+    this.camDip += this.camDipV * dt;
+    const spd = Math.hypot(this.vel.x, this.vel.z);
+    const targetFov = 70 + (this.dashS ? 12 : 0) + Math.min(6, Math.max(0, spd - 9) * 0.8);
+    this.fov += (targetFov - this.fov) * Math.min(1, dt * 8);
+    if (Math.abs(cam.fov - this.fov) > 0.05) {
+      cam.fov = this.fov;
+      cam.updateProjectionMatrix();
+    }
+    cam.position.set(cx + sx, cy + sy + this.camDip, cz);
     cam.rotation.set(this.camPitch, this.camYaw, 0, 'YXZ');
     cam.updateMatrixWorld();
     this.camRayOrigin.copy(cam.position);
@@ -505,6 +545,7 @@ export class Player {
     if (Input.pressed.jump && !this.dashS) {
       if (this.grounded || this.coyote > 0) {
         this.vel.y = s.jumpPower;
+        this.sqv += 4;
         this.jumpsLeft = s.jumps - 1;
         this.grounded = false;
         this.coyote = 0;
@@ -512,6 +553,7 @@ export class Player {
       } else if (this.jumpsLeft > 0) {
         this.jumpsLeft--;
         this.vel.y = s.jumpPower * 0.95;
+        this.sqv += 3;
         particles(this.pos, 0xffffff, 6, 3, 0.3, 0.25);
         sfx('jump');
       }
@@ -566,6 +608,14 @@ export class Player {
     const gh = w.heightAt(this.pos.x, this.pos.z);
     if (this.pos.y <= gh) {
       const landing = !this.grounded && this.vel.y < -1;
+      if (landing) {
+        const impact = -this.vel.y;
+        this.sqv -= Math.min(7, impact * 0.28);
+        if (impact > 14) {
+          this.camDipV -= Math.min(6, impact * 0.18);
+          particles(this.pos, 0xddddcc, 8, 4, 0.4, 0.3, 14);
+        }
+      }
       this.pos.y = gh;
       if (this.vel.y < 0) this.vel.y = 0;
       if (landing) {
@@ -719,6 +769,19 @@ export class Player {
     r.armL.rotation.x = armL;
     r.armR.rotation.x = armR;
     r.body.rotation.y = twist;
+    // squash & stretch spring
+    this.sqv += (-200 * this.sq - 13 * this.sqv) * dt;
+    this.sq = Math.max(-0.35, Math.min(0.35, this.sq + this.sqv * dt));
+    m.scale.set(1 - this.sq * 0.4, 1 + this.sq, 1 - this.sq * 0.4);
+    // lean into movement: forward with speed, sideways into turns
+    const fyaw = this.yaw + Math.PI;
+    const fwd = this.vel.x * Math.sin(fyaw) + this.vel.z * Math.cos(fyaw);
+    const side = this.vel.x * Math.cos(fyaw) - this.vel.z * Math.sin(fyaw);
+    this.leanF += (Math.max(-0.2, Math.min(0.25, fwd * 0.018)) - this.leanF) * Math.min(1, dt * 8);
+    this.lean += (Math.max(-0.3, Math.min(0.3, side * 0.03)) - this.lean) * Math.min(1, dt * 8);
+    m.rotation.order = 'YXZ';
+    m.rotation.x = this.grounded ? this.leanF : 0;
+    m.rotation.z = -this.lean;
     if (this.charId === 'bulwark' && this.cs.spin > 0.1) {
       r.armR.rotation.x = -1.4;
       r.armL.rotation.x = -1.4;
