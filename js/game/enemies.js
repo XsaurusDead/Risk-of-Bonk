@@ -5,6 +5,7 @@ import { G } from '../core/state.js';
 import { ENEMIES, BOSSES, ELITES } from '../data/enemies.js';
 import { ITEMS } from '../data/items.js';
 import { enemyGeometry, MAT } from './models.js';
+import { skinTexture } from './textures.js';
 import { spawnProjectile, damagePlayer, dealDamage, spawnZone, findTargets } from './combat.js';
 import { particles, ring, telegraph, shake, floatText, gibs } from './fx.js';
 import { dropCoins, dropXp, dropHeal } from './pickups.js';
@@ -32,11 +33,21 @@ export function spawnEnemy(id, pos, opts = {}) {
   const diff = run.diff;
   const elite = opts.elite ? ELITES[opts.elite] : null;
   const loopMult = 1 + run.loop * 0.5;
-  const hpMult = (opts.boss ? Math.pow(diff, 1.05) : diff) * loopMult * (elite ? elite.hpMult : 1);
-  const dmgMult = Math.pow(diff, 0.72) * (1 + run.loop * 0.2) * (elite ? elite.dmgMult : 1);
+  const champ = !!opts.champion;
+  const ot = opts.otMult || 1; // overtime scaling (after the 10 minute mark)
+  const hpMult = (opts.boss ? Math.pow(diff, 1.05) : diff) * loopMult * (elite ? elite.hpMult : 1) * (champ ? 28 : 1) * ot;
+  const dmgMult = Math.pow(diff, 0.72) * (1 + run.loop * 0.2) * (elite ? elite.dmgMult : 1) * (champ ? 2.2 : 1) * Math.pow(ot, 0.85);
 
-  const { geo, glow } = enemyGeometry(id, def);
+  const { geo, glow, roles } = enemyGeometry(id, def);
   const mat = MAT.vc.clone();
+  if (def.skin) {
+    mat.map = skinTexture(def.skin);
+    if (MAT.high) {
+      mat.bumpMap = mat.map;
+      mat.bumpScale = 1.2;
+    }
+    mat.needsUpdate = true;
+  }
   const group = new THREE.Group();
   // fully-glowing models (e.g. wisps) use their glow geometry as the body
   const body = new THREE.Mesh(geo || glow, mat);
@@ -44,10 +55,26 @@ export function spawnEnemy(id, pos, opts = {}) {
   group.add(body);
   if (glow && geo) group.add(new THREE.Mesh(glow, MAT.glow));
   if (!geo) mat.emissiveIntensity = 1;
-  const scale = elite ? 1.25 : 1;
+  // animatable rig parts, each hinged at its pivot
+  const rig = {};
+  for (const r of roles) {
+    const node = new THREE.Group();
+    node.position.set(r.pivot[0], r.pivot[1], r.pivot[2]);
+    node.rotation.order = 'YXZ';
+    if (r.geo) {
+      const m = new THREE.Mesh(r.geo, mat);
+      m.castShadow = body.castShadow;
+      node.add(m);
+    }
+    if (r.glow) node.add(new THREE.Mesh(r.glow, MAT.glow));
+    group.add(node);
+    rig[r.role] = node;
+  }
+  const scale = (elite ? 1.25 : 1) * (champ ? 2.1 : 1);
   group.scale.setScalar(scale);
   group.rotation.order = 'YXZ';
   if (elite) mat.emissive = new THREE.Color(elite.color).multiplyScalar(0.35);
+  if (champ) mat.emissive = new THREE.Color(0xffaa22).multiplyScalar(0.3);
   G.scene.add(group);
 
   const e = {
@@ -64,7 +91,12 @@ export function spawnEnemy(id, pos, opts = {}) {
     // spring-driven squash/stretch and flinch tilt (see updateSprings)
     sq: 0, sqv: 0, tilt: 0, tiltv: 0, walkPh: Math.random() * 6, lastX: pos.x, lastZ: pos.z, bank: 0, pitch: 0,
     jelly: JELLY.has(id) || def.ai === 'hopper', bodyColor: def.model[0][1],
+    rig: roles.length ? rig : null, animT: Math.random() * 10, armX: 0, champion: champ, overtime: ot > 1,
   };
+  if (champ) {
+    e.mass = 40;
+    e.speed *= 0.9;
+  }
   if (elite?.shield) e.shieldHp = e.maxHp * elite.shield;
   const h = G.world.heightAt(e.pos.x, e.pos.z);
   e.pos.y = e.flying ? h + e.hover : h;
@@ -96,7 +128,7 @@ export function killEnemy(e, o = {}) {
   const mult = e.elite ? 3 : 1;
   particles(_v.copy(e.pos).setY(e.pos.y + e.height * 0.4), e.elite ? e.elite.color : 0xffffff, e.isBoss ? 60 : 10, e.isBoss ? 14 : 6, 0.7, e.isBoss ? 0.8 : 0.4);
   if (!o.noReward) {
-    dropCoins(e.pos, e.def.coins * run.coinScale * mult * (1 + Math.random() * 0.3));
+    dropCoins(e.pos, e.def.coins * 0.6 * run.coinScale * mult * (e.champion ? 6 : 1) * (1 + Math.random() * 0.3));
     dropXp(e.pos, e.def.xp * run.xpScale * mult);
     if (Math.random() < (e.elite ? 0.25 : 0.03)) dropHeal(e.pos);
     track('kills');
@@ -122,6 +154,7 @@ export function killEnemy(e, o = {}) {
     }
   }
   if (e.isBoss && run.onBossKilled) run.onBossKilled(e);
+  if (e.champion && run.onChampionKilled) run.onChampionKilled(e);
 
   // death physics: get flung away from the player, tumble, bounce, then shrink away
   const away = _v2.copy(e.pos).sub(p ? p.pos : e.pos).setY(0);
@@ -138,6 +171,46 @@ export function killEnemy(e, o = {}) {
     const n = Math.min(16, Math.round(5 + e.radius * e.scale * 3 + (e.isBoss ? 20 : 0)));
     gibs(e.pos, e.bodyColor, n, e.isBoss ? 12 : 7, Math.min(0.7, 0.22 + e.radius * 0.12));
     if (e.jelly) particles(_v.copy(e.pos).setY(e.pos.y + 0.4), e.bodyColor, 12, 6, 0.7, 0.3, 20);
+  }
+}
+
+/** Procedural limb animation: walk cycles, arm swings & attacks, wing flaps, tails, heads. */
+function animateRig(e, dt, amt, held) {
+  if (held) return; // frozen/stunned enemies keep their pose
+  const r = e.rig;
+  e.animT += dt;
+  const t = e.animT;
+  const ph = e.walkPh;
+  const walk = Math.sin(ph) * 0.7 * amt;
+  const k = Math.min(1, dt * 12);
+  if (r.legL) r.legL.rotation.x = walk;
+  if (r.legR) r.legR.rotation.x = -walk;
+  if (r.legFL) r.legFL.rotation.x = walk;
+  if (r.legBR) r.legBR.rotation.x = walk;
+  if (r.legFR) r.legFR.rotation.x = -walk;
+  if (r.legBL) r.legBL.rotation.x = -walk;
+  if (r.legs) r.legs.rotation.z = Math.sin(ph * 2) * 0.12 * amt;
+  // arms: swing while walking, raise on wind-up, slam on release
+  let armTarget = -walk * 0.7;
+  if (e.state === 'windup' || (e.state === 'attack' && e.t < 0.6)) armTarget = -2.2;
+  else if (e.state === 'recover' || e.state === 'attack') armTarget = 0.5;
+  e.armX += (armTarget - e.armX) * k;
+  if (r.armL) r.armL.rotation.x = e.armX + (amt > 0.1 ? walk * 0.3 : Math.sin(t * 1.6) * 0.05);
+  if (r.armR) r.armR.rotation.x = e.state === 'chase' ? -e.armX * 0.6 + (e.ai === 'ranged' ? -0.3 : 0) : e.armX;
+  if (r.wingL) r.wingL.rotation.z = Math.sin(t * (e.isBoss ? 4 : 14)) * 0.55 + 0.1;
+  if (r.wingR) r.wingR.rotation.z = -Math.sin(t * (e.isBoss ? 4 : 14)) * 0.55 - 0.1;
+  if (r.tail) {
+    r.tail.rotation.y = Math.sin(t * 3) * 0.3;
+    r.tail.rotation.x = e.state === 'windup' || e.state === 'attack' ? -0.5 : Math.sin(t * 2) * 0.08;
+  }
+  const snap = e.state === 'windup' || e.state === 'attack' ? 1 : 0.25;
+  if (r.clawL) r.clawL.rotation.y = Math.sin(t * 7) * 0.25 * snap + 0.1;
+  if (r.clawR) r.clawR.rotation.y = -Math.sin(t * 7) * 0.25 * snap - 0.1;
+  if (r.neck) r.neck.rotation.z = Math.sin(t * 2.5) * 0.15;
+  if (r.head) {
+    r.head.rotation.x = Math.sin(t * 2.2) * 0.06 + (e.state === 'windup' ? -0.25 : 0);
+    r.head.rotation.y = Math.sin(t * 0.9) * 0.15;
+    if (e.jelly) r.head.rotation.z = Math.sin(t * 5) * 0.08;
   }
 }
 
@@ -341,12 +414,13 @@ function updateEnemy(e, dt, p) {
   } else if (e.isBoss && moved > 0.001) {
     e.walkPh += moved * 0.7;
     roll = Math.sin(e.walkPh) * 0.04;
-  }
+  } else e.walkPh += moved * 1.5;
   if (e.state === 'windup' || e.state === 'fuse') sq += Math.sin(e.t * 40) * 0.06;
   if (e.ai === 'hopper' && e.pos.y <= gy + 0.05 && e.aux < 0.22) sq -= (0.22 - e.aux) * 1.2; // crouch before a hop
   m.rotation.x = pitch;
   m.rotation.z = roll;
   m.scale.set(e.scale * (1 - sq * 0.45), e.scale * (1 + sq), e.scale * (1 - sq * 0.45));
+  if (e.rig) animateRig(e, dt, Math.min(1, moved / Math.max(dt, 1e-4) / 4), frozen || stunned);
   if (e.flash > 0) e.flash -= dt;
   const em = e.mat.emissive;
   if (e.flash > 0) em.copy(FLASH).multiplyScalar(0.8);

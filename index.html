@@ -25,10 +25,12 @@
       <div id="hud-tl">
         <div id="hud-stage">Verdant Meadows</div>
         <div id="hud-timer">0:00</div>
+        <div id="hud-runtime"></div>
         <div id="hud-diff"><div id="hud-diff-fill"></div><span id="hud-diff-label">Easy</span></div>
       </div>
       <div id="hud-tr">
-        <div id="hud-coins"><span class="coin-icon"></span><span id="hud-coin-val">0</span></div>
+        <div id="hud-coins"><span class="coin-icon"></span><span id="hud-coin-val">0</span><span id="hud-devil" class="hidden" title="Devil's Trademarks">😈<b>0</b></span></div>
+        <canvas id="minimap" width="200" height="200" title="Map (M)"></canvas>
         <div id="hud-items"></div>
       </div>
       <div id="hud-boss" class="hidden">
@@ -37,6 +39,7 @@
       </div>
       <div id="hud-objective"></div>
       <div id="crosshair"><div></div></div>
+      <div id="hud-bhop" class="hidden"></div>
       <div id="portal-marker" class="hidden">🌀<span></span></div>
       <div id="hud-prompt" class="hidden"></div>
       <div id="hud-bl">
@@ -210,6 +213,16 @@
         </div>
       </div>
     </div>
+
+    <div id="screen-moai" class="screen dim hidden">
+      <div class="levelup-wrap">
+        <h2 class="glow moai-t">🗿 The Moai Speaks</h2>
+        <p class="sub">"Choose one gift… or bargain with the devil."</p>
+        <div id="moai-cards"></div>
+      </div>
+    </div>
+
+    <div id="bigmap" class="hidden"><canvas id="bigmap-canvas" width="640" height="640"></canvas><div class="bm-legend" id="bm-legend"></div><button class="btn" id="bigmap-close">Close (M)</button></div>
 
     <div id="screen-gameover" class="screen dim hidden">
       <div class="panel wide">

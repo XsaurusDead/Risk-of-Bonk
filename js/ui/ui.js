@@ -11,7 +11,8 @@ import {
 } from '../core/save.js';
 import { Game } from '../game/game.js';
 import { loadRunData } from '../core/runsave.js';
-import { diffLabel, DIFF_LABELS } from '../game/director.js';
+import { diffLabel, DIFF_LABELS, STAGE_TIME } from '../game/director.js';
+import { Minimap } from './minimap.js';
 import { formatTime, formatNum, RARITY, RARITY_ORDER } from '../core/util.js';
 import * as THREE from 'three';
 
@@ -107,6 +108,7 @@ export const UI = {
     );
     $('#hud-stats').addEventListener('click', () => (this.invToggle = false));
 
+    Minimap.bind();
     Input.onDeviceChange = (d) => this.onDevice(d);
     Input.onPointerLockLost = () => {
       if (G.mode === 'playing') Game.pause();
@@ -385,6 +387,7 @@ export const UI = {
 
   // ------------------------------------------------------------ in-run UI
   onStageStart() {
+    Minimap.init(G.world);
     $('#hud').classList.remove('hidden');
     this.showScreen('none');
     this.buildAbilityBar();
@@ -421,10 +424,25 @@ export const UI = {
     this.bannerTimer = setTimeout(() => b.classList.add('hidden'), 3600);
   },
 
-  setBoss(e) {
+  setBoss(e, name) {
     this.boss = e;
     $('#hud-boss').classList.toggle('hidden', !e);
-    if (e) $('#hud-boss-name').textContent = `${e.def.name} — ${e.def.title}`;
+    if (e) $('#hud-boss-name').textContent = name || `${e.def.name} — ${e.def.title}`;
+  },
+
+  // ------------------------------------------------------------ Moai
+  showMoai(choices) {
+    const cards = choices.map((id, i) => {
+      const it = ITEMS[id];
+      return `<button class="up-card" data-i="${i}" style="--c:${RARITY[it.rarity].color}"><div class="ic">${it.icon}</div><div><div class="rr">${RARITY[it.rarity].name}</div><div class="nm">${esc(it.name)}</div><div class="tx">${esc(it.desc)}</div></div><div class="key">[${i + 1}]</div></button>`;
+    });
+    cards.push(`<button class="up-card devil" data-i="3"><div class="ic">😈</div><div><div class="rr">DEVIL'S TRADEMARK</div><div class="nm">Take the Mark</div><div class="tx">A rare currency. What it buys… you'll find out.</div></div><div class="key">[4]</div></button>`);
+    $('#moai-cards').innerHTML = cards.join('');
+    $$('#moai-cards .up-card').forEach((b) => b.addEventListener('click', () => Game.chooseMoai(+b.dataset.i)));
+    this.showScreen('moai');
+  },
+  hideMoai() {
+    this.showScreen('none');
   },
 
   toastItem(id) {
@@ -691,13 +709,35 @@ export const UI = {
       if (Input.numberPressed >= 1 && Input.numberPressed <= 3) Game.chooseUpgrade(Input.numberPressed - 1);
       return;
     }
+    if (G.mode === 'moai') {
+      if (Input.numberPressed >= 1 && Input.numberPressed <= 4) Game.chooseMoai(Input.numberPressed - 1);
+      return;
+    }
     if (G.mode !== 'playing' && G.mode !== 'transition') return;
     this.updateHud(dt);
   },
 
   updateHud(dt) {
     const run = G.run, p = G.player, s = p.stats;
-    $('#hud-timer').textContent = formatTime(run.time);
+    const stg = run.stageTime || 0;
+    const timerEl = $('#hud-timer');
+    if (run.stage.final) timerEl.textContent = formatTime(stg);
+    else if (stg > STAGE_TIME) timerEl.textContent = `OVERTIME +${formatTime(stg - STAGE_TIME)}`;
+    else timerEl.textContent = `${formatTime(stg)} / ${formatTime(STAGE_TIME)}`;
+    timerEl.classList.toggle('ot', stg > STAGE_TIME && !run.stage.final);
+    $('#hud-runtime').textContent = `Run ${formatTime(run.time)}`;
+    const dv = $('#hud-devil');
+    dv.classList.toggle('hidden', !run.devilMarks);
+    if (run.devilMarks) dv.querySelector('b').textContent = run.devilMarks;
+    const bh = $('#hud-bhop');
+    const hop = p.bhop || 1;
+    bh.classList.toggle('hidden', hop < 1.05);
+    if (hop >= 1.05) bh.textContent = `🐇 ${Math.round(hop * 100)}% speed`;
+    this.minimapT = (this.minimapT || 0) - dt;
+    if (this.minimapT <= 0) {
+      this.minimapT = 0.1;
+      Minimap.draw();
+    }
     const lbl = diffLabel(run.diff);
     const idx = DIFF_LABELS.indexOf(lbl);
     const next = DIFF_LABELS[idx + 1];
@@ -781,9 +821,18 @@ export const UI = {
       if (it.kind === 'chest') {
         const cost = Game.chestCost(it.obj);
         const can = run.coins >= cost;
-        text = `<span class="k">${key}</span>Open ${it.obj.large ? 'Large ' : ''}Chest — <span class="${can ? '' : 'cant'}">🪙 ${cost}</span>`;
-      } else if (it.obj.state === 'idle') text = `<span class="k">${key}</span>Activate portal <span class="cant">(summons the boss!)</span>`;
-      else text = `<span class="k">${key}</span>Enter portal`;
+        const tn = { normal: '', large: 'Large ', epic: '<span class="r-epic">Epic</span> ', legendary: '<span class="r-legendary">Legendary</span> ' }[it.obj.tier] || '';
+        text = `<span class="k">${key}</span>Open ${tn}Chest — <span class="${can ? '' : 'cant'}">🪙 ${cost}</span>`;
+      } else if (it.kind === 'portal') {
+        const n = run.bossCount || 1;
+        text = it.obj.state === 'idle' ? `<span class="k">${key}</span>Activate portal <span class="cant">(summons ${n > 1 ? n + ' bosses' : 'the boss'}!)</span>` : `<span class="k">${key}</span>Enter portal`;
+      } else {
+        const T = {
+          heal: 'Shrine of Healing — restore 50% HP', xp: 'Shrine of Wisdom — gain experience', combat: 'Shrine of Combat — summon challengers for loot',
+          boss: `Shrine of the Mountain — ${Math.min(8, (run.bossCount || 1) * 2)}x portal bosses (more loot)`, moai: 'Moai — choose a gift',
+        };
+        text = `<span class="k">${key}</span>${T[it.kind] || it.kind}`;
+      }
       if (prompt.innerHTML !== text) prompt.innerHTML = text;
       prompt.classList.remove('hidden');
     } else prompt.classList.add('hidden');

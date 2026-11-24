@@ -13,7 +13,7 @@ import { Player, xpFor } from './player.js';
 import { Director } from './director.js';
 import { initEnemies, updateEnemies, clearEnemies, spawnEnemy } from './enemies.js';
 import { updateCombat, clearCombat } from './combat.js';
-import { initFx, updateFx, updateHpBars, updateBlobShadows, clearFx, particles, gibs, ring, shake } from './fx.js';
+import { initFx, updateFx, updateHpBars, updateBlobShadows, clearFx, particles, gibs, ring, shake, floatText } from './fx.js';
 import { initPickups, updatePickups, clearPickups, dropItem, rollRarity, rollItem, dropCoins, collectAll } from './pickups.js';
 import { updateMinions, clearMinions } from './minions.js';
 import { buildCharacter, windUniform } from './models.js';
@@ -174,6 +174,8 @@ export const Game = {
     run.coins = d.coins;
     run.stats = d.stats || {};
     run.kills0 = (G.save.stats.kills || 0) - (d.killsThisRun || 0);
+    run.chestsOpened = d.chestsOpened || 0;
+    run.devilMarks = d.devilMarks || 0;
     p.level = d.level;
     p.xp = d.xp;
     p.xpNext = xpFor(p.level);
@@ -202,6 +204,8 @@ export const Game = {
       charId, stats: {}, newAchievements: [], coins: 0, stageNum: 0, stagesCleared: 0, loop: 0,
       diff: 1, coinScale: 1, xpScale: 1, chestScale: 1, time: 0, boss: null, secT: 0, kills0: G.save.stats.kills || 0,
       onBossKilled: (e) => this.onBossKilled(e),
+      onChampionKilled: (e) => this.onChampionKilled(e),
+      chestsOpened: 0, devilMarks: 0,
       onPlayerDeath: () => this.onPlayerDeath(),
     };
     G.player = new Player(charId);
@@ -227,6 +231,8 @@ export const Game = {
     this.director = new Director(stage);
     run.boss = null;
     run.bossDead = false;
+    run.bossCount = 1;
+    run.stageTime = 0;
     run.finalSpawnT = 0;
     run.saveT = 0;
     if (stage.final) {
@@ -262,8 +268,9 @@ export const Game = {
     const run = G.run;
     const minutes = run.time / 60;
     // Exponential in both time and stages cleared.
-    run.diff = Math.pow(1.085, minutes) * Math.pow(1.22, run.stagesCleared);
-    run.coinScale = Math.pow(run.diff, 0.8);
+    // gentler per-minute growth now that stages last up to 10 minutes
+    run.diff = Math.pow(1.035, minutes) * Math.pow(1.2, run.stagesCleared);
+    run.coinScale = Math.pow(run.diff, 0.6);
     run.xpScale = Math.pow(run.diff, 0.65);
   },
 
@@ -316,6 +323,7 @@ export const Game = {
     updateFx(dt);
     updateHpBars();
     this.updatePortal(dt);
+    this.updateShrines();
     if (run.finalSpawnT > 0) {
       run.finalSpawnT -= dt;
       if (run.finalSpawnT <= 0) this.spawnFinalBoss();
@@ -360,21 +368,131 @@ export const Game = {
   },
 
   // ------------------------------------------------------------ interaction
+  /**
+   * Chest prices rise with every chest opened this run (Megabonk-style):
+   * 10, 13, 16, 20, 24 … the steps grow gently as you progress.
+   */
   chestCost(c) {
     const p = G.player;
-    return Math.ceil(c.baseCost * G.run.chestScale * (1 - p.stats.chestDiscount));
+    const n = G.run.chestsOpened || 0;
+    const base = 10 * (1 + 0.25 * n + 0.02 * n * n);
+    const tierMult = { normal: 1, large: 2, epic: 4, legendary: 8 }[c.tier] || 1;
+    return Math.ceil(base * tierMult * (1 - p.stats.chestDiscount));
   },
 
   interact(it) {
-    if (it.kind === 'chest') this.openChest(it.obj);
-    else if (it.kind === 'portal') {
-      if (it.obj.state === 'idle') this.activatePortal();
-      else if (it.obj.state === 'ready') this.leaveStage();
+    const o = it.obj;
+    switch (it.kind) {
+      case 'chest': return this.openChest(o);
+      case 'portal':
+        if (o.state === 'idle') this.activatePortal();
+        else if (o.state === 'ready') this.leaveStage();
+        return;
+      case 'heal': return this.useShrine(o, () => {
+        const p = G.player;
+        p.heal(p.stats.maxHp * 0.5);
+        ring(p.pos, 6, 0x55ff88, 0.6);
+        particles(p.pos, 0x55ff88, 30, 6, 0.8);
+        floatText(p.pos.clone().setY(p.pos.y + 2.5), '+50% HP', '#88ff99', true);
+        sfx('levelup');
+      });
+      case 'xp': return this.useShrine(o, () => {
+        const p = G.player;
+        const amt = p.xpNext * rand(0.4, 1.4);
+        floatText(p.pos.clone().setY(p.pos.y + 2.5), `+${Math.round(amt)} XP`, '#55e6ff', true);
+        particles(p.pos, 0x55e6ff, 30, 6, 0.8);
+        p.addXp(amt);
+      });
+      case 'boss': return this.useShrine(o, () => {
+        const run = G.run;
+        if (G.world.portal.state !== 'idle') return false;
+        run.bossCount = Math.min(8, (run.bossCount || 1) * 2);
+        const word = { 2: 'DOUBLED', 4: 'QUADRUPLED', 8: 'OCTUPLED' }[run.bossCount];
+        G.ui?.banner(`Boss ${word}`, `${run.bossCount} bosses will guard the portal — each drops loot`, true);
+        sfx('roar');
+      });
+      case 'combat': return this.useShrine(o, () => this.startCombatShrine(o));
+      case 'moai': return this.openMoai(o);
     }
+  },
+
+  useShrine(o, fn) {
+    if (o.used) return;
+    if (fn() === false) {
+      sfx('deny', 0.2);
+      G.ui?.toastText('The portal is already active.');
+      return;
+    }
+    o.used = true;
+    track('shrinesUsed');
+  },
+
+  startCombatShrine(o) {
+    const run = G.run;
+    const ids = Object.keys(run.stage.enemies);
+    const n = 6 + Math.min(10, run.stagesCleared * 2 + Math.floor((run.stageTime || 0) / 120));
+    o.wave = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const pos = o.pos.clone().add(_v.set(Math.cos(a) * 9, 0, Math.sin(a) * 9));
+      const e = spawnEnemy(ids[i % ids.length], pos, { elite: i < 1 + run.loop ? 'blazing' : null });
+      if (e) o.wave.push(e);
+    }
+    G.ui?.banner('Shrine of Combat', `Defeat ${n} challengers for a reward`, true);
+    sfx('roar');
+  },
+
+  updateShrines() {
+    for (const o of G.world.interactables) {
+      if (o.kind !== 'combat' || !o.wave) continue;
+      if (o.wave.every((e) => e.dead)) {
+        o.wave = null;
+        dropItem(o.pos.clone().setY(o.pos.y + 3), rollItem(rollRarity('large')));
+        dropCoins(o.pos, 15 * G.run.coinScale);
+        ring(o.pos, 8, 0xff4433, 0.6);
+        G.ui?.banner('Challenge complete', 'The shrine rewards you');
+        sfx('item');
+      }
+    }
+  },
+
+  // ---- Moai: pick 1 of 3 items or a Devil's Trademark
+  openMoai(o) {
+    if (o.used) return;
+    const kind = 'small';
+    const seen = new Set();
+    const choices = [];
+    for (let k = 0; k < 30 && choices.length < 3; k++) {
+      const id = rollItem(rollRarity(kind));
+      if (!seen.has(id)) { seen.add(id); choices.push(id); }
+    }
+    this.moaiState = { o, choices };
+    G.mode = 'moai';
+    Input.releaseLock();
+    G.ui?.showMoai(choices);
+    sfx('portal');
+  },
+  chooseMoai(i) {
+    const st = this.moaiState;
+    if (!st || G.mode !== 'moai') return;
+    const run = G.run;
+    st.o.used = true;
+    track('shrinesUsed');
+    if (i === 3) {
+      run.devilMarks = (run.devilMarks || 0) + 1;
+      track('devilMarks');
+      G.ui?.toastText("You took a Devil's Trademark. Its price will come due…");
+      sfx('roar');
+    } else if (st.choices[i]) this.onItemCollected(st.choices[i]);
+    this.moaiState = null;
+    G.ui?.hideMoai();
+    G.mode = 'playing';
+    Input.requestLock();
   },
 
   openChest(c) {
     const run = G.run;
+    if (c.used) return;
     const cost = this.chestCost(c);
     if (run.coins < cost) {
       sfx('deny', 0.2);
@@ -382,14 +500,16 @@ export const Game = {
       return;
     }
     run.coins -= cost;
-    c.opened = true;
+    run.chestsOpened = (run.chestsOpened || 0) + 1;
+    c.used = true;
     track('chests');
-    if (c.large) track('largeChests');
+    if (c.tier === 'large') track('largeChests');
+    if (c.tier === 'epic' || c.tier === 'legendary') track('specialChests');
     track('coinsSpent', cost);
-    const kind = c.large ? 'large' : 'small';
+    const kind = { normal: 'small', large: 'large', epic: 'epic', legendary: 'legendary' }[c.tier] || 'small';
     const id = rollItem(rollRarity(kind));
     particles(c.pos, 0xffe680, 20, 6, 0.6);
-    gibs(c.pos.clone().setY(c.pos.y + 0.6), 0xffcc22, c.large ? 14 : 8, 6, 0.22); // coin shower
+    gibs(c.pos.clone().setY(c.pos.y + 0.6), 0xffcc22, c.tier !== 'normal' ? 14 : 8, 6, 0.22); // coin shower
     c.group.scale.set(1.15, 0.85, 1.15);
     setTimeout(() => c.group.scale.set(1, 1, 1), 120);
     sfx('chest');
@@ -420,10 +540,18 @@ export const Game = {
     P.charge = 0;
     const bossId = run.stage.boss;
     const def = BOSSES[bossId];
-    const a = Math.random() * Math.PI * 2;
-    const pos = P.pos.clone().add(_v.set(Math.cos(a) * 14, 0, Math.sin(a) * 14));
-    G.world.clampBounds(pos);
-    run.boss = spawnEnemy(bossId, pos, { boss: true });
+    const count = run.bossCount || 1;
+    run.bossesAlive = 0;
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const pos = P.pos.clone().add(_v.set(Math.cos(a) * (14 + i * 2), 0, Math.sin(a) * (14 + i * 2)));
+      G.world.clampBounds(pos);
+      const b = spawnEnemy(bossId, pos, { boss: true });
+      if (b) {
+        run.bossesAlive++;
+        if (!run.boss) run.boss = b;
+      }
+    }
     if (run.loop > 0 && Math.random() < 0.5 + run.loop * 0.2) {
       // later loops can bring an extra elite guard
       spawnEnemy(Object.keys(run.stage.enemies)[0], pos.clone().add(_v.set(4, 0, 4)), { elite: 'overloading' });
@@ -507,7 +635,13 @@ export const Game = {
 
   onBossKilled(e) {
     const run = G.run;
-    run.bossDead = true;
+    run.bossesAlive = Math.max(0, (run.bossesAlive || 1) - 1);
+    run.bossDead = run.bossesAlive === 0;
+    if (!run.bossDead) {
+      // next living boss takes over the health bar
+      run.boss = G.enemies.find((x) => x.isBoss && !x.dead) || null;
+      G.ui?.setBoss(run.boss);
+    }
     G.hitStop = 0.35;
     track('bossKills');
     const rarity = rollRarity('boss');
@@ -524,10 +658,18 @@ export const Game = {
       this.onFinalBossKilled();
       return;
     }
-    if (G.ui) {
+    if (G.ui && run.bossDead) {
       G.ui.setBoss(null);
       G.ui.banner(e.def.name + ' defeated', G.world.portal.charge >= 1 ? 'The portal is ready' : 'Finish charging the portal');
     }
+  },
+
+  onChampionKilled(e) {
+    track('championKills');
+    dropItem(e.pos.clone().setY(e.pos.y + 2), rollItem(rollRarity('large')));
+    dropCoins(e.pos, 20 * G.run.coinScale);
+    G.hitStop = 0.15;
+    G.ui?.banner('Champion defeated', 'It dropped something shiny');
   },
 
   leaveStage() {

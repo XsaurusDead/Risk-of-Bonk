@@ -193,6 +193,15 @@ export const ENEMIES = {
     model: [['ico', 0x5a1a8a, [0, 0.7, 0], [1.3, 1.3, 1.3], null, true], ['oct', 0x1a0a2a, [0, 0.7, 0], [1.6, 0.4, 1.6]], ...glowEyes(0.8, 0.62, 0.18, 0.1, 0xffffff)],
   },
 
+  // ================= Overtime (spawns only after the 10 minute mark) =================
+  reaper: {
+    name: 'Overtime Reaper', hp: 140, dmg: 22, speed: 11, radius: 0.8, height: 2.4, ai: 'melee', attackRange: 2.4, flying: true, hover: 1.2, xp: 10, coins: 4, cost: 0,
+    model: [
+      ['cone', 0x120a18, [0, 1.3, 0], [1.3, 2.6, 1.3], [Math.PI, 0, 0]], ['sphere', 0x1a1024, [0, 2.4, 0], [0.75, 0.8, 0.75]],
+      ['cone', 0x1a1024, [0, 2.75, -0.1], [0.8, 0.8, 0.8]], ['sphere', 0xff2244, [-0.13, 2.45, 0.32], [0.12, 0.08, 0.05], null, true], ['sphere', 0xff2244, [0.13, 2.45, 0.32], [0.12, 0.08, 0.05], null, true],
+      ['cyl', 0x3a2a1a, [0.7, 1.6, 0.3], [0.08, 2.6, 0.08]], ['box', 0xd8d8e8, [0.7, 2.85, 0.75], [0.06, 0.25, 1.1], [0.3, 0, 0], true],
+    ],
+  },
   // ================= Minions summoned by bosses (not in stage pools) =================
 };
 
@@ -285,3 +294,46 @@ export const ELITES = {
   overloading: { name: 'Overloading', color: 0x4488ff, hpMult: 3.0, dmgMult: 1.6, shield: 0.5 },
   vampiric: { name: 'Vampiric', color: 0xff1a55, hpMult: 3.0, dmgMult: 2.0, leech: true },
 };
+
+// ---------------------------------------------------------------------------
+// Animation rigs (role -> model part indices) and procedural skins per enemy.
+// Rig roles are animated in enemies.js (walk cycles, wing flaps, tail sway…).
+// ---------------------------------------------------------------------------
+const LOOKS = {
+  slime: { skin: 'slime' },
+  goblin_archer: { skin: 'spots', rig: { legL: [4], legR: [5], armR: [6], head: [1, 2, 3, 7, 8] } },
+  wisp: { skin: 'crystal' },
+  stone_golem: { skin: 'stone', rig: { armL: [2], armR: [3], legL: [4], legR: [5], head: [1, 7, 8] } },
+  scarab: { skin: 'chitin', rig: { legs: [2, 3, 4], head: [1, 5, 6, 7] } },
+  dune_ram: { skin: 'fur', rig: { legFL: [4], legFR: [5], legBL: [6], legBR: [7], head: [1, 2, 3, 8, 9, 10, 11] } },
+  cactus_spitter: { skin: 'bark', rig: { armL: [2], armR: [3], head: [1, 4, 5, 6, 7, 8, 9] } },
+  sand_wurm: { skin: 'scales', rig: { neck: [1], head: [2, 3, 4, 5] } },
+  snow_slime: { skin: 'ice' },
+  ice_imp: { skin: 'ice', rig: { head: [1, 2, 3, 4, 5] } },
+  yeti: { skin: 'fur', rig: { armL: [3], armR: [4], legL: [5], legR: [6], head: [1, 2, 7, 8, 9, 10] } },
+  frost_wisp: { skin: 'crystal' },
+  sporeling: { skin: 'mushroom', rig: { head: [1, 2, 3] } },
+  shroom_shaman: { skin: 'mushroom', rig: { armR: [2, 3], head: [1, 4, 5] } },
+  cave_bat: { skin: 'fur', rig: { wingL: [1], wingR: [2] } },
+  glow_beetle: { skin: 'chitin', rig: { head: [2, 3, 4, 5, 6] } },
+  magma_hound: { skin: 'lava', rig: { legFL: [3], legFR: [4], legBL: [5], legBR: [6], head: [1, 8, 9], tail: [7] } },
+  fire_imp: { skin: 'lava', rig: { armR: [4], head: [1, 2, 3, 5, 6] } },
+  obsidian_brute: { skin: 'stone', rig: { armL: [2], armR: [3], head: [1, 6, 7] } },
+  ember_wisp: { skin: 'lava' },
+  void_reaver: { skin: 'void', rig: { armL: [2], armR: [3], head: [1, 4] } },
+  eye_stalker: { skin: 'void', rig: { head: [1, 2], tail: [3] } },
+  null_shade: { skin: 'void', rig: { head: [1, 2, 3] } },
+  void_bomber: { skin: 'void' },
+  reaper: { skin: 'void', rig: { armR: [5, 6], head: [1, 2, 3, 4] } },
+  stone_colossus: { skin: 'stone', rig: { armL: [2], armR: [3], legL: [4], legR: [5], head: [1, 7, 8, 9] } },
+  scorpion_king: { skin: 'chitin', rig: { tail: [2, 3, 4, 5], clawL: [6, 8], clawR: [7, 9], head: [1, 10, 11, 12] } },
+  frost_titan: { skin: 'ice', rig: { armL: [2], armR: [3], legL: [7], legR: [8], head: [1, 4, 5, 6, 9, 10] } },
+  spore_mother: { skin: 'mushroom', rig: { head: [1, 2, 3, 4] } },
+  inferno_drake: { skin: 'scales', rig: { wingL: [3], wingR: [4], tail: [2], head: [1, 5, 6, 8, 9] } },
+  void_herald: { skin: 'void', rig: { armL: [4], armR: [5], head: [1, 2, 3] } },
+  apex_sovereign: { skin: 'royal', rig: { wingL: [12], wingR: [13], armL: [14, 16], armR: [15, 17], head: [3, 4, 5, 6, 7, 8, 9, 10, 11] } },
+};
+for (const id in LOOKS) {
+  const d = ENEMIES[id] || BOSSES[id];
+  if (d) Object.assign(d, LOOKS[id]);
+}

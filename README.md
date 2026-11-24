@@ -34,26 +34,35 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 | Interact | E / F | X | ✋ (appears when near) |
 | Items & stats | Hold Tab | View/Back | 🎒 |
 | Pause | Esc / P | Start | ⏸ |
+| Full map | M or click the minimap | – | tap the minimap |
 | Pick level-up | 1 / 2 / 3 or click | D-pad + A | tap |
 
 ## How a run works
 
+- **Stage clock (10 minutes):** a steady stream of enemies that grows every minute, **HUGE waves at 3:00 and 6:00**, a **Champion mini-boss at 5:00 and 8:00** (giant, tanky version of the stage's toughest enemy; drops an item). After **10:00 comes OVERTIME**: Overtime Reapers and elite waves that get ×1.35 stronger every 30 seconds. They will kill you quickly, so find the portal and leave.
+- **Maps:** 520 × 520 m (4× the old area) with terraced plateaus and cliffs (you can't walk up cliffs, so use ramps or jump), caves you walk through (the roof fades when you're inside), ruins, and floating islands reachable by jump pads. The Scorched Dunes stay mostly flat.
+- **Chests (15-20 per stage):** normal, large (better odds, ~13%), epic (only epic items, ~4%) and legendary (only legendary items, ~1%, with a light beacon). The price starts at 10 coins and rises with every chest you open in the run (10, 13, 16 … 28 after 5, 55 after 10, 140 after 20). Large/epic/legendary cost 2×/4×/8×.
+- **Shrines:** Healing (1-2, heals 50% HP), Combat (1-3, summons challengers and pays out an item), Mountain/Boss (1-3, doubles → quadruples → octuples the portal boss, each boss drops loot), Wisdom (2-5, random XP based on your level).
+- **Moai statues (3-7):** pick 1 of 3 random items, or take a **Devil's Trademark** (a special currency, shown next to your coins; its use comes later).
+- **Bunny hopping:** jump again right as you land (or press jump just before touching down) to keep your momentum and gain +12% speed per perfect hop, up to +90%. Stop hopping and it decays.
+- **Minimap:** top right, rotates with your camera and shows the portal, all chests by tier, shrines, Moai, jump pads and caves (no enemies). Click it or press **M** for the full map.
+
 - **Stages:** Verdant Meadows → Scorched Dunes → Frostfang Peaks → Fungal Hollow → Molten Caldera → Void Sanctum → **Celestial Throne** (final). Each stage has its own terrain, palette, hazards (water / toxic sludge / lava / void / starlight) and enemy roster.
 - **Final boss:** on the Celestial Throne the *Apex Sovereign* descends after a few seconds. Its health and damage are re-scaled to your current power (DPS estimate × ~110 s, heavy hits ≈ 12% of your effective HP), it enrages at 50% and enters a *Final Form* at 25%. Beat it and you can **end the run** (victory) or **continue the run** into a harder loop for as long as you survive.
 - **Saving runs:** your run is checkpointed at every stage start, every 15 s and on *Save & Quit* (pause menu). *Continue Run* on the title screen picks it up again (the current stage gets a fresh map; character, level, items, upgrades, coins and timer are kept). Dying, abandoning or ending the run clears the save.
-- **Coins & chests:** enemies drop coins and XP. Chests are scattered randomly around the map; large chests cost more but roll better. Opening one freezes the game and spins a CS:GO-style item roulette that lands on your prize (skip with E / Space / A / tap).
+- **Coins & chests:** enemies drop coins and XP. Opening a chest freezes the game and spins a CS:GO-style item roulette that lands on your prize (skip with E / Space / A / tap).
   - Small chest: Common 70% · Rare 23% · Epic 6% · Legendary 1%
   - Large chest: Common 15% · Rare 55% · Epic 24% · Legendary 6%
   - Boss drop: Rare 55% · Epic 33% · Legendary 12%
   - *Luck* shifts the odds toward higher rarities.
 - **Level-ups:** Megabonk-style. Pick 1 of 3 upgrades, each rolled at its own rarity (bigger values at higher rarity).
 - **Portal & boss:** find the portal (marker on screen), interact to summon the stage boss. Stand in the ring to charge the portal, kill the boss, then enter the portal.
-- **Scaling:** difficulty = `1.085^minutes × 1.22^stagesCleared`. Enemy HP, damage, spawn credits, coin/XP drops and chest prices all scale off it, so everything grows exponentially. Elites (Blazing, Glacial, Overloading, Vampiric) show up as it rises.
+- **Scaling:** difficulty = `1.035^minutes × 1.2^stagesCleared`. Enemy HP, damage, spawn credits, coin/XP drops and chest prices all scale off it, so everything grows exponentially. Elites (Blazing, Glacial, Overloading, Vampiric) show up as it rises.
 
 ## Look & feel
 
-- **Graphics:** PBR materials, ACES tone mapping, gradient sky with a sun, smooth terrain with colour variation, wind-swaying grass and trees, animated water and glowing lava, bloom on glowing parts, soft contact shadows. *Graphics quality* in Settings switches phones to a lighter renderer (no bloom, Lambert shading).
-- **Physics & juice:** slimes squash on landing and wobble like jelly, enemies flinch and squish when hit, waddle while walking, and flyers bank into turns. Dead enemies get flung, tumble and bounce. Debris, coins and items bounce on the terrain. The player squashes and stretches, leans into movement and gets a FOV kick on dashes. Chest lids spring open, big hits briefly freeze the game (hit-stop), and the camera pulls in when trees block the view.
+- **Graphics:** procedurally generated textures (unique skins for every enemy and boss, detail textures for every stage's ground), PBR materials, ACES tone mapping, gradient sky with a sun, smooth terrain with colour variation, wind-swaying grass and trees, animated water and glowing lava, bloom on glowing parts, soft contact shadows. *Graphics quality* in Settings switches phones to a lighter renderer (no bloom, Lambert shading).
+- **Physics & juice:** enemies and bosses have rigged limbs with walk cycles, arm swings, wing flaps, tail sways and attack poses; slimes squash on landing and wobble like jelly, enemies flinch and squish when hit, waddle while walking, and flyers bank into turns. Dead enemies get flung, tumble and bounce. Debris, coins and items bounce on the terrain. The player squashes and stretches, leans into movement and gets a FOV kick on dashes. Chest lids spring open, big hits briefly freeze the game (hit-stop), and the camera pulls in when trees block the view.
 
 ## Survivors (17)
 

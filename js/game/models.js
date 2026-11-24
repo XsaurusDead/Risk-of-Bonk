@@ -46,6 +46,7 @@ export function buildMerged(parts, scaleAll = 1) {
     _s.set(scale[0] * scaleAll, scale[1] * scaleAll, scale[2] * scaleAll);
     _m.compose(_p, _q, _s);
     g.applyMatrix4(_m);
+    addTriplanarUV(g);
     _c.set(color);
     const n = g.attributes.position.count;
     const col = new Float32Array(n * 3);
@@ -62,16 +63,30 @@ export function buildMerged(parts, scaleAll = 1) {
   return { geo: mergeList(normal), glow: mergeList(glow) };
 }
 
+/** UVs projected along each face's dominant axis, so skins have even texel density on every part. */
+function addTriplanarUV(g, scale = 1 / 1.6) {
+  const p = g.attributes.position.array, n = g.attributes.normal.array;
+  const uv = new Float32Array((p.length / 3) * 2);
+  for (let i = 0, v = 0; i < p.length; i += 3, v += 2) {
+    const ax = Math.abs(n[i]), ay = Math.abs(n[i + 1]), az = Math.abs(n[i + 2]);
+    if (ax >= ay && ax >= az) { uv[v] = p[i + 2] * scale; uv[v + 1] = p[i + 1] * scale; }
+    else if (ay >= az) { uv[v] = p[i] * scale; uv[v + 1] = p[i + 2] * scale; }
+    else { uv[v] = p[i] * scale; uv[v + 1] = p[i + 1] * scale; }
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
 export function mergeList(list) {
   if (!list.length) return null;
   let total = 0;
   for (const g of list) total += g.attributes.position.count;
-  const pos = new Float32Array(total * 3), nor = new Float32Array(total * 3), col = new Float32Array(total * 3);
+  const pos = new Float32Array(total * 3), nor = new Float32Array(total * 3), col = new Float32Array(total * 3), uvs = new Float32Array(total * 2);
   let o = 0;
   for (const g of list) {
     pos.set(g.attributes.position.array, o * 3);
     nor.set(g.attributes.normal.array, o * 3);
     col.set(g.attributes.color.array, o * 3);
+    if (g.attributes.uv) uvs.set(g.attributes.uv.array, o * 2);
     o += g.attributes.position.count;
     g.dispose();
   }
@@ -79,6 +94,7 @@ export function mergeList(list) {
   out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   out.computeBoundingSphere();
   return out;
 }
@@ -138,10 +154,39 @@ export function swayMaterial(amp) {
 }
 
 const geoCache = new Map();
-/** Cached merged model for an enemy/boss definition. */
+/**
+ * Cached model for an enemy/boss: a static body plus animatable rig parts.
+ * def.rig maps a role (legL, armR, wingL, tail, head, claw…) to part indices;
+ * each role is merged separately around a pivot so it can rotate.
+ */
 export function enemyGeometry(id, def) {
-  if (!geoCache.has(id)) geoCache.set(id, buildMerged(def.model));
-  return geoCache.get(id);
+  if (geoCache.has(id)) return geoCache.get(id);
+  const rig = def.rig || {};
+  const used = new Set();
+  const roles = [];
+  for (const role in rig) {
+    const parts = rig[role].map((i) => def.model[i]).filter(Boolean);
+    rig[role].forEach((i) => used.add(i));
+    if (!parts.length) continue;
+    // bounding box of the role's parts (approximate from position ± scale/2)
+    const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+    for (const [, , pos, sc] of parts) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], pos[k] - sc[k] / 2); max[k] = Math.max(max[k], pos[k] + sc[k] / 2); }
+    const c = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
+    let pivot;
+    if (/^(leg|arm|neck)/.test(role)) pivot = [c[0], max[1], c[2]]; // hip / shoulder
+    else if (role === 'head') pivot = [c[0], min[1], c[2]];
+    else {
+      // wings, tails, claws: hinge at the point of the box closest to the body axis
+      const bodyY = def.height * 0.5;
+      pivot = [Math.max(min[0], Math.min(max[0], 0)), Math.max(min[1], Math.min(max[1], bodyY)), Math.max(min[2], Math.min(max[2], 0))];
+    }
+    const local = parts.map(([sh, col, pos, sc, rot, glow]) => [sh, col, [pos[0] - pivot[0], pos[1] - pivot[1], pos[2] - pivot[2]], sc, rot, glow]);
+    roles.push({ role, pivot, ...buildMerged(local) });
+  }
+  const body = buildMerged(def.model.filter((_, i) => !used.has(i)));
+  const out = { geo: body.geo, glow: body.glow, roles };
+  geoCache.set(id, out);
+  return out;
 }
 
 // ------------------------------------------------------------------
@@ -436,21 +481,128 @@ export function decorParts(type, tint) {
 // ------------------------------------------------------------------
 // Props
 // ------------------------------------------------------------------
-export function buildChest(large) {
-  const s = large ? 1.5 : 1;
+const CHEST_LOOK = {
+  normal: { s: 1, base: 0x8a5a2b, trim: 0xd4af37, glow: 0xffe680 },
+  large: { s: 1.45, base: 0x6a3a98, trim: 0xffcc33, glow: 0xffe680 },
+  epic: { s: 1.3, base: 0x3a1a5a, trim: 0xc461ff, glow: 0xd890ff },
+  legendary: { s: 1.55, base: 0x5a3a08, trim: 0xffb22e, glow: 0xffd27a },
+};
+export function buildChest(tier = 'normal') {
+  if (tier === true) tier = 'large';
+  if (tier === false) tier = 'normal';
+  const L = CHEST_LOOK[tier] || CHEST_LOOK.normal;
+  const s = L.s;
   const g = new THREE.Group();
-  const baseCol = large ? 0x7a3aa8 : 0x8a5a2b;
-  const trim = large ? 0xffcc33 : 0xd4af37;
-  g.add(mesh('box', baseCol, [0, 0.4 * s, 0], [1.4 * s, 0.8 * s, 0.9 * s]));
-  g.add(mesh('box', trim, [0, 0.4 * s, 0], [1.45 * s, 0.12 * s, 0.95 * s]));
+  g.add(mesh('box', L.base, [0, 0.4 * s, 0], [1.4 * s, 0.8 * s, 0.9 * s]));
+  g.add(mesh('box', L.trim, [0, 0.4 * s, 0], [1.45 * s, 0.12 * s, 0.95 * s]));
+  g.add(mesh('box', L.trim, [-0.62 * s, 0.4 * s, 0], [0.1 * s, 0.82 * s, 0.94 * s]), mesh('box', L.trim, [0.62 * s, 0.4 * s, 0], [0.1 * s, 0.82 * s, 0.94 * s]));
   const lid = new THREE.Group();
   lid.position.set(0, 0.8 * s, -0.45 * s);
-  lid.add(mesh('box', baseCol, [0, 0.18 * s, 0.45 * s], [1.4 * s, 0.36 * s, 0.9 * s]));
-  lid.add(mesh('box', trim, [0, 0.18 * s, 0.9 * s], [0.25 * s, 0.3 * s, 0.06 * s]));
+  lid.add(mesh('box', L.base, [0, 0.18 * s, 0.45 * s], [1.4 * s, 0.36 * s, 0.9 * s]));
+  lid.add(mesh('box', L.trim, [0, 0.18 * s, 0.9 * s], [0.25 * s, 0.3 * s, 0.06 * s]));
   g.add(lid);
-  const glow = mesh('box', 0xffe680, [0, 0.82 * s, 0], [1.2 * s, 0.05 * s, 0.75 * s], null, true);
+  const glow = mesh('box', L.glow, [0, 0.82 * s, 0], [1.2 * s, 0.05 * s, 0.75 * s], null, true);
   g.add(glow);
+  if (tier === 'epic' || tier === 'legendary') {
+    // rarity beacon so special chests can be spotted from afar
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 30, 8, 1, true), new THREE.MeshBasicMaterial({ color: L.glow, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending }));
+    beam.position.y = 15;
+    g.add(beam);
+    g.add(mesh('oct', L.glow, [0, 2.2 * s, 0], [0.35, 0.55, 0.35], null, true));
+  }
   return { group: g, lid, glow };
+}
+
+const SHRINE_LOOK = {
+  heal: { col: 0x55ff88, icon: 'cross', name: 'Shrine of Healing' },
+  combat: { col: 0xff4433, icon: 'swords', name: 'Shrine of Combat' },
+  boss: { col: 0xb455ff, icon: 'skull', name: 'Shrine of the Mountain' },
+  xp: { col: 0x55e6ff, icon: 'orb', name: 'Shrine of Wisdom' },
+};
+/** Stone shrine with a floating, glowing emblem. Returns { group, emblem }. */
+export function buildShrine(kind) {
+  const L = SHRINE_LOOK[kind];
+  const g = new THREE.Group();
+  g.add(mesh('cyl', 0x6a6a72, [0, 0.2, 0], [3.2, 0.4, 3.2]));
+  g.add(mesh('cyl', 0x7a7a84, [0, 0.5, 0], [2.4, 0.3, 2.4]));
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    g.add(mesh('box', 0x6a6a72, [Math.cos(a) * 1.25, 1.4, Math.sin(a) * 1.25], [0.35, 2.2, 0.35]));
+    g.add(mesh('oct', L.col, [Math.cos(a) * 1.25, 2.7, Math.sin(a) * 1.25], [0.25, 0.4, 0.25], null, true));
+  }
+  g.add(mesh('box', 0x8a8a94, [0, 0.95, 0], [1.2, 0.6, 1.2]));
+  const emblem = new THREE.Group();
+  emblem.position.y = 2.4;
+  if (L.icon === 'cross') emblem.add(mesh('box', L.col, [0, 0, 0], [0.35, 1.2, 0.35], null, true), mesh('box', L.col, [0, 0.15, 0], [1.0, 0.35, 0.35], null, true));
+  else if (L.icon === 'swords') emblem.add(mesh('box', 0xdddddd, [0, 0, 0], [0.12, 1.5, 0.06], [0, 0, 0.7]), mesh('box', 0xdddddd, [0, 0, 0], [0.12, 1.5, 0.06], [0, 0, -0.7]), mesh('sphere', L.col, [0, 0, 0], [0.45, 0.45, 0.45], null, true));
+  else if (L.icon === 'skull') emblem.add(mesh('sphere', 0xf0ead6, [0, 0.1, 0], [0.9, 0.85, 0.85]), mesh('box', 0xf0ead6, [0, -0.35, 0.1], [0.55, 0.3, 0.5]), mesh('sphere', L.col, [-0.2, 0.15, 0.38], [0.22, 0.22, 0.1], null, true), mesh('sphere', L.col, [0.2, 0.15, 0.38], [0.22, 0.22, 0.1], null, true));
+  else emblem.add(mesh('ico', L.col, [0, 0, 0], [0.9, 0.9, 0.9], null, true), mesh('torus', 0xffffff, [0, 0, 0], [1.2, 1.2, 1.2], [Math.PI / 2, 0, 0], true));
+  g.add(emblem);
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return { group: g, emblem, color: L.col, name: L.name };
+}
+
+/** A weathered Moai-style stone head. */
+export function buildMoai() {
+  const g = new THREE.Group();
+  const stone = 0x8a8478, dark = 0x5a554c;
+  g.add(mesh('box', dark, [0, 0.35, 0], [2.4, 0.7, 2.0]));
+  g.add(mesh('box', stone, [0, 2.4, 0], [1.7, 3.6, 1.4]));
+  g.add(mesh('box', stone, [0, 4.0, 0.15], [1.8, 1.4, 1.5]));
+  g.add(mesh('box', dark, [0, 4.55, 0.72], [1.7, 0.35, 0.3]));
+  g.add(mesh('box', stone, [0, 3.7, 0.85], [0.42, 1.2, 0.35]));
+  g.add(mesh('box', dark, [0, 2.95, 0.75], [1.1, 0.18, 0.15]));
+  g.add(mesh('box', stone, [-0.98, 3.8, 0], [0.22, 1.4, 0.5]), mesh('box', stone, [0.98, 3.8, 0], [0.22, 1.4, 0.5]));
+  g.add(mesh('box', 0xb03030, [0, 5.0, 0], [1.6, 0.5, 1.3]));
+  const eyes = new THREE.Group();
+  eyes.add(mesh('box', 0xff3355, [-0.42, 4.2, 0.78], [0.35, 0.12, 0.05], null, true), mesh('box', 0xff3355, [0.42, 4.2, 0.78], [0.35, 0.12, 0.05], null, true));
+  g.add(eyes);
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return { group: g, emblem: eyes };
+}
+
+export function buildJumpPad() {
+  const g = new THREE.Group();
+  g.add(mesh('cyl', 0x4a4a55, [0, 0.15, 0], [2.6, 0.3, 2.6]));
+  const ring = mesh('torus', 0x55ffdd, [0, 0.35, 0], [1.6, 1.6, 1.6], [Math.PI / 2, 0, 0], true);
+  g.add(ring);
+  g.add(mesh('cone', 0x55ffdd, [0, 0.6, 0], [0.6, 0.5, 0.6], null, true));
+  return { group: g, ring };
+}
+
+/** Parts for ruins, cave rocks and floating islands (merged geometry). */
+export function structureParts(kind, tint, rng = Math.random) {
+  const stone = tint || 0xbdb4a2;
+  const darker = shade(stone, 0.8);
+  const parts = [];
+  switch (kind) {
+    case 'ruin_wall': {
+      for (let i = 0; i < 5; i++) {
+        const h = 2 + rng() * 3.5;
+        if (rng() < 0.2) continue;
+        parts.push(['box', i % 2 ? stone : darker, [i * 2.2 - 4.4, h / 2, 0], [2.2, h, 1.1]]);
+      }
+      parts.push(['box', darker, [0, 0.15, 0], [11.5, 0.3, 1.6]]);
+      break;
+    }
+    case 'ruin_arch':
+      parts.push(['box', stone, [-2.6, 2.6, 0], [1.2, 5.2, 1.2]], ['box', stone, [2.6, 2.6, 0], [1.2, 5.2, 1.2]], ['box', darker, [0, 5.6, 0], [6.6, 1.0, 1.4]]);
+      parts.push(['box', darker, [-2.6, 0.2, 0], [1.6, 0.4, 1.6]], ['box', darker, [2.6, 0.2, 0], [1.6, 0.4, 1.6]]);
+      break;
+    case 'ruin_floor':
+      for (let i = 0; i < 9; i++) parts.push(['box', i % 2 ? stone : darker, [(i % 3) * 3 - 3, 0.1 + rng() * 0.15, Math.floor(i / 3) * 3 - 3], [2.9, 0.3, 2.9], [0, rng() * 0.1, 0]]);
+      parts.push(['cyl', stone, [-4.5, 1.5, -4.5], [1, 3, 1]], ['cyl', stone, [4.5, 0.8, 4.5], [1, 1.6, 1]], ['box', darker, [4.2, 0.4, -4.2], [1.4, 0.8, 3.0], [0, 0, 1.4]]);
+      break;
+    case 'island':
+      parts.push(['cyl', tint || 0x5fae3f, [0, -0.3, 0], [1, 0.6, 1]]);
+      parts.push(['cone', 0x6a5a48, [0, -2.2, 0], [1, 3.4, 1], [Math.PI, 0, 0]]);
+      parts.push(['dodeca', 0x5a4a38, [0, -1.0, 0], [0.95, 0.8, 0.95]]);
+      break;
+    case 'boulder':
+      parts.push(['dodeca', stone, [0, 0, 0], [1, 1, 1]]);
+      break;
+  }
+  return parts;
 }
 
 export function buildPortal() {

@@ -359,7 +359,7 @@ export const EXT_ITEMS = [
     },
   }),
   X('golden_goose', 'Golden Goose', 'epic', '🪿', 'Every 30s, lay a pile of coins worth a chest.', {
-    onTick: every('goose', 30)((n, p) => { dropCoins(p.pos, 25 * G.run.chestScale * n); sfx('coin'); }),
+    onTick: every('goose', 30)((n, p) => { dropCoins(p.pos, 30 * G.run.coinScale * n); sfx('coin'); }),
   }),
   X('warlord_banner', 'Warlord Banner', 'epic', '🏴', 'You and your allies deal +25% damage and attack 20% faster.', {}, { damage: 0.25, attackSpeed: 0.2 }),
   X('clone_mask', 'Clone Mask', 'epic', '🎭', 'A shadow clone fights beside you (+1 per stack).', {

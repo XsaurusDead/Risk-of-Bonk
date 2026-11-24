@@ -75,6 +75,8 @@ export const CHEST_ODDS = {
   small: { common: 70, rare: 23, epic: 6, legendary: 1 },
   large: { common: 15, rare: 55, epic: 24, legendary: 6 },
   boss: { common: 0, rare: 55, epic: 33, legendary: 12 },
+  epic: { common: 0, rare: 0, epic: 100, legendary: 0 },
+  legendary: { common: 0, rare: 0, epic: 0, legendary: 100 },
 };
 
 export function rollRarity(kind = 'small') {
@@ -153,7 +155,7 @@ export function updatePickups(dt) {
         c.x += c.vx * dt;
         c.y += c.vy * dt;
         c.z += c.vz * dt;
-        const h = w.heightAt(c.x, c.z) + 0.35;
+        const h = w.groundAt(c.x, c.z, c.y) + 0.35;
         if (c.y <= h) {
           c.y = h;
           // bounce a couple of times before settling
@@ -185,7 +187,7 @@ export function updatePickups(dt) {
     if (!it.grounded) {
       it.vel.y -= 20 * dt;
       it.pos.addScaledVector(it.vel, dt);
-      const h = w.heightAt(it.pos.x, it.pos.z) + 1;
+      const h = w.groundAt(it.pos.x, it.pos.z, it.pos.y) + 1;
       if (it.pos.y <= h) {
         it.pos.y = h;
         if (it.vel.y < -3) {

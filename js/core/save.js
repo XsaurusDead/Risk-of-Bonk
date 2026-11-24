@@ -88,6 +88,9 @@ export function loadSave() {
     console.warn('[save] unreachable achievements auto-granted:', unreachable.map((a) => a.id));
     for (const a of unreachable) s.achievements[a.id] = s.achievements[a.id] || Date.now();
   }
+  // Re-evaluate everything against the current requirements (quietly, no popups).
+  silent = true;
+  try { checkAchievements(); } finally { silent = false; }
   if (!isCharacterUnlocked(s.lastChar)) s.lastChar = DEFAULT_CHARACTERS[0];
   persist();
   return s;
@@ -188,6 +191,7 @@ function charBucket(charId) {
 }
 
 export let onAchievement = null;
+let silent = false;
 export function setAchievementHandler(fn) {
   onAchievement = fn;
 }
@@ -247,7 +251,7 @@ function grant(a) {
   G.save.achievements[a.id] = Date.now();
   if (G.run) G.run.newAchievements.push(a.id);
   persist();
-  if (onAchievement) onAchievement(a);
+  if (onAchievement && !silent) onAchievement(a);
   // chained achievements (like "unlock N characters")
   if (a.reward.character) checkAchievements('charactersUnlocked');
 }

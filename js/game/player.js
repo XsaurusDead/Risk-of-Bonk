@@ -606,6 +606,30 @@ export class Player {
     return mode === 'always' || (mode === 'touch' && Input.device === 'touch');
   }
 
+  /**
+   * Horizontal move that respects cliffs: on the ground you can step up at
+   * most ~1.1m; in the air you can't pass through terrain above your feet.
+   */
+  moveH(dx, dz) {
+    const w = G.world;
+    const tryAxis = (ax, az) => {
+      const nx = this.pos.x + ax, nz = this.pos.z + az;
+      const th = w.heightAt(nx, nz);
+      const limit = this.grounded ? this.pos.y + 1.1 : this.pos.y + 0.35;
+      if (th > limit && th > w.heightAt(this.pos.x, this.pos.z) + 0.05) return false;
+      this.pos.x = nx;
+      this.pos.z = nz;
+      return true;
+    };
+    if (!tryAxis(dx, dz)) {
+      // slide along the cliff
+      const okX = tryAxis(dx, 0);
+      const okZ = tryAxis(0, dz);
+      if (!okX && !okZ) return false;
+    }
+    return true;
+  }
+
   updateMovement(dt) {
     const s = this.stats;
     const w = G.world;
@@ -616,21 +640,40 @@ export class Player {
     let speed = s.moveSpeed * (this.slowT > 0 ? 0.6 : 1) * (inLiquid ? 1 - w.stage.liquid.slow : 1);
     if (this.charId === 'bulwark' && this.cs.spin > 0.3) speed *= 0.8;
 
+    // ---- bunny hop: jumping right as you land keeps and builds speed
+    this.bhop = this.bhop || 1;
+    this.landT = this.grounded ? (this.landT || 0) + dt : 0;
+    this.jumpBuf = Input.pressed.jump ? 0.15 : Math.max(0, (this.jumpBuf || 0) - dt);
+    if (this.grounded && this.landT > 0.22) this.bhop += (1 - this.bhop) * Math.min(1, dt * 6);
+    speed *= this.bhop;
+
     // jumping
     if (this.grounded) {
       this.coyote = 0.12;
       this.jumpsLeft = s.jumps;
     } else this.coyote -= dt;
-    if (Input.pressed.jump && !this.dashS) {
+    const wantJump = Input.pressed.jump || (this.grounded && this.jumpBuf > 0 && this.landT < 0.05);
+    if (wantJump && !this.dashS) {
       if (this.grounded || this.coyote > 0) {
+        // perfect timing (within ~0.12s of landing, or buffered just before) = hop
+        if (this.grounded && this.landT < 0.12 && this.hopReady && Math.hypot(this.vel.x, this.vel.z) > 3) {
+          this.bhop = Math.min(1.9, this.bhop + 0.12);
+          this.hops = (this.hops || 0) + 1;
+          if (this.hops % 5 === 0) track('bhops', 5);
+          particles(this.pos, 0x9ff5ff, 6, 4, 0.3, 0.22);
+          sfx('dash', 0.08);
+        } else this.hops = 0;
         this.vel.y = s.jumpPower;
         this.sqv += 4;
         track('jumps');
         this.jumpsLeft = s.jumps - 1;
         this.grounded = false;
         this.coyote = 0;
+        this.jumpBuf = 0;
+        this.hopReady = false;
         sfx('jump');
-      } else if (this.jumpsLeft > 0) {
+      } else if (this.jumpsLeft > 0 && Input.pressed.jump && !(this.vel.y < 0 && this.pos.y - w.groundAt(this.pos.x, this.pos.z, this.pos.y) < 0.9)) {
+        // (a press just before touching down is buffered as a bunny hop instead)
         this.jumpsLeft--;
         this.vel.y = s.jumpPower * 0.95;
         this.sqv += 3;
@@ -643,7 +686,7 @@ export class Player {
     if (this.dashS) {
       const ds = this.dashS;
       ds.t -= dt;
-      this.pos.addScaledVector(ds.dir, ds.speed * dt);
+      if (!this.moveH(ds.dir.x * ds.speed * dt, ds.dir.z * ds.speed * dt)) ds.t = 0;
       this.vel.y = Math.max(this.vel.y, 0);
       if (Math.random() < 0.8) particles(this.pos, this.char.color, 2, 1, 0.3, 0.3, 0);
       if (ds.along) {
@@ -663,11 +706,13 @@ export class Player {
       this.vel.x = ls.h.x + this.moveDir.x * speed * 0.3;
       this.vel.z = ls.h.z + this.moveDir.z * speed * 0.3;
     } else {
-      const accel = this.grounded ? 70 : 28;
+      // in the air you keep your momentum (that's what makes hopping fast)
+      const accel = this.grounded ? 70 : 22;
       const tx = this.moveDir.x * speed, tz = this.moveDir.z * speed;
       const k = Math.min(1, accel * dt / Math.max(1, speed));
-      this.vel.x += (tx - this.vel.x) * Math.min(1, k * 4);
-      this.vel.z += (tz - this.vel.z) * Math.min(1, k * 4);
+      const keep = !this.grounded && this.moveDir.lengthSq() < 0.01 ? 0.15 : 1;
+      this.vel.x += (tx - this.vel.x) * Math.min(1, k * 4 * keep);
+      this.vel.z += (tz - this.vel.z) * Math.min(1, k * 4 * keep);
     }
 
     // gravity & glide
@@ -677,20 +722,23 @@ export class Player {
 
     // knockback
     if (this.knock.lengthSq() > 0.01) {
-      this.pos.addScaledVector(this.knock, dt);
+      this.moveH(this.knock.x * dt, this.knock.z * dt);
       this.knock.multiplyScalar(Math.max(0, 1 - dt * 5));
     }
-    this.pos.x += this.vel.x * dt;
-    this.pos.z += this.vel.z * dt;
+    if (!this.moveH(this.vel.x * dt, this.vel.z * dt) && !this.grounded) {
+      this.vel.x *= 0.5;
+      this.vel.z *= 0.5;
+    }
     this.pos.y += this.vel.y * dt;
     w.collide(this.pos, 0.55);
     w.clampBounds(this.pos);
-    const gh = w.heightAt(this.pos.x, this.pos.z);
+    const gh = w.groundAt(this.pos.x, this.pos.z, this.pos.y - this.vel.y * dt);
     if (this.pos.y <= gh) {
       const landing = !this.grounded && this.vel.y < -1;
       if (landing) {
         const impact = -this.vel.y;
         this.sqv -= Math.min(7, impact * 0.28);
+        this.hopReady = true;
         for (const id in this.items) {
           const it = ITEMS[id];
           if (it.onLand) it.onLand(this.items[id], impact, this);
@@ -709,15 +757,32 @@ export class Player {
           cb();
         }
         this.leapS = null;
+        this.landT = 0;
         particles(this.pos, 0xddddcc, 3, 2, 0.3, 0.25);
       }
       this.grounded = true;
     } else if (this.pos.y > gh + 0.15) {
       this.grounded = false;
     } else if (this.vel.y <= 0) {
-      // snap down small steps when walking downhill
       this.pos.y = gh;
       this.grounded = true;
+    }
+
+    // jump pads launch you up to the floating islands
+    this.padCd = Math.max(0, (this.padCd || 0) - dt);
+    if (this.grounded && this.padCd <= 0) {
+      for (const pad of w.jumpPads) {
+        if (Math.hypot(pad.x - this.pos.x, pad.z - this.pos.z) < 1.8 && Math.abs(pad.y - this.pos.y) < 1) {
+          this.vel.y = pad.power;
+          this.grounded = false;
+          this.padCd = 0.6;
+          this.pos.y += 0.1;
+          particles(this.pos, 0x55ffdd, 20, 6, 0.5);
+          sfx('jump');
+          sfx('dash');
+          track('jumpPads');
+        }
+      }
     }
 
     // liquid damage
