@@ -66,9 +66,11 @@ export function loadCharModel(id) {
       if (def.fix) fix.rotation.set(def.fix.x || 0, def.fix.y || 0, def.fix.z || 0);
       fix.add(g.scene);
       fix.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(fix);
       let clips = g.animations;
       if (def.inPlace) clips = clips.map(inPlace);
+      // measure in the pose the model is actually shown in (idle clip), not the rig's rest pose:
+      // some rigs (Mixamo) have a rest pose far above the animated feet
+      const box = posedBox(fix, clips.find((c) => c.name === def.anims?.idle));
       templates[id] = { scene: fix, clips, height: box.max.y - box.min.y, minY: box.min.y };
       return true;
     }).catch((e) => {
@@ -86,6 +88,33 @@ export async function preloadCharacterModels() {
 }
 
 export const hasCharModel = (id) => !!templates[id];
+
+/** Bounding box of the (skinned) vertices with `clip` applied at its first frame. */
+function posedBox(obj, clip) {
+  let mixer = null;
+  if (clip) {
+    mixer = new THREE.AnimationMixer(obj);
+    mixer.clipAction(clip).play();
+    mixer.update(0);
+  }
+  obj.updateMatrixWorld(true);
+  const box = new THREE.Box3(), v = new THREE.Vector3();
+  obj.traverse((o) => {
+    if (!o.isMesh || !o.visible) return;
+    const pos = o.geometry.attributes.position;
+    if (o.isSkinnedMesh) o.skeleton.update();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      if (o.isSkinnedMesh) o.applyBoneTransform(i, v);
+      box.expandByPoint(v.applyMatrix4(o.matrixWorld));
+    }
+  });
+  if (mixer) {
+    mixer.stopAllAction();
+    mixer.uncacheRoot(obj);
+  }
+  return box.isEmpty() ? new THREE.Box3().setFromObject(obj) : box;
+}
 
 /** Mixamo-style runs move the hips forward; keep them on the spot (the game moves the player). */
 function inPlace(clip) {
