@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import { icon, achievementIcon, characterIcon, UI_ICONS } from '../data/icons.js';
 import { TOME_BY_ID, TOME_SLOTS, TOME_MAX, WEAPON_MAX, WEAPON_SLOTS } from '../data/tomes.js';
 import { WEAPONS } from '../data/weapons.js';
+import { loadCharModel } from '../game/charmodels.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -91,9 +92,12 @@ export const UI = {
     $('#btn-continue').addEventListener('click', () => {
       unlockAudio();
       sfx('portal');
-      this.showScreen('none');
-      $('#hud').classList.remove('hidden');
-      if (!Game.resumeRun()) this.showScreen('title');
+      const d = loadRunData();
+      loadCharModel(d?.charId).finally(() => {
+        this.showScreen('none');
+        $('#hud').classList.remove('hidden');
+        if (!Game.resumeRun()) this.showScreen('title');
+      });
     });
     $('#btn-vic-continue').addEventListener('click', () => {
       sfx('portal');
@@ -380,9 +384,13 @@ export const UI = {
     }
     unlockAudio();
     sfx('portal');
-    this.showScreen('none');
-    $('#hud').classList.remove('hidden');
-    Game.startRun(this.selChar);
+    const id = this.selChar;
+    // make sure the survivor's 3D model is loaded before the run starts
+    loadCharModel(id).finally(() => {
+      this.showScreen('none');
+      $('#hud').classList.remove('hidden');
+      Game.startRun(id);
+    });
   },
 
   // ------------------------------------------------------------ logbook

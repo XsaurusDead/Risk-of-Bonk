@@ -19,7 +19,7 @@ import { initFx, updateFx, updateHpBars, updateBlobShadows, clearFx, particles, 
 import { initPickups, updatePickups, clearPickups, dropItem, rollRarity, rollItem, dropCoins, collectAll } from './pickups.js';
 import { updateMinions, clearMinions } from './minions.js';
 import { windUniform } from './models.js';
-import { buildCharacter } from './charmodels.js';
+import { buildCharacter, loadCharModel, hasCharModel } from './charmodels.js';
 import { sfx } from '../core/audio.js';
 import { track, trackMax, commitRunBests, persist, selectedCostume } from '../core/save.js';
 import { weightedPick, shuffle, rand } from '../core/util.js';
@@ -129,6 +129,12 @@ export const Game = {
     if (this.menuModel) G.scene.remove(this.menuModel.root);
     this.menuModel = buildCharacter(id, costume);
     if (locked && this.menuModel.rig.anim) this.menuModel.rig.anim.frozen = true;
+    // the 3D model loads on demand: show the block model meanwhile, then swap it in
+    if (!hasCharModel(id)) {
+      loadCharModel(id).then((ok) => {
+        if (ok && this.menuChar === id && G.mode === 'menu' && this.menuModel && !this.menuModel.glb) this.setMenuCharacter(id, costume, locked, 0);
+      });
+    }
     const h = this.menuWorld.heightAt(0, 0);
     this.menuModel.root.position.set(0, h, 0);
     if (locked) {
@@ -310,6 +316,7 @@ export const Game = {
       chestsOpened: 0, devilMarks: 0,
       onPlayerDeath: () => this.onPlayerDeath(),
     };
+    if (G.player) G.player.dispose(); // never leave an old survivor model in the scene
     G.player = new Player(charId);
     G.minions = [];
   },

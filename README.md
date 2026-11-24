@@ -97,16 +97,35 @@ To add a track: upload it to the right folder and add its path to the matching l
 
 ## Character models
 
-Survivors can use a rigged 3D model (glTF/.glb with animations) instead of the built-in block model.
-They live in `assets/models/<name>/` and are mapped in `CHAR_MODELS` in `js/game/charmodels.js`.
+Every survivor except Rook uses a 3D model from the uploaded packs. The raw uploads stay in `assets/models/`;
+the game loads optimised copies from `assets/models/game/` (converted with Blender: textures ≤512 px, heavy meshes reduced,
+only the needed animations kept). A model is downloaded when you pick that survivor, not at start-up.
 
-- **Kestrel** is the **Hooded Fox by Heytibo** (itch.io, `assets/models/fox/`). The model's own animations are used:
-  idle, run (speeds up with your movement speed), jump, fall, attack and landing. The fox's sword is swapped for a bow.
-- Costumes recolour the model's textures: Rival = blue fox, Arctic = white fox, Inferno = red, Shadow = purple, Golden = gold with a crown.
-- If a model can't be loaded, the survivor falls back to the block model.
+| Survivor | Model | Animation |
+|---|---|---|
+| Vanguard | Cop | procedural (arm/leg swing) |
+| Bonker | Sandbound Marauder (bloody club) | idle / run / attack clips |
+| Pyra | Witch | procedural |
+| Glacia | Living Snowman (by Asgart) | idle / walk / attack clips |
+| Kestrel | Hooded Fox (by Heytibo) | idle / run / jump / fall / attack / land clips (sword swapped for a bow) |
+| Tinker | Goblin | toy-style waddle & hop |
+| Kaze | Cat-human | idle / run clips |
+| Morrow | Skeleton | procedural |
+| Bulwark | Heavy radiation suit (Radiation Workers PSX pack) | idle / run / jump clips |
+| Nyx | PS1 horror killer (machete) | toy-style |
+| Sol | Dead Oath Hunter (PSX bounty hunter) | idle / run / attack clips |
+| Rook | built-in block model | — |
+| Vex | Light hazmat suit (Radiation Workers PSX pack) | idle / run / jump clips |
+| Echo | Vald (suit & sunglasses) | toy-style |
+| Grizzle | Dog | idle (tail wag) / run / bark clips |
+| Spark | Angry baby boy | procedural |
+| Mimic | PSX BagMan — "Sackhead Killer" by **Aredius (Daniel Arias)** | idle / run / attack clips |
 
-To give another survivor a model: put the .glb (with its textures) in its own folder under `assets/models/` and add an entry
-to `CHAR_MODELS` with the clip names for idle / run / jump / fall / attack / land.
+- Costumes recolour the models (Rival = opposite colours, Arctic = white, Inferno = red, Shadow = purple, Golden = gold + crown).
+- *Maurice* is not used: it's a Maya-only file and its licence allows educational / non-commercial use only.
+- Check each pack's licence before publishing the game; the BagMan licence asks for the credit above.
+- To change who gets which model, edit `CHAR_MODELS` in `js/game/charmodels.js`.
+- The website only publishes the files the game needs (see `.github/workflows/pages.yml`); the raw packs stay in the repo.
 
 ## Icons
 

@@ -22,9 +22,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      # Publish only what the game loads. Raw uploads (Blender/FBX files, full-size
+      # texture packs) stay in the repo but would push the site past the 1 GB limit.
+      - name: Collect the game files
+        run: |
+          mkdir -p _site/assets/models/fox _site/assets/packs/stylized-nature _site/assets/textures
+          cp -r index.html css js vendor _site/
+          cp -r assets/music _site/assets/
+          cp -r assets/textures/raven-fantasy _site/assets/textures/
+          cp -r assets/packs/stylized-nature/web _site/assets/packs/stylized-nature/
+          cp -r assets/models/game _site/assets/models/
+          cp assets/models/fox/fox.glb _site/assets/models/fox/
+          du -sh _site
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
   deploy:
     needs: build
