@@ -4,6 +4,7 @@
 import { G } from '../core/state.js';
 import { Input } from '../core/input.js';
 import { SIZE } from '../game/world.js';
+import { MAP_ICONS, iconImage, icon } from '../data/icons.js';
 
 const MARK = {
   chest_normal: { icon: '📦', col: '#d8a050', label: 'Chest' },
@@ -19,6 +20,28 @@ const MARK = {
   pad: { icon: '⏫', col: '#55ffdd', label: 'Jump pad' },
   cave: { icon: '🕳️', col: '#9fdcff', label: 'Cave' },
 };
+for (const [k, m] of Object.entries(MARK)) m.px = MAP_ICONS[k];
+const ICON_PX = 16; // marker size on the 200px minimap canvas
+const ICON_PX_BIG = 24; // on the 640px big map
+
+/** Pixel-art marker with a dark backing disc so it reads on any terrain. */
+function drawIcon(ctx, m, x, y, size) {
+  const img = iconImage(m.px);
+  const s = m === MARK.portal ? size * 1.4 : size;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.beginPath();
+  ctx.arc(x, y, s * 0.62, 0, Math.PI * 2);
+  ctx.fill();
+  if (img.complete && img.naturalWidth) {
+    const prev = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, Math.round(x - s / 2), Math.round(y - s / 2), s, s);
+    ctx.imageSmoothingEnabled = prev;
+  } else {
+    ctx.fillStyle = m.col;
+    ctx.fillRect(x - 3, y - 3, 6, 6);
+  }
+}
 const VIEW = 190; // metres visible across the small map
 
 export const Minimap = {
@@ -130,8 +153,7 @@ export const Minimap = {
         px *= lim / d;
         py *= lim / d;
       }
-      ctx.font = mk.m === MARK.portal ? '18px sans-serif' : '13px sans-serif';
-      ctx.fillText(mk.m.icon, c + px, c + py);
+      drawIcon(ctx, mk.m, c + px, c + py, ICON_PX);
     }
     // player arrow
     ctx.translate(c, c);
@@ -170,8 +192,7 @@ export const Minimap = {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const mk of this.markers()) {
-      ctx.font = mk.m === MARK.portal ? '26px sans-serif' : '18px sans-serif';
-      ctx.fillText(mk.m.icon, (mk.x + SIZE / 2) * k, (mk.z + SIZE / 2) * k);
+      drawIcon(ctx, mk.m, (mk.x + SIZE / 2) * k, (mk.z + SIZE / 2) * k, ICON_PX_BIG);
     }
     const p = G.player;
     if (p) {
@@ -195,6 +216,6 @@ export const Minimap = {
 
   legend() {
     const el = document.getElementById('bm-legend');
-    if (el) el.innerHTML = Object.values(MARK).map((m) => `<span>${m.icon} ${m.label}</span>`).join('');
+    if (el) el.innerHTML = Object.values(MARK).map((m) => `<span>${icon(m.px)} ${m.label}</span>`).join('');
   },
 };

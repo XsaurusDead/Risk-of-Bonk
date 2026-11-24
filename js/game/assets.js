@@ -52,6 +52,10 @@ export async function preloadAssets(onProgress) {
     }).catch(() => {}).finally(tick)
   );
   await Promise.all(jobs);
+  // Bush_Common ships with the red autumn leaves of the twisted trees; give it the green
+  // broadleaf texture so meadows aren't covered in red shrubs
+  const bush = models.get('Bush_Common'), flowers = models.get('Bush_Common_Flowers');
+  if (bush && flowers) bush.parts.forEach((p) => { p.material = flowers.parts[0].material; });
   ready = models.size > 0;
   return ready;
 }
