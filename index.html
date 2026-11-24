@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#120a1f" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Risk of Bonk</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+</head>
+<body data-device="kbm">
+  <canvas id="game"></canvas>
+
+  <div id="ui">
+    <div id="dmg-layer"></div>
+    <div id="hurt-vignette"></div>
+
+    <!-- ===================== HUD ===================== -->
+    <div id="hud" class="hidden">
+      <div id="hud-tl">
+        <div id="hud-stage">Verdant Meadows</div>
+        <div id="hud-timer">0:00</div>
+        <div id="hud-diff"><div id="hud-diff-fill"></div><span id="hud-diff-label">Easy</span></div>
+      </div>
+      <div id="hud-tr">
+        <div id="hud-coins"><span class="coin-icon"></span><span id="hud-coin-val">0</span></div>
+        <div id="hud-items"></div>
+      </div>
+      <div id="hud-boss" class="hidden">
+        <div id="hud-boss-name">Boss</div>
+        <div class="bar"><div id="hud-boss-fill"></div></div>
+      </div>
+      <div id="hud-objective"></div>
+      <div id="crosshair"><div></div></div>
+      <div id="portal-marker" class="hidden">🌀<span></span></div>
+      <div id="hud-prompt" class="hidden"></div>
+      <div id="hud-bl">
+        <div id="hud-level">Lv <b id="hud-level-val">1</b></div>
+        <div id="hud-hp" class="bar">
+          <div id="hud-hp-fill"></div><div id="hud-shield-fill"></div><div id="hud-barrier-fill"></div>
+          <span id="hud-hp-text">100 / 100</span>
+        </div>
+        <div id="hud-xp" class="bar"><div id="hud-xp-fill"></div></div>
+      </div>
+      <div id="hud-abilities"></div>
+      <div id="hud-banner" class="hidden"><div class="t"></div><div class="s"></div></div>
+      <div id="hud-stats" class="hidden"></div>
+      <div id="hud-fps" class="hidden"></div>
+    </div>
+
+    <div id="toasts"></div>
+    <div id="ach-toasts"></div>
+
+    <!-- ===================== TOUCH ===================== -->
+    <div id="touch-controls" class="hidden">
+      <div id="look-zone"></div>
+      <div id="joy-zone"><div id="joy-base"><div id="joy-knob"></div></div></div>
+      <div id="touch-btns">
+        <button class="tbtn big" id="tb-primary" data-action="primary" data-drag="1" data-slot="primary"><span class="ic">🔫</span><i class="cd"></i></button>
+        <button class="tbtn" id="tb-a1" data-action="ability1" data-slot="ability1"><span class="ic">⚡</span><i class="cd"></i><b class="cdt"></b></button>
+        <button class="tbtn" id="tb-a2" data-action="ability2" data-slot="ability2"><span class="ic">🌀</span><i class="cd"></i><b class="cdt"></b></button>
+        <button class="tbtn ult" id="tb-ult" data-action="ultimate" data-slot="ultimate"><span class="ic">🌪️</span><i class="cd"></i><b class="cdt"></b></button>
+        <button class="tbtn" id="tb-jump" data-action="jump"><span class="ic">⤒</span></button>
+        <button class="tbtn hidden" id="tb-interact" data-action="interact"><span class="ic">✋</span></button>
+      </div>
+      <button class="tbtn small" id="tb-pause" data-action="pause"><span class="ic">⏸</span></button>
+      <button class="tbtn small" id="tb-inv" data-action="inventory"><span class="ic">🎒</span></button>
+    </div>
+
+    <!-- ===================== SCREENS ===================== -->
+    <div id="screen-title" class="screen">
+      <div class="title-wrap">
+        <h1 class="logo">RISK<span>of</span>BONK</h1>
+        <p class="tagline">A 3rd-person roguelike. Loot, level, survive. It only gets worse.</p>
+        <div class="menu-col">
+          <button class="btn primary" data-go="select">▶ Play</button>
+          <button class="btn" data-go="logbook">📖 Logbook</button>
+          <button class="btn" data-go="settings">⚙ Settings</button>
+          <button class="btn" data-go="help">❓ How to Play</button>
+        </div>
+        <p class="foot" id="title-foot"></p>
+      </div>
+    </div>
+
+    <div id="screen-select" class="screen hidden">
+      <div class="select-wrap">
+        <div class="select-left">
+          <h2>Choose your Survivor</h2>
+          <div id="char-grid"></div>
+        </div>
+        <div class="select-right panel" id="char-detail"></div>
+      </div>
+      <div class="screen-actions">
+        <button class="btn" data-back="title">← Back</button>
+        <button class="btn primary" id="btn-start">Start Run ▶</button>
+      </div>
+    </div>
+
+    <div id="screen-logbook" class="screen hidden">
+      <div class="panel wide">
+        <div class="tabs">
+          <button class="tab active" data-tab="ach">Achievements</button>
+          <button class="tab" data-tab="items">Items</button>
+          <button class="tab" data-tab="stats">Records</button>
+        </div>
+        <div id="logbook-body" class="scroll"></div>
+      </div>
+      <div class="screen-actions"><button class="btn" data-back="title">← Back</button></div>
+    </div>
+
+    <div id="screen-settings" class="screen hidden">
+      <div class="panel">
+        <h2>Settings</h2>
+        <div id="settings-body" class="scroll"></div>
+      </div>
+      <div class="screen-actions"><button class="btn" data-back="__prev">← Back</button></div>
+    </div>
+
+    <div id="screen-help" class="screen hidden">
+      <div class="panel wide scroll">
+        <h2>How to Play</h2>
+        <div class="help-grid">
+          <div>
+            <h3>⌨️ Mouse &amp; Keyboard</h3>
+            <ul>
+              <li><b>WASD</b> move · <b>Mouse</b> look (click to lock)</li>
+              <li><b>Left Click</b> primary attack (hold)</li>
+              <li><b>Right Click / Q</b> Ability 1</li>
+              <li><b>Shift</b> Ability 2</li>
+              <li><b>R</b> Ultimate</li>
+              <li><b>Space</b> jump (multi-jump!)</li>
+              <li><b>E / F</b> interact (chests, portal)</li>
+              <li><b>Tab</b> hold for items &amp; stats · <b>Esc</b> pause</li>
+              <li><b>1 / 2 / 3</b> pick a level-up</li>
+            </ul>
+          </div>
+          <div>
+            <h3>🎮 Controller</h3>
+            <ul>
+              <li><b>Left stick</b> move · <b>Right stick</b> look</li>
+              <li><b>RT</b> primary · <b>LT</b> Ability 1</li>
+              <li><b>RB</b> Ability 2 · <b>Y / LB</b> Ultimate</li>
+              <li><b>A</b> jump · <b>X</b> interact</li>
+              <li><b>View/Back</b> items &amp; stats · <b>Start</b> pause</li>
+              <li>Menus: <b>D-pad/stick</b> + <b>A</b>, <b>B</b> back</li>
+            </ul>
+          </div>
+          <div>
+            <h3>📱 Touch</h3>
+            <ul>
+              <li><b>Left side</b>: virtual joystick</li>
+              <li><b>Right side</b>: drag to look</li>
+              <li>Big button: attack (auto-fire is on by default)</li>
+              <li>Buttons for abilities, ultimate, jump, interact</li>
+              <li>🎒 shows items &amp; stats</li>
+            </ul>
+          </div>
+          <div>
+            <h3>🗺️ The Loop</h3>
+            <ul>
+              <li>Kill enemies for <b>coins</b> and <b>XP</b>. Level-ups let you pick an upgrade.</li>
+              <li>Spend coins on <b>chests</b>: Common · <span class="r-rare">Rare</span> · <span class="r-epic">Epic</span> · <span class="r-legendary">Legendary</span>.</li>
+              <li>Find the <b>portal</b> 🌀, interact to summon the <b>boss</b>.</li>
+              <li>Stay in the ring to charge the portal, kill the boss, then leave.</li>
+              <li>Difficulty rises <b>exponentially</b> with time and stages. Don't dawdle.</li>
+              <li>Achievements unlock new survivors and items. Every unlock can be earned from a fresh save.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="screen-actions"><button class="btn" data-back="title">← Back</button></div>
+    </div>
+
+    <div id="screen-pause" class="screen dim hidden">
+      <div class="panel">
+        <h2>Paused</h2>
+        <div class="menu-col">
+          <button class="btn primary" id="btn-resume">Resume</button>
+          <button class="btn" data-go="settings">⚙ Settings</button>
+          <button class="btn danger" id="btn-quit">Abandon Run</button>
+        </div>
+        <div id="pause-stats"></div>
+      </div>
+    </div>
+
+    <div id="screen-levelup" class="screen dim hidden">
+      <div class="levelup-wrap">
+        <h2 class="glow">LEVEL UP! <span id="lvl-num"></span></h2>
+        <p class="sub">Choose an upgrade</p>
+        <div id="levelup-cards"></div>
+      </div>
+    </div>
+
+    <div id="screen-gameover" class="screen dim hidden">
+      <div class="panel wide">
+        <h2 class="dead">YOU DIED</h2>
+        <div id="gameover-body"></div>
+        <div class="menu-row">
+          <button class="btn primary" id="btn-retry">↻ Try Again</button>
+          <button class="btn" id="btn-menu">Main Menu</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="fade"></div>
+    <div id="loading">Loading…</div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

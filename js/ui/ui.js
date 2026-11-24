@@ -1,0 +1,726 @@
+// All DOM UI: menus, character select, logbook, settings, HUD, level-up,
+// game over, toasts and controller menu navigation.
+import { G } from '../core/state.js';
+import { Input } from '../core/input.js';
+import { sfx, unlockAudio } from '../core/audio.js';
+import { CHARACTERS, CHARACTER_ORDER } from '../data/characters.js';
+import { ITEMS, ITEM_LIST } from '../data/items.js';
+import { ACHIEVEMENTS } from '../data/achievements.js';
+import {
+  isCharacterUnlocked, isItemUnlocked, unlockSourceFor, achievementProgress, persist, resetSave, setAchievementHandler, DEFAULT_SETTINGS,
+} from '../core/save.js';
+import { Game } from '../game/game.js';
+import { diffLabel, DIFF_LABELS } from '../game/director.js';
+import { formatTime, formatNum, RARITY, RARITY_ORDER } from '../core/util.js';
+import * as THREE from 'three';
+
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+const CHAR_EMOJI = { vanguard: '🔫', bonker: '🏏', pyra: '🔥', glacia: '❄️', kestrel: '🏹', tinker: '🔧', kaze: '👊', morrow: '💀', bulwark: '🛡️', nyx: '🗡️' };
+const KEYS = {
+  kbm: ['LMB', 'RMB', 'SHIFT', 'R'],
+  pad: ['RT', 'LT', 'RB', 'Y'],
+  touch: ['', '', '', ''],
+};
+const SLOT_NAMES = ['Primary', 'Ability 1', 'Ability 2', 'Ultimate'];
+const SLOTS = ['primary', 'ability1', 'ability2', 'ultimate'];
+const _v = new THREE.Vector3();
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+function rewardText(a) {
+  if (a.reward.character) return `Unlocks <b style="color:${CHARACTERS[a.reward.character].color}">${CHARACTERS[a.reward.character].name}</b>`;
+  if (a.reward.item) {
+    const it = ITEMS[a.reward.item];
+    return `Unlocks ${it.icon} <b class="r-${it.rarity}">${it.name}</b>`;
+  }
+  return '';
+}
+
+export const UI = {
+  screen: 'title',
+  prevScreen: 'title',
+  selChar: null,
+  focusEl: null,
+  invToggle: false,
+  fpsAcc: 0,
+  fpsN: 0,
+  lastItemCount: -1,
+
+  init() {
+    G.ui = this;
+    setAchievementHandler((a) => this.toastAchievement(a));
+
+    document.addEventListener('click', (e) => {
+      unlockAudio();
+      const go = e.target.closest('[data-go]');
+      const back = e.target.closest('[data-back]');
+      if (go) {
+        sfx('ui');
+        this.showScreen(go.dataset.go);
+      } else if (back) {
+        sfx('ui');
+        this.goBack(back.dataset.back);
+      }
+    });
+    document.addEventListener('pointerdown', () => unlockAudio(), { once: false, passive: true });
+
+    $('#btn-start').addEventListener('click', () => this.startRun());
+    $('#btn-resume').addEventListener('click', () => Game.resume());
+    $('#btn-quit').addEventListener('click', () => {
+      sfx('ui');
+      Game.quitToMenu();
+    });
+    $('#btn-retry').addEventListener('click', () => {
+      const id = G.run?.charId || G.save.lastChar;
+      Game.cleanupRun();
+      this.showScreen('none');
+      Game.startRun(id);
+    });
+    $('#btn-menu').addEventListener('click', () => Game.quitToMenu());
+    $$('.tab').forEach((t) =>
+      t.addEventListener('click', () => {
+        $$('.tab').forEach((x) => x.classList.toggle('active', x === t));
+        this.renderLogbook(t.dataset.tab);
+      })
+    );
+    $('#hud-stats').addEventListener('click', () => (this.invToggle = false));
+
+    Input.onDeviceChange = (d) => this.onDevice(d);
+    Input.onPointerLockLost = () => {
+      if (G.mode === 'playing') Game.pause();
+    };
+    Input.initTouch($('#touch-controls'));
+    this.onDevice(Input.device);
+    this.buildCharGrid();
+    this.selectChar(G.save.lastChar);
+    $('#title-foot').textContent = `${Object.keys(CHARACTERS).filter(isCharacterUnlocked).length}/10 survivors · ${Object.keys(G.save.achievements).length}/${ACHIEVEMENTS.length} achievements`;
+    this.showScreen('title');
+  },
+
+  onDevice(d) {
+    document.body.dataset.device = d;
+    if (d === 'touch') document.body.classList.add('touch');
+    this.buildAbilityBar();
+    this.updateTouchVisibility();
+  },
+
+  updateTouchVisibility() {
+    const show = G.isTouch && (G.mode === 'playing' || G.mode === 'transition');
+    $('#touch-controls').classList.toggle('hidden', !show);
+  },
+
+  // ------------------------------------------------------------ screens
+  showScreen(name) {
+    if (name !== this.screen && this.screen !== 'settings') this.prevScreen = this.screen;
+    this.screen = name;
+    $$('.screen').forEach((s) => s.classList.add('hidden'));
+    const el = $('#screen-' + name);
+    if (el) el.classList.remove('hidden');
+    this.focusEl = null;
+    $$('.focus').forEach((f) => f.classList.remove('focus'));
+    if (name === 'select') {
+      this.buildCharGrid();
+      this.selectChar(this.selChar || G.save.lastChar);
+    }
+    if (name === 'logbook') {
+      $$('.tab').forEach((x, i) => x.classList.toggle('active', i === 0));
+      this.renderLogbook('ach');
+    }
+    if (name === 'settings') this.renderSettings();
+    if (name === 'title') {
+      $('#title-foot').textContent = `${Object.keys(CHARACTERS).filter(isCharacterUnlocked).length}/10 survivors · ${Object.keys(G.save.achievements).length}/${ACHIEVEMENTS.length} achievements`;
+    }
+    const inMenu = G.mode === 'menu';
+    $('#hud').classList.toggle('hidden', inMenu || name === 'gameover');
+    this.updateTouchVisibility();
+  },
+
+  goBack(target) {
+    if (target === '__prev') {
+      if (G.mode === 'paused') return this.showScreen('pause');
+      return this.showScreen(this.prevScreen === 'settings' ? 'title' : this.prevScreen || 'title');
+    }
+    this.showScreen(target);
+  },
+
+  // ------------------------------------------------------------ character select
+  buildCharGrid() {
+    const grid = $('#char-grid');
+    grid.innerHTML = '';
+    for (const id of CHARACTER_ORDER) {
+      const c = CHARACTERS[id];
+      const unlocked = isCharacterUnlocked(id);
+      const b = document.createElement('button');
+      b.className = 'char-card' + (unlocked ? '' : ' locked') + (id === this.selChar ? ' sel' : '');
+      b.dataset.char = id;
+      b.innerHTML = `<div class="portrait" style="background:${c.color}">${CHAR_EMOJI[id]}</div><div class="nm">${c.name}</div>`;
+      b.addEventListener('click', () => {
+        sfx('ui');
+        this.selectChar(id);
+      });
+      b.addEventListener('dblclick', () => this.startRun());
+      grid.appendChild(b);
+    }
+  },
+
+  selectChar(id) {
+    if (!CHARACTERS[id]) id = 'vanguard';
+    this.selChar = id;
+    $$('.char-card').forEach((c) => c.classList.toggle('sel', c.dataset.char === id));
+    const c = CHARACTERS[id];
+    const unlocked = isCharacterUnlocked(id);
+    const src = unlockSourceFor('character', id);
+    const pips = (n) => `<div class="pips">${[1, 2, 3, 4, 5].map((i) => `<i class="pip ${i <= n ? 'on' : ''}"></i>`).join('')}</div>`;
+    const skills = [c.primary, ...c.abilities];
+    let html = `<div class="cd-head"><span class="name" style="color:${c.color}">${c.name}</span><span class="title">${c.title}</span></div>
+      <div class="lore">${c.lore}</div>`;
+    if (!unlocked && src) html += `<div class="locked-note">🔒 <b>Locked.</b> Achievement <b>${src.name}</b>: ${src.desc}<br><small>Progress: ${formatNum(achievementProgress(src))} / ${formatNum(src.cond.value)}</small></div>`;
+    html += `<div class="stat-bars"><span>Health</span>${pips(c.ratings.hp)}<span>Damage</span>${pips(c.ratings.dmg)}<span>Mobility</span>${pips(c.ratings.speed)}<span>Range</span>${pips(c.ratings.range)}<span>Complexity</span>${pips(c.difficulty)}</div>`;
+    html += `<div class="skill"><div class="ico">${c.passive.icon}</div><div><div class="hd">${c.passive.name}<span class="slot">Passive</span></div><div class="ds">${c.passive.desc}</div></div></div>`;
+    skills.forEach((s, i) => {
+      const cd = i === 0 ? `${s.rate}/s` : `${s.cd}s cooldown${s.charges ? ` · ${s.charges} charges` : ''}`;
+      html += `<div class="skill"><div class="ico">${s.icon}</div><div><div class="hd">${s.name}<span class="slot">${SLOT_NAMES[i]}</span><span class="cdv">${cd}</span></div><div class="ds">${s.desc}</div></div></div>`;
+    });
+    $('#char-detail').innerHTML = html;
+    $('#btn-start').disabled = !unlocked;
+    if (G.mode === 'menu' && Game.menuChar !== id) Game.setMenuCharacter(id);
+  },
+
+  startRun() {
+    if (!isCharacterUnlocked(this.selChar)) {
+      sfx('deny');
+      return;
+    }
+    unlockAudio();
+    sfx('portal');
+    this.showScreen('none');
+    $('#hud').classList.remove('hidden');
+    Game.startRun(this.selChar);
+  },
+
+  // ------------------------------------------------------------ logbook
+  renderLogbook(tab) {
+    const body = $('#logbook-body');
+    if (tab === 'ach') {
+      body.innerHTML = ACHIEVEMENTS.map((a) => {
+        const done = !!G.save.achievements[a.id];
+        const prog = done ? a.cond.value : achievementProgress(a);
+        const pct = Math.min(100, (prog / a.cond.value) * 100);
+        return `<div class="ach ${done ? 'done' : ''}"><div><div class="nm">${a.name}</div><div class="ds">${a.desc}</div></div>
+          <div class="rw">${rewardText(a)}<br><small>${formatNum(prog)} / ${formatNum(a.cond.value)}</small></div>
+          <div class="prog"><i style="width:${pct}%"></i></div></div>`;
+      }).join('');
+    } else if (tab === 'items') {
+      let html = '';
+      for (const r of RARITY_ORDER) {
+        html += `<h3 class="r-${r}">${RARITY[r].name}</h3><div class="item-grid">`;
+        for (const it of ITEM_LIST.filter((x) => x.rarity === r)) {
+          const unlocked = isItemUnlocked(it.id);
+          const src = unlockSourceFor('item', it.id);
+          const seen = G.save.discovered[it.id];
+          html += `<div class="item-entry ${unlocked ? '' : 'locked'}" style="--c:${RARITY[r].color}"><div class="ic">${it.icon}</div><div>
+            <div class="nm">${it.name}${seen ? '' : unlocked ? ' <small style="color:#888">(undiscovered)</small>' : ''}</div>
+            <div class="ds">${unlocked ? it.desc : '🔒 ' + (src ? `${src.name}: ${src.desc}` : 'Locked')}</div></div></div>`;
+        }
+        html += '</div>';
+      }
+      body.innerHTML = html;
+    } else {
+      const s = G.save.stats;
+      const rows = [
+        ['Runs started', s.runs || 0], ['Enemies defeated', s.kills || 0], ['Elites defeated', s.eliteKills || 0], ['Bosses defeated', s.bossKills || 0],
+        ['Stages cleared', s.stagesCleared || 0], ['Chests opened', s.chests || 0], ['Coins spent', s.coinsSpent || 0],
+        ['Highest stage reached', s.stageReached || 0], ['Longest run', formatTime(s.runTime || 0)], ['Highest level', s.level || 0],
+        ['Most items in one run', s.itemsHeld || 0], ['Biggest hit', formatNum(s.maxHit || 0)], ['Critical hits', s.crits || 0], ['Enemies frozen', s.freezes || 0],
+        ['Ultimates used', s.ultsUsed || 0],
+      ];
+      body.innerHTML = `<div class="rec">${rows.map(([a, b]) => `<span>${a}</span><b>${typeof b === 'number' ? b.toLocaleString() : b}</b>`).join('')}</div>`;
+    }
+  },
+
+  // ------------------------------------------------------------ settings
+  renderSettings() {
+    const s = G.save.settings;
+    const body = $('#settings-body');
+    const rows = [
+      ['sensitivity', 'Mouse sensitivity', 'range', 0.2, 3, 0.05],
+      ['padSensitivity', 'Controller look speed', 'range', 0.3, 3, 0.05],
+      ['touchSensitivity', 'Touch look speed', 'range', 0.3, 3, 0.05],
+      ['volume', 'Volume', 'range', 0, 1, 0.05],
+      ['invertY', 'Invert Y axis', 'toggle'],
+      ['autoFire', 'Auto-fire', 'select', [['off', 'Off'], ['touch', 'Touch only'], ['always', 'Always']]],
+      ['aimAssist', 'Aim assist (controller/touch)', 'toggle'],
+      ['quality', 'Graphics quality', 'select', [['auto', 'Auto'], ['low', 'Low (phones)'], ['high', 'High']]],
+      ['damageNumbers', 'Damage numbers', 'toggle'],
+      ['screenShake', 'Screen shake', 'toggle'],
+      ['showFps', 'Show FPS', 'toggle'],
+    ];
+    body.innerHTML = '';
+    for (const [key, label, type, a, b, step] of rows) {
+      const row = document.createElement('div');
+      row.className = 'setting';
+      row.innerHTML = `<label>${label}</label>`;
+      let ctl;
+      if (type === 'range') {
+        ctl = document.createElement('input');
+        ctl.type = 'range';
+        ctl.min = a;
+        ctl.max = b;
+        ctl.step = step;
+        ctl.value = s[key];
+        ctl.addEventListener('input', () => {
+          s[key] = parseFloat(ctl.value);
+          persist();
+        });
+        ctl.dataset.nav = '1';
+      } else if (type === 'toggle') {
+        ctl = document.createElement('button');
+        ctl.className = 'toggle' + (s[key] ? ' on' : '');
+        ctl.textContent = s[key] ? 'ON' : 'OFF';
+        ctl.addEventListener('click', () => {
+          s[key] = !s[key];
+          ctl.className = 'toggle' + (s[key] ? ' on' : '');
+          ctl.textContent = s[key] ? 'ON' : 'OFF';
+          persist();
+          if (key === 'showFps') $('#hud-fps').classList.toggle('hidden', !s.showFps);
+        });
+      } else {
+        ctl = document.createElement('select');
+        for (const [v, t] of a) {
+          const o = document.createElement('option');
+          o.value = v;
+          o.textContent = t;
+          if (s[key] === v) o.selected = true;
+          ctl.appendChild(o);
+        }
+        ctl.addEventListener('change', () => {
+          s[key] = ctl.value;
+          persist();
+          if (key === 'quality') this.toastText('Graphics quality applies after reloading the page.');
+        });
+        ctl.dataset.nav = '1';
+      }
+      row.appendChild(ctl);
+      body.appendChild(row);
+    }
+    const reset = document.createElement('div');
+    reset.className = 'setting';
+    reset.innerHTML = `<label>Reset all progress</label>`;
+    const rb = document.createElement('button');
+    rb.className = 'toggle';
+    rb.textContent = 'Reset…';
+    let armed = false;
+    rb.addEventListener('click', () => {
+      if (!armed) {
+        armed = true;
+        rb.textContent = 'Click again to confirm';
+        return;
+      }
+      resetSave();
+      rb.textContent = 'Progress reset';
+      this.buildCharGrid();
+      this.selectChar('vanguard');
+    });
+    reset.appendChild(rb);
+    body.appendChild(reset);
+    const defaults = document.createElement('div');
+    defaults.className = 'setting';
+    defaults.innerHTML = `<label>Restore default settings</label>`;
+    const db = document.createElement('button');
+    db.className = 'toggle';
+    db.textContent = 'Restore';
+    db.addEventListener('click', () => {
+      G.save.settings = { ...DEFAULT_SETTINGS };
+      persist();
+      this.renderSettings();
+    });
+    defaults.appendChild(db);
+    body.appendChild(defaults);
+  },
+
+  // ------------------------------------------------------------ in-run UI
+  onStageStart() {
+    $('#hud').classList.remove('hidden');
+    this.showScreen('none');
+    this.buildAbilityBar();
+    this.lastItemCount = -1;
+    $('#hud-stage').textContent = G.run.stage.name + ` · Stage ${G.run.stageNum + 1}`;
+    $('#hud-fps').classList.toggle('hidden', !G.save.settings.showFps);
+    this.setBoss(null);
+  },
+
+  buildAbilityBar() {
+    const bar = $('#hud-abilities');
+    const p = G.player;
+    if (!p) return;
+    const c = p.char;
+    const skills = [c.primary, ...c.abilities];
+    const keys = KEYS[Input.device] || KEYS.kbm;
+    bar.innerHTML = skills.map((s, i) => `<div class="ab ${i === 3 ? 'ult' : ''}" data-slot="${SLOTS[i]}"><span>${s.icon}</span><i class="cd"></i><b class="cdt"></b><span class="key">${keys[i]}</span><span class="chg"></span></div>`).join('');
+    // touch buttons get the character's icons
+    $('#tb-primary .ic').textContent = c.primary.icon;
+    $('#tb-a1 .ic').textContent = c.abilities[0].icon;
+    $('#tb-a2 .ic').textContent = c.abilities[1].icon;
+    $('#tb-ult .ic').textContent = c.abilities[2].icon;
+  },
+
+  banner(title, sub, boss = false) {
+    const b = $('#hud-banner');
+    b.classList.add('hidden');
+    void b.offsetWidth;
+    b.querySelector('.t').textContent = title;
+    b.querySelector('.s').textContent = sub || '';
+    b.classList.toggle('boss', boss);
+    b.classList.remove('hidden');
+    clearTimeout(this.bannerTimer);
+    this.bannerTimer = setTimeout(() => b.classList.add('hidden'), 3600);
+  },
+
+  setBoss(e) {
+    this.boss = e;
+    $('#hud-boss').classList.toggle('hidden', !e);
+    if (e) $('#hud-boss-name').textContent = `${e.def.name} — ${e.def.title}`;
+  },
+
+  toastItem(id) {
+    const it = ITEMS[id];
+    const n = G.player.items[id] || 1;
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.style.setProperty('--c', RARITY[it.rarity].color);
+    t.innerHTML = `<div class="ic">${it.icon}</div><div><div class="nm">${it.name}${n > 1 ? ' ×' + n : ''}</div><div class="ds">${it.desc}</div></div>`;
+    this.pushToast(t, '#toasts');
+  },
+  toastText(text) {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.style.setProperty('--c', '#aaa');
+    t.innerHTML = `<div class="ic">ℹ️</div><div><div class="ds">${esc(text)}</div></div>`;
+    this.pushToast(t, '#toasts');
+  },
+  toastAchievement(a) {
+    sfx('achievement');
+    const t = document.createElement('div');
+    t.className = 'ach-toast';
+    t.innerHTML = `<div class="a">ACHIEVEMENT UNLOCKED</div><div class="n">${a.name}</div><div class="r">${rewardText(a)}</div>`;
+    this.pushToast(t, '#ach-toasts', 5000);
+  },
+  pushToast(el, root, life = 4000) {
+    const r = $(root);
+    r.appendChild(el);
+    while (r.children.length > 4) r.firstChild.remove();
+    setTimeout(() => el.remove(), life);
+  },
+
+  flashCoins() {
+    const c = $('#hud-coins');
+    c.classList.remove('flash');
+    void c.offsetWidth;
+    c.classList.add('flash');
+  },
+  hurt(frac) {
+    this.hurtLevel = Math.min(1, (this.hurtLevel || 0) + frac * 3 + 0.15);
+  },
+
+  fade(cb) {
+    const f = $('#fade');
+    f.classList.add('on');
+    setTimeout(() => {
+      try { cb(); } finally { setTimeout(() => f.classList.remove('on'), 150); }
+    }, 550);
+  },
+
+  showPause(on) {
+    if (on) {
+      $('#pause-stats').innerHTML = this.statsHtml();
+      this.showScreen('pause');
+    } else this.showScreen('none');
+  },
+
+  showLevelUp(choices, level) {
+    $('#lvl-num').textContent = level;
+    const keys = Input.device === 'pad' ? ['A', 'A', 'A'] : ['1', '2', '3'];
+    $('#levelup-cards').innerHTML = choices.map((c, i) => `<button class="up-card" data-i="${i}" style="--c:${RARITY[c.rarity].color}">
+      <div class="ic">${c.icon}</div><div><div class="rr">${RARITY[c.rarity].name}</div><div class="nm">${c.name}</div><div class="tx">${c.text}</div></div><div class="key">[${keys[i]}]</div></button>`).join('');
+    $$('#levelup-cards .up-card').forEach((b) => b.addEventListener('click', () => Game.chooseUpgrade(+b.dataset.i)));
+    this.showScreen('levelup');
+    this.levelOpenT = performance.now();
+  },
+  hideLevelUp() {
+    this.showScreen('none');
+  },
+
+  showGameOver(s) {
+    const c = CHARACTERS[s.charId];
+    const lbl = diffLabel(s.diff);
+    let html = `<div class="go-stats">
+      <div class="go-stat"><b style="color:${c.color}">${c.name}</b>Survivor</div>
+      <div class="go-stat"><b>${formatTime(s.time)}</b>Time survived</div>
+      <div class="go-stat"><b>${s.stage}</b>Stage reached</div>
+      <div class="go-stat"><b>${s.level}</b>Level</div>
+      <div class="go-stat"><b>${s.kills.toLocaleString()}</b>Kills</div>
+      <div class="go-stat"><b style="color:${lbl.color}">${lbl.name}</b>Difficulty</div></div>`;
+    if (s.items.length) {
+      html += `<h3>Items</h3><div class="go-items">${s.items.map(([id, n]) => {
+        const it = ITEMS[id];
+        return `<div class="hud-item" style="--c:${RARITY[it.rarity].color}" title="${esc(it.name)}">${it.icon}${n > 1 ? `<b>${n}</b>` : ''}</div>`;
+      }).join('')}</div>`;
+    }
+    if (s.achievements.length) {
+      html += `<div class="go-new"><b>🏆 New this run:</b><br>${s.achievements.map((id) => {
+        const a = ACHIEVEMENTS.find((x) => x.id === id);
+        return `${a.name} — ${rewardText(a)}`;
+      }).join('<br>')}</div>`;
+    }
+    $('#gameover-body').innerHTML = html;
+    this.showScreen('gameover');
+  },
+
+  statsHtml() {
+    const p = G.player;
+    if (!p) return '';
+    const s = p.stats;
+    const pct = (v) => `${Math.round(v * 100)}%`;
+    const armorRed = s.armor >= 0 ? 1 - 100 / (100 + s.armor) : 0;
+    const rows = [
+      ['Damage', s.damage.toFixed(1)], ['Attack speed', pct(s.attackSpeed)], ['Max HP', Math.round(s.maxHp)], ['Regen', s.regen.toFixed(1) + '/s'],
+      ['Armor', `${Math.round(s.armor)} (${pct(armorRed)})`], ['Crit chance', pct(s.crit)], ['Crit damage', pct(s.critMult)], ['Move speed', s.moveSpeed.toFixed(1)],
+      ['Cooldowns', pct(s.cdMult)], ['Jumps', s.jumps], ['Area', pct(s.area)], ['Luck', s.luck.toFixed(2)], ['Pickup range', s.pickup.toFixed(1) + 'm'],
+      ['XP gain', pct(s.xpMult)], ['Coin gain', pct(s.coinMult)], ['Dodge', pct(s.dodge)],
+    ];
+    let html = `<h3>Stats — Level ${p.level}</h3><div class="st-grid">${rows.map(([a, b]) => `<span>${a} <b>${b}</b></span>`).join('')}</div>`;
+    if (p.itemOrder.length) {
+      html += `<h3>Items (${p.itemCount})</h3><div class="inv-list">${p.itemOrder.map((id) => {
+        const it = ITEMS[id];
+        return `<div class="item-entry" style="--c:${RARITY[it.rarity].color}"><div class="ic">${it.icon}</div><div><div class="nm">${it.name} ×${p.items[id]}</div><div class="ds">${it.desc}</div></div></div>`;
+      }).join('')}</div>`;
+    } else html += `<p style="color:var(--muted)">No items yet — open chests with coins!</p>`;
+    return html;
+  },
+
+  // ------------------------------------------------------------ per-frame
+  update(dt) {
+    this.menuNav();
+    if (G.save.settings.showFps) {
+      this.fpsAcc += dt;
+      this.fpsN++;
+      if (this.fpsAcc > 0.5) {
+        $('#hud-fps').textContent = Math.round(this.fpsN / this.fpsAcc) + ' fps';
+        this.fpsAcc = 0;
+        this.fpsN = 0;
+      }
+    }
+    if (!G.run || !G.player) return;
+    if (G.mode === 'levelup') {
+      if (Input.numberPressed >= 1 && Input.numberPressed <= 3) Game.chooseUpgrade(Input.numberPressed - 1);
+      return;
+    }
+    if (G.mode !== 'playing' && G.mode !== 'transition') return;
+    this.updateHud(dt);
+  },
+
+  updateHud(dt) {
+    const run = G.run, p = G.player, s = p.stats;
+    $('#hud-timer').textContent = formatTime(run.time);
+    const lbl = diffLabel(run.diff);
+    const idx = DIFF_LABELS.indexOf(lbl);
+    const next = DIFF_LABELS[idx + 1];
+    const frac = next ? (run.diff - lbl.at) / (next.at - lbl.at) : 1;
+    const fill = $('#hud-diff-fill');
+    fill.style.width = (frac * 100).toFixed(1) + '%';
+    fill.style.background = lbl.color;
+    $('#hud-diff-label').textContent = lbl.name;
+    $('#hud-coin-val').textContent = formatNum(Math.floor(run.coins));
+
+    // hp
+    const max = s.maxHp + s.maxShield;
+    $('#hud-hp-fill').style.width = ((Math.max(0, p.hp) / max) * 100).toFixed(1) + '%';
+    const sh = $('#hud-shield-fill');
+    sh.style.left = ((Math.max(0, p.hp) / max) * 100).toFixed(1) + '%';
+    sh.style.width = ((p.shield / max) * 100).toFixed(1) + '%';
+    $('#hud-barrier-fill').style.width = ((p.barrier / s.maxHp) * 100).toFixed(1) + '%';
+    $('#hud-hp-text').textContent = `${Math.ceil(Math.max(0, p.hp + p.shield))} / ${Math.ceil(max)}`;
+    $('#hud-level-val').textContent = p.level;
+    $('#hud-xp-fill').style.width = ((p.xp / p.xpNext) * 100).toFixed(1) + '%';
+
+    // abilities (desktop bar + touch buttons share data-slot)
+    for (let i = 0; i < 4; i++) {
+      const slot = SLOTS[i];
+      let frac = 0, txt = '', ready = true, chg = '';
+      if (i > 0) {
+        const max = p.char.abilities[i - 1].charges || 1;
+        const cdm = p.cdMax[slot] || 1;
+        if (p.charges[slot] <= 0) {
+          frac = Math.max(0, p.cd[slot] / cdm);
+          txt = p.cd[slot] > 0 ? (p.cd[slot] < 10 ? p.cd[slot].toFixed(1) : Math.ceil(p.cd[slot])) : '';
+          ready = false;
+        }
+        if (max > 1) chg = p.charges[slot];
+      }
+      for (const el of document.querySelectorAll(`[data-slot="${slot}"]`)) {
+        const cd = el.querySelector('.cd');
+        if (cd) cd.style.height = (frac * 100).toFixed(0) + '%';
+        const t = el.querySelector('.cdt');
+        if (t) t.textContent = txt;
+        const c = el.querySelector('.chg');
+        if (c) c.textContent = chg;
+        el.classList.toggle('ready', ready);
+      }
+    }
+
+    // items bar
+    if (p.itemCount !== this.lastItemCount) {
+      this.lastItemCount = p.itemCount;
+      $('#hud-items').innerHTML = p.itemOrder.map((id) => {
+        const it = ITEMS[id];
+        const n = p.items[id];
+        return `<div class="hud-item" style="--c:${RARITY[it.rarity].color}">${it.icon}${n > 1 ? `<b>${n}</b>` : ''}</div>`;
+      }).join('');
+    }
+
+    // boss
+    if (this.boss) {
+      const e = this.boss;
+      $('#hud-boss-fill').style.width = ((Math.max(0, e.hp) / e.maxHp) * 100).toFixed(1) + '%';
+      if (e.dead) this.setBoss(null);
+    }
+
+    // objective + portal marker
+    const P = G.world.portal;
+    let obj = '';
+    if (P.state === 'idle') obj = '🌀 Find the portal and activate it to summon the boss';
+    else if (P.state === 'charging') obj = `⚡ Charging portal: ${Math.floor(P.charge * 100)}%${!run.bossDead ? ' · Defeat the boss' : ''}${Math.hypot(p.pos.x - P.pos.x, p.pos.z - P.pos.z) > G.world.chargeRadius ? ' · Return to the ring!' : ''}`;
+    else if (P.state === 'ready') obj = '✨ Portal ready — enter it to continue';
+    const objEl = $('#hud-objective');
+    if (objEl.textContent !== obj) objEl.textContent = obj;
+    this.updatePortalMarker(P, p);
+
+    // interaction prompt
+    const it = Game.interactable;
+    const prompt = $('#hud-prompt');
+    const key = Input.device === 'pad' ? 'X' : Input.device === 'touch' ? '✋' : 'E';
+    if (it) {
+      let text = '';
+      if (it.kind === 'chest') {
+        const cost = Game.chestCost(it.obj);
+        const can = run.coins >= cost;
+        text = `<span class="k">${key}</span>Open ${it.obj.large ? 'Large ' : ''}Chest — <span class="${can ? '' : 'cant'}">🪙 ${cost}</span>`;
+      } else if (it.obj.state === 'idle') text = `<span class="k">${key}</span>Activate portal <span class="cant">(summons the boss!)</span>`;
+      else text = `<span class="k">${key}</span>Enter portal`;
+      if (prompt.innerHTML !== text) prompt.innerHTML = text;
+      prompt.classList.remove('hidden');
+    } else prompt.classList.add('hidden');
+    $('#tb-interact').classList.toggle('hidden', !it);
+
+    $('#crosshair').classList.toggle('target', !!p.aim.target);
+
+    // hurt vignette (recent damage + low hp)
+    this.hurtLevel = Math.max(0, (this.hurtLevel || 0) - dt * 2);
+    const low = p.hp / s.maxHp < 0.3 ? 0.35 + Math.sin(G.realTime * 6) * 0.1 : 0;
+    $('#hurt-vignette').style.opacity = Math.min(1, Math.max(this.hurtLevel, low)).toFixed(2);
+
+    // inventory / stats overlay
+    if (Input.pressed.inventory && Input.device === 'touch') this.invToggle = !this.invToggle;
+    const showStats = Input.held.inventory && Input.device !== 'touch' ? true : this.invToggle;
+    const st = $('#hud-stats');
+    if (showStats) {
+      this.statsT = (this.statsT || 0) - dt;
+      if (st.classList.contains('hidden') || this.statsT <= 0) {
+        st.innerHTML = this.statsHtml();
+        this.statsT = 0.5;
+      }
+      st.classList.remove('hidden');
+    } else st.classList.add('hidden');
+  },
+
+  updatePortalMarker(P, p) {
+    const m = $('#portal-marker');
+    if (P.state === 'charging' && Math.hypot(p.pos.x - P.pos.x, p.pos.z - P.pos.z) < G.world.chargeRadius) {
+      m.classList.add('hidden');
+      return;
+    }
+    _v.set(P.pos.x, P.pos.y + 6, P.pos.z).project(G.camera);
+    const w = window.innerWidth, h = window.innerHeight;
+    let x = (_v.x * 0.5 + 0.5) * w, y = (-_v.y * 0.5 + 0.5) * h;
+    const behind = _v.z > 1;
+    if (behind) {
+      x = w - x;
+      y = h - 40;
+    }
+    const pad = 40;
+    x = Math.max(pad, Math.min(w - pad, x));
+    y = Math.max(pad + 60, Math.min(h - pad - 60, y));
+    // keep clear of the on-screen buttons on touch devices
+    if (G.isTouch && x > w - 280 && y > h - 300) y = h - 300;
+    m.style.left = x + 'px';
+    m.style.top = y + 'px';
+    m.querySelector('span').textContent = Math.round(p.pos.distanceTo(P.pos)) + 'm';
+    m.classList.remove('hidden');
+  },
+
+  // ------------------------------------------------------------ controller menu navigation
+  menuNav() {
+    const nav = Input.menu;
+    if (!(nav.up || nav.down || nav.left || nav.right || nav.confirm || nav.back)) return;
+    if (G.mode === 'playing' || G.mode === 'transition') return;
+    const scr = $('#screen-' + this.screen);
+    if (!scr || scr.classList.contains('hidden')) return;
+    if (nav.back) {
+      if (this.screen === 'pause') return Game.resume();
+      const b = scr.querySelector('[data-back]');
+      if (b) {
+        b.click();
+        return;
+      }
+    }
+    const els = Array.from(scr.querySelectorAll('button:not([disabled]), [data-nav]')).filter((e) => e.offsetParent !== null);
+    if (!els.length) return;
+    if (!this.focusEl || !els.includes(this.focusEl)) {
+      this.setFocus(els[0]);
+      if (!nav.confirm) return;
+    }
+    if (nav.confirm) {
+      const f = this.focusEl;
+      if (f.tagName === 'SELECT') {
+        f.selectedIndex = (f.selectedIndex + 1) % f.options.length;
+        f.dispatchEvent(new Event('change'));
+      } else f.click();
+      return;
+    }
+    const f = this.focusEl;
+    if ((nav.left || nav.right) && f.type === 'range') {
+      const st = parseFloat(f.step) || 0.1;
+      f.value = parseFloat(f.value) + (nav.right ? st * 2 : -st * 2);
+      f.dispatchEvent(new Event('input'));
+      return;
+    }
+    const r0 = f.getBoundingClientRect();
+    const cx = r0.left + r0.width / 2, cy = r0.top + r0.height / 2;
+    const dir = nav.up ? [0, -1] : nav.down ? [0, 1] : nav.left ? [-1, 0] : [1, 0];
+    let best = null, bestScore = Infinity;
+    for (const e of els) {
+      if (e === f) continue;
+      const r = e.getBoundingClientRect();
+      const dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy;
+      const along = dx * dir[0] + dy * dir[1];
+      if (along <= 4) continue;
+      const perp = Math.abs(dx * dir[1] - dy * dir[0]);
+      const score = along + perp * 2.5;
+      if (score < bestScore) {
+        bestScore = score;
+        best = e;
+      }
+    }
+    if (best) this.setFocus(best);
+  },
+  setFocus(el) {
+    if (this.focusEl) this.focusEl.classList.remove('focus');
+    this.focusEl = el;
+    el.classList.add('focus');
+    el.scrollIntoView?.({ block: 'nearest' });
+    sfx('ui');
+    if (el.dataset.char) this.selectChar(el.dataset.char);
+  },
+};
