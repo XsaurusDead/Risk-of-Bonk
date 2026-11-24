@@ -126,6 +126,26 @@ export function setGlowColor(m, hex) {
   if (MAT.high) m.color.multiplyScalar(GLOW_BOOST);
 }
 
+/** Fresnel rim light (per-material colour/strength) — makes creatures read clearly against any background. */
+export function addRimLight(mat, color, strength = 0.5) {
+  const uRim = { value: new THREE.Color(color).multiplyScalar(strength) };
+  mat.userData.rim = uRim;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uRim = uRim;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uRim;')
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        {
+          float rimF = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));
+          totalEmissiveRadiance += uRim * pow(rimF, 2.6);
+        }`
+      );
+  };
+  mat.customProgramCacheKey = () => 'rim';
+}
+
 // Wind sway for instanced vegetation: bends vertices by their height.
 export const windUniform = { value: 0 };
 export function swayMaterial(amp) {
@@ -236,8 +256,38 @@ const CHAR_DESIGN = {
 };
 
 /** Build an animatable character. Returns { root, rig } where rig holds limb groups. */
-export function buildCharacter(id) {
-  const d = CHAR_DESIGN[id] || CHAR_DESIGN.vanguard;
+// Costumes: index 0 is the classic look; 1-5 are unlocked by character-level achievements.
+export const COSTUMES = [
+  { name: 'Classic', swatch: null },
+  { name: 'Rival', swatch: '#5a8fd0', hue: 0.5 },
+  { name: 'Arctic', swatch: '#dff4ff', body: 0xe8f4ff, trim: 0x7fd3ff, legs: 0xb8d8ee, flair: 'frost' },
+  { name: 'Inferno', swatch: '#ff5522', body: 0x2a0e08, trim: 0xff5522, legs: 0x1a0805, flair: 'flame' },
+  { name: 'Shadow', swatch: '#8a4aff', body: 0x15101e, trim: 0xb06bff, legs: 0x0c0812, flair: 'shadow' },
+  { name: 'Golden', swatch: '#ffd23c', body: 0xe8c25a, trim: 0xfff2b0, legs: 0xb8902a, flair: 'crown' },
+];
+export const COSTUME_LEVELS = [0, 3, 6, 10, 15, 20];
+
+function hueShift(hex, amt) {
+  const c = new THREE.Color(hex);
+  const hsl = {};
+  c.getHSL(hsl);
+  c.setHSL((hsl.h + amt) % 1, Math.min(1, hsl.s * 1.1), hsl.l);
+  return c.getHex();
+}
+
+export function buildCharacter(id, costume = 0) {
+  const base = CHAR_DESIGN[id] || CHAR_DESIGN.vanguard;
+  const C = COSTUMES[costume] || COSTUMES[0];
+  const d = { ...base };
+  if (C.hue) {
+    d.body = hueShift(base.body, C.hue);
+    d.trim = hueShift(base.trim, C.hue);
+    d.legs = hueShift(base.legs, C.hue);
+  } else if (C.body) {
+    d.body = C.body;
+    d.trim = C.trim;
+    d.legs = C.legs;
+  }
   const bulk = d.bulk || 1;
   const slim = d.slim ? 0.85 : 1;
   const root = new THREE.Group();
@@ -408,6 +458,25 @@ export function buildCharacter(id) {
       body.add(mesh('sphere', 0xc9a050, [0.3, 0.9, -0.35], [0.55, 0.6, 0.45]), mesh('box', 0xffd23c, [0.3, 1.15, -0.35], [0.2, 0.08, 0.2], null, true));
       handR.add(mesh('cyl', 0xffd23c, [0, 0, 0.12], [0.22, 0.05, 0.22], [Math.PI / 2, 0, 0], true));
       break;
+  }
+  // costume flair
+  if (C.flair === 'frost') {
+    for (const sx of [-1, 1]) body.add(mesh('oct', 0xbff3ff, [sx * (armOff + 0.05), 1.95, 0], [0.18, 0.4, 0.18], [0, 0, sx * 0.4], true), mesh('oct', 0xbff3ff, [sx * (armOff - 0.12), 2.0, -0.08], [0.12, 0.28, 0.12], [0, 0, sx * 0.8], true));
+  } else if (C.flair === 'flame') {
+    head.add(mesh('cone', 0xff6a22, [0, 0.55, -0.05], [0.35, 0.7, 0.35], null, true), mesh('cone', 0xffcc33, [0, 0.5, 0], [0.2, 0.45, 0.2], null, true));
+    head.add(mesh('box', 0xff8833, [0, 0.03, 0.29], [0.4, 0.06, 0.03], null, true));
+  } else if (C.flair === 'shadow') {
+    head.add(mesh('sphere', 0xd080ff, [-0.12, 0.05, 0.27], [0.09, 0.06, 0.04], null, true), mesh('sphere', 0xd080ff, [0.12, 0.05, 0.27], [0.09, 0.06, 0.04], null, true));
+    root.add(mesh('torus', 0x8a4aff, [0, 0.08, 0], [1.4, 1.4, 1.4], [Math.PI / 2, 0, 0], true));
+  } else if (C.flair === 'crown') {
+    const crown = group(0, id === 'bonker' || id === 'spark' ? 0.55 : 0.42, 0);
+    crown.add(mesh('cyl', 0xffcc33, [0, 0, 0], [0.5, 0.14, 0.5]));
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      crown.add(mesh('cone', 0xffcc33, [Math.cos(a) * 0.2, 0.14, Math.sin(a) * 0.2], [0.1, 0.18, 0.1]));
+    }
+    crown.add(mesh('oct', 0xff3355, [0, 0.05, 0.25], [0.08, 0.1, 0.05], null, true));
+    head.add(crown);
   }
   root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return { root, rig: { body, head, armL, armR, legL, legR, handR, handL } };

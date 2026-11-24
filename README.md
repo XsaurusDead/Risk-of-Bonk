@@ -26,7 +26,7 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 | Action | Mouse & Keyboard | Controller | Touch |
 |---|---|---|---|
 | Move / Look | WASD / Mouse (click to lock) | Left / Right stick | Left joystick / drag right side |
-| Primary attack | Left click (hold) | RT | Big button (auto-fire on by default) |
+| Primary attack | **automatic** (auto-aims at the nearest enemy; hold Left Click to fire at the crosshair) | automatic | automatic |
 | Ability 1 | Right click / Q | LT | ⚡ button |
 | Ability 2 | Shift | RB | button |
 | Ultimate | R | Y / LB | gold button |
@@ -66,6 +66,11 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 
 ## Survivors (17)
 
+The survivor select screen shows one survivor at a time: an animated 3D preview (it shows off its attack every few seconds, drag to rotate), base stats, the passive, auto-attack and all three abilities with cooldowns and keys, its character level and its costumes. Switch with the ‹ › arrows, A/D or the arrow keys, the D-pad, a swipe, or the portrait strip at the top. Q/E or D-pad up/down cycles costumes.
+
+**Character levels & costumes:** every survivor levels up on its own from the XP you collect while playing them. Levels are purely cosmetic: reaching **level 3 / 6 / 10 / 15 / 20** completes an achievement that unlocks that survivor's **Rival / Arctic / Inferno / Shadow / Golden** costume (5 per survivor, 85 in total). Each costume has its own palette and a signature flair (frost crystals, flames, shadow aura, crown).
+
+
 | | Passive | Ability 1 | Ability 2 | Ultimate | Unlock |
 |---|---|---|---|---|---|
 | **Vanguard** (gunner) | Crits cut cooldowns | Piercing Rail 4s | Tactical Roll 5s | Bullet Storm 40s | Starter |
@@ -92,7 +97,7 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 
 ## Achievements & the "can't brick your save" guarantee
 
-**404 achievements**: lifetime milestones, single-run feats, per-stage, per-boss, per-enemy and per-survivor goals. 193 of them unlock a survivor or an item. Unlocks pop up as an animated card showing what you did and what you got. The Logbook has search and filters.
+**404 achievements**: lifetime milestones, single-run feats, per-stage, per-boss, per-enemy and per-survivor goals. 278 of them unlock something: 15 survivors, 178 items and 85 costumes. Unlocks pop up as an animated card showing what you did and what you got. The Logbook has search and filters.
 
 - Unlocks are never stored directly. The save only records **completed achievements** and **lifetime counters**, and the unlocked characters/items are derived from those every time. A save can't end up in a state that disagrees with itself.
 - Every character unlock is achievable with the two starters. Character-mastery achievements only need that character, which is always unlocked earlier in the chain.

@@ -92,16 +92,25 @@
     </div>
 
     <div id="screen-select" class="screen hidden">
-      <div class="select-wrap">
-        <div class="select-left">
-          <h2>Choose your Survivor</h2>
-          <div id="char-grid"></div>
-        </div>
-        <div class="select-right panel" id="char-detail"></div>
+      <div class="cs-top">
+        <button class="btn cs-back" data-back="title">← Back</button>
+        <div class="cs-strip" id="cs-strip"></div>
+        <div class="cs-count" id="cs-count"></div>
       </div>
-      <div class="screen-actions">
-        <button class="btn" data-back="title">← Back</button>
-        <button class="btn primary" id="btn-start">Start Run ▶</button>
+      <div class="cs-stage">
+        <button class="cs-arrow" id="cs-prev" aria-label="Previous survivor">‹</button>
+        <div class="cs-drag" id="cs-drag"></div>
+        <button class="cs-arrow" id="cs-next" aria-label="Next survivor">›</button>
+        <div class="cs-hero" id="cs-hero"></div>
+      </div>
+      <div class="cs-panel" id="cs-panel"></div>
+      <div class="cs-bottom">
+        <div class="cs-cos-wrap">
+          <div class="cs-cos-title">Costume <span id="cs-cos-name"></span></div>
+          <div class="cs-costumes" id="cs-costumes"></div>
+          <div class="cs-cos-label" id="cs-cos-label"></div>
+        </div>
+        <button class="btn primary cs-start" id="btn-start">Start Run ▶</button>
       </div>
     </div>
 
@@ -133,7 +142,7 @@
             <h3>⌨️ Mouse &amp; Keyboard</h3>
             <ul>
               <li><b>WASD</b> move · <b>Mouse</b> look (click to lock)</li>
-              <li><b>Left Click</b> primary attack (hold)</li>
+              <li>Your <b>primary attack fires automatically</b> at the nearest enemy (hold <b>Left Click</b> to fire at the crosshair when nothing is in range)</li>
               <li><b>Right Click / Q</b> Ability 1</li>
               <li><b>Shift</b> Ability 2</li>
               <li><b>R</b> Ultimate</li>
@@ -147,7 +156,7 @@
             <h3>🎮 Controller</h3>
             <ul>
               <li><b>Left stick</b> move · <b>Right stick</b> look</li>
-              <li><b>RT</b> primary · <b>LT</b> Ability 1</li>
+              <li>Primary attack is automatic · <b>LT</b> Ability 1</li>
               <li><b>RB</b> Ability 2 · <b>Y / LB</b> Ultimate</li>
               <li><b>A</b> jump · <b>X</b> interact</li>
               <li><b>View/Back</b> items &amp; stats · <b>Start</b> pause</li>
@@ -159,7 +168,7 @@
             <ul>
               <li><b>Left side</b>: virtual joystick</li>
               <li><b>Right side</b>: drag to look</li>
-              <li>Big button: attack (auto-fire is on by default)</li>
+              <li>Your primary attack fires automatically</li>
               <li>Buttons for abilities, ultimate, jump, interact</li>
               <li>🎒 shows items &amp; stats</li>
             </ul>

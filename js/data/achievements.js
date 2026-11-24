@@ -76,7 +76,7 @@ export function buildAchievements({ items, characters, charNames, enemies, bosse
   const gen = [];
   const add = (id, name, cond, tier, descOverride) => {
     let d = descOverride || (cond.scope === 'run' && RUN_LABEL[cond.stat] ? RUN_LABEL[cond.stat](cond.value) : LABEL[cond.stat] ? LABEL[cond.stat](cond.value) : `${cond.stat} ${cond.value}`);
-    if (cond.char) d = `As ${charNames[cond.char]}: ${d.charAt(0).toLowerCase()}${d.slice(1)}`;
+    if (cond.char && cond.stat !== 'charLevel') d = `As ${charNames[cond.char]}: ${d.charAt(0).toLowerCase()}${d.slice(1)}`;
     if (cond.scope === 'life' && !/single|Unlock|with a single/.test(d) && cond.value > 1 && !cond.char) d += ' (all runs)';
     gen.push({ id, name, desc: d + '.', cond, reward: {}, tier });
   };
@@ -132,12 +132,17 @@ export function buildAchievements({ items, characters, charNames, enemies, bosse
     [250, 1500].forEach((v, i) => add(`kill_${id}_${v}`, `${e.name} ${['Hunter', 'Exterminator'][i]}`, { scope: 'life', stat: 'kill_' + id, value: v }, i + 1, `Defeat ${v} ${e.name}${e.name.endsWith('s') ? '' : 's'}`));
   }
   // --- per survivor ---
-  const CH = [
-    ['kills', 'life', 500, 0, 'Initiate'], ['kills', 'life', 3000, 1, 'Veteran'], ['kills', 'life', 12000, 2, 'Legend'],
-    ['bossKills', 'life', 6, 1, 'Giant Killer'], ['stageReached', 'run', 4, 1, 'Explorer'], ['stageReached', 'run', 7, 2, 'Summit'],
-    ['level', 'run', 30, 2, 'Prodigy'], ['finalBossKills', 'life', 1, 3, 'Crowned'],
-  ];
-  for (const c of characters) for (const [stat, scope, value, tier, title] of CH) add(`${c}_${stat}_${scope}_${value}`, `${charNames[c]}: ${title}`, { scope, stat, value, char: c }, tier);
+  // 5 character-level milestones per survivor, each unlocking one of its costumes
+  const COSTUME_LV = [[3, 'Rival'], [6, 'Arctic'], [10, 'Inferno'], [15, 'Shadow'], [20, 'Golden']];
+  const CH = [['kills', 'life', 3000, 1, 'Veteran'], ['bossKills', 'life', 6, 1, 'Giant Killer'], ['finalBossKills', 'life', 1, 3, 'Crowned']];
+  for (const c of characters) {
+    COSTUME_LV.forEach(([lv, cos], i) => {
+      add(`${c}_charLevel_${lv}`, `${charNames[c]}: Level ${lv}`, { scope: 'life', stat: 'charLevel', value: lv, char: c }, Math.min(3, i), `Reach character level ${lv} with ${charNames[c]}`);
+      gen[gen.length - 1].reward.costume = `${c}:${i + 1}`;
+      gen[gen.length - 1].costumeName = cos;
+    });
+    for (const [stat, scope, value, tier, title] of CH) add(`${c}_${stat}_${scope}_${value}`, `${charNames[c]}: ${title}`, { scope, stat, value, char: c }, tier);
+  }
 
   // --- new mechanics ---
   fam('shrinesUsed', 'life', [10, 50, 200], 'Pilgrim');
@@ -163,12 +168,13 @@ export function buildAchievements({ items, characters, charNames, enemies, bosse
     level_run_28: 'rook', poisonKills_life_1000: 'vex', finalBossKills_life_1: 'echo',
   };
   for (const a of gen) if (charRewards[a.id]) a.reward.character = charRewards[a.id];
+  const special = (a) => a.reward.character || a.reward.costume;
   // Expansion items: rarity follows achievement difficulty (tier 0..3).
   const RAR = ['common', 'rare', 'epic', 'legendary'];
   const pools = RAR.map((r) => items.filter((it) => it.ext && it.rarity === r).map((it) => it.id));
   // Sort achievements by difficulty tier and items by rarity, then spread the
   // items evenly: easy achievements hand out commons, hard ones legendaries.
-  const order = gen.filter((a) => !a.reward.character).map((a, i) => ({ a, i })).sort((x, y) => x.a.tier - y.a.tier || x.i - y.i).map((x) => x.a);
+  const order = gen.filter((a) => !special(a)).map((a, i) => ({ a, i })).sort((x, y) => x.a.tier - y.a.tier || x.i - y.i).map((x) => x.a);
   const loot = pools.flat();
   const step = order.length / Math.max(1, loot.length);
   loot.forEach((id, i) => { order[Math.min(order.length - 1, Math.floor(i * step))].reward.item = id; });

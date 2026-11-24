@@ -40,6 +40,7 @@ function freshSave() {
     stats: {},
     charStats: {},
     discovered: {},
+    costumes: {},
     settings: { ...DEFAULT_SETTINGS },
     lastChar: 'vanguard',
   };
@@ -74,7 +75,7 @@ export function loadSave() {
   const base = freshSave();
   for (const k in base) if (s[k] === undefined || s[k] === null) s[k] = base[k];
   s.settings = { ...DEFAULT_SETTINGS, ...(s.settings || {}) };
-  for (const k of ['achievements', 'stats', 'charStats', 'discovered']) {
+  for (const k of ['achievements', 'stats', 'charStats', 'discovered', 'costumes']) {
     if (typeof s[k] !== 'object' || Array.isArray(s[k])) s[k] = {};
   }
   // drop unknown achievement ids
@@ -125,9 +126,10 @@ const rewardedChars = new Set();
 let achIndex = null;
 const itemUnlockedBy = new Map();
 const charUnlockedBy = new Map();
+const costumeUnlockedBy = new Map();
 
 function sourceMap(kind) {
-  const m = kind === 'item' ? itemUnlockedBy : charUnlockedBy;
+  const m = kind === 'item' ? itemUnlockedBy : kind === 'costume' ? costumeUnlockedBy : charUnlockedBy;
   if (!m.size) for (const a of ACHIEVEMENTS) if (a.reward[kind]) m.set(a.reward[kind], a);
   return m;
 }
@@ -135,6 +137,15 @@ export function isCharacterUnlocked(id) {
   if (DEFAULT_CHARACTERS.includes(id)) return true;
   const a = sourceMap('character').get(id);
   return !!(a && G.save?.achievements[a.id]);
+}
+export function isCostumeUnlocked(charId, idx) {
+  if (!idx) return true;
+  const a = sourceMap('costume').get(`${charId}:${idx}`);
+  return !!(a && G.save?.achievements[a.id]);
+}
+export function selectedCostume(charId) {
+  const i = G.save?.costumes?.[charId] || 0;
+  return isCostumeUnlocked(charId, i) ? i : 0;
 }
 export function isItemUnlocked(id) {
   if (!rewardedItems.has(id)) return true;

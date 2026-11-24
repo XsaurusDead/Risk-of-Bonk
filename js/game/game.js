@@ -18,11 +18,14 @@ import { initPickups, updatePickups, clearPickups, dropItem, rollRarity, rollIte
 import { updateMinions, clearMinions } from './minions.js';
 import { buildCharacter, windUniform } from './models.js';
 import { sfx } from '../core/audio.js';
-import { track, trackMax, commitRunBests, persist } from '../core/save.js';
+import { track, trackMax, commitRunBests, persist, selectedCostume } from '../core/save.js';
 import { weightedPick, shuffle, rand } from '../core/util.js';
 import { saveRun, clearRun, loadRunData } from '../core/runsave.js';
 
 const _v = new THREE.Vector3();
+const SILHOUETTE = new THREE.MeshBasicMaterial({ color: 0x07040c });
+// which showcase animation each survivor plays on the select screen
+const MENU_ANIM = { bonker: 'swing', sol: 'swing', kaze: 'punch', pyra: 'cast', glacia: 'cast', morrow: 'cast', vex: 'cast', echo: 'cast', spark: 'cast' };
 
 export const Game = {
   init() {
@@ -114,41 +117,119 @@ export const Game = {
     G.scene.add(this.menuWorld.group);
     this.applyStageLook(STAGES[0]);
     this.menuT = 0;
-    this.setMenuCharacter(G.save.lastChar);
+    this.setMenuCharacter(G.save.lastChar, selectedCostume(G.save.lastChar));
   },
 
-  setMenuCharacter(id) {
+  setMenuCharacter(id, costume = 0, locked = false, dir = 0) {
     if (this.menuModel) G.scene.remove(this.menuModel.root);
-    this.menuModel = buildCharacter(id);
+    this.menuModel = buildCharacter(id, costume);
     const h = this.menuWorld.heightAt(0, 0);
     this.menuModel.root.position.set(0, h, 0);
+    if (locked) {
+      // unknown survivors are shown as a dark silhouette
+      this.menuModel.root.traverse((o) => { if (o.isMesh) o.material = SILHOUETTE; });
+    }
     G.scene.add(this.menuModel.root);
     this.menuChar = id;
+    this.menuLocked = locked;
+    this.menuSwitchT = 0;
+    this.menuSwitchDir = dir || 1;
+    this.menuShowT = 1.2; // first showcase attack shortly after switching
+    this.menuSpin = 0;
+    if (!locked && dir) particles(this.menuModel.root.position.clone().setY(h + 1), new THREE.Color(CHARACTERS[id].color).getHex(), 24, 5, 0.7, 0.3);
   },
 
+  /** Title-screen orbit, or the survivor showcase on the select screen. */
   menuUpdate(dt) {
     this.menuT += dt;
     const w = this.menuWorld;
     const h = w.heightAt(0, 0);
     const cam = G.camera;
-    const a = this.menuT * 0.08;
-    // on the title screen the hero stands to the right of the menu; elsewhere centred
-    const off = window.innerWidth > window.innerHeight && G.ui?.screen === 'title' ? 2.2 : 0;
-    cam.position.set(Math.sin(a) * 7, h + 2.6, Math.cos(a) * 7);
-    cam.lookAt(-Math.cos(a) * off, h + 1.3, Math.sin(a) * off);
-    if (this.menuModel) {
-      const r = this.menuModel.rig;
-      this.menuModel.root.rotation.y = this.menuT * 0.6;
-      r.body.position.y = Math.sin(this.menuT * 2) * 0.04;
-      r.armR.rotation.x = Math.sin(this.menuT * 1.5) * 0.15 - 0.2;
-      r.armL.rotation.x = -Math.sin(this.menuT * 1.5) * 0.15;
+    const selecting = G.ui?.screen === 'select';
+    if (selecting) {
+      // frame the survivor in the space left of the info panel
+      const panel = document.getElementById('cs-panel');
+      const portrait = window.innerWidth <= window.innerHeight;
+      const shift = !portrait && panel ? panel.getBoundingClientRect().width / 2 : 0;
+      cam.setViewOffset(window.innerWidth, window.innerHeight, shift, portrait ? window.innerHeight * 0.16 : 0, window.innerWidth, window.innerHeight);
+      cam.position.set(0, h + 1.7, 5.6);
+      cam.lookAt(0, h + 1.2, 0);
+      this.viewOffset = true;
+    } else {
+      if (this.viewOffset) {
+        cam.clearViewOffset();
+        this.viewOffset = false;
+      }
+      const a = this.menuT * 0.08;
+      const off = window.innerWidth > window.innerHeight && G.ui?.screen === 'title' ? 2.2 : 0;
+      cam.position.set(Math.sin(a) * 7, h + 2.6, Math.cos(a) * 7);
+      cam.lookAt(-Math.cos(a) * off, h + 1.3, Math.sin(a) * off);
     }
+    if (this.menuModel) this.animateMenuModel(dt, selecting, h);
     w.update(dt);
     windUniform.value += dt;
     this.sun.position.copy(this.sunOffset);
     this.sun.target.position.set(0, 0, 0);
     this.sky.position.copy(G.camera.position);
     updateFx(dt);
+  },
+
+  animateMenuModel(dt, selecting, h) {
+    const m = this.menuModel;
+    const r = m.rig;
+    const root = m.root;
+    this.menuSwitchT += dt;
+    // spin-in + scale pop when a new survivor is shown
+    const k = Math.min(1, this.menuSwitchT / 0.45);
+    const ease = 1 - Math.pow(1 - k, 3);
+    const pop = k < 1 ? 0.7 + 0.3 * ease + Math.sin(k * Math.PI) * 0.08 : 1;
+    root.scale.setScalar(pop);
+    this.menuSpin *= Math.pow(0.15, dt); // drag-to-rotate eases back
+    if (selecting) root.rotation.y = (1 - ease) * Math.PI * this.menuSwitchDir + Math.sin(this.menuT * 0.6) * 0.35 + this.menuSpin;
+    else root.rotation.y = this.menuT * 0.6;
+    // idle: breathing, sway
+    const t = this.menuT;
+    r.body.position.y = Math.sin(t * 2) * 0.04;
+    r.body.rotation.y = 0;
+    r.body.rotation.x = 0;
+    let armR = Math.sin(t * 1.5) * 0.12 - 0.15, armL = -Math.sin(t * 1.5) * 0.12, twist = 0;
+    r.legL.rotation.x = r.legR.rotation.x = 0;
+    // showcase: every few seconds perform the primary attack + an ability flourish
+    if (selecting && !this.menuLocked) {
+      this.menuShowT -= dt;
+      if (this.menuShowT <= 0) {
+        this.menuShowT = 3.2;
+        this.menuAnimT = 0;
+        this.menuAnimType = MENU_ANIM[this.menuChar] || 'shoot';
+      }
+      if (this.menuAnimT !== undefined && this.menuAnimT < 1.2) {
+        this.menuAnimT += dt;
+        const a = this.menuAnimT;
+        const col = new THREE.Color(CHARACTERS[this.menuChar].color).getHex();
+        const hand = new THREE.Vector3();
+        r.handR.getWorldPosition(hand);
+        switch (this.menuAnimType) {
+          case 'swing':
+            if (a < 0.25) { armR = -2.6 * (a / 0.25); twist = 0.4 * (a / 0.25); }
+            else if (a < 0.5) { const q = (a - 0.25) / 0.25; armR = -2.6 + q * 3.4; twist = 0.4 - q * 0.9; if (q > 0.6 && !this.menuFx) { this.menuFx = 1; particles(hand, col, 18, 6, 0.5, 0.3); } }
+            break;
+          case 'punch':
+            if (a < 0.6) { const ph = Math.floor(a / 0.15) % 2; armR = ph ? -1.6 : -0.2; armL = ph ? -0.2 : -1.6; twist = ph ? -0.3 : 0.3; if (Math.random() < 0.3) particles(hand, 0xffffff, 2, 3, 0.25, 0.2); }
+            break;
+          case 'cast':
+            if (a < 0.7) { armR = -1.7; armL = -1.3; r.body.position.y += Math.sin(a * 9) * 0.05; if (Math.random() < 0.5) particles(hand, col, 2, 2, 0.5, 0.22, -2); }
+            break;
+          default:
+            if (a < 0.7) { armR = -1.5; if (this.menuChar === 'vanguard' || this.menuChar === 'bulwark') armL = -1.5; if (Math.random() < 0.4) particles(hand, 0xffee99, 2, 4, 0.2, 0.15, 0); }
+        }
+        if (a < 0.05) this.menuFx = 0;
+        // a little hop of joy at the end
+        if (a > 0.8 && a < 1.2) r.body.position.y += Math.sin(((a - 0.8) / 0.4) * Math.PI) * 0.25;
+      }
+    }
+    r.armR.rotation.x = armR;
+    r.armL.rotation.x = armL;
+    r.body.rotation.y = twist;
   },
 
   // ------------------------------------------------------------ run lifecycle
@@ -195,6 +276,8 @@ export const Game = {
   },
 
   startRunBase(charId) {
+    G.camera.clearViewOffset();
+    this.viewOffset = false;
     if (this.menuModel) {
       G.scene.remove(this.menuModel.root);
       this.menuModel = null;

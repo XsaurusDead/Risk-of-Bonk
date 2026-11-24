@@ -11,7 +11,8 @@ import { buildCharacter } from './models.js';
 import { targetNearAim, nearestEnemy, applyFreeze, dealDamage, findTargets, explode } from './combat.js';
 import { particles, shake, floatText, ring } from './fx.js';
 import { sfx } from '../core/audio.js';
-import { track, trackMax, discover } from '../core/save.js';
+import { track, trackMax, discover, selectedCostume } from '../core/save.js';
+import { charLevelFromXp, charXp } from '../core/charlevel.js';
 import { clamp, lerpAngle, angleDiff } from '../core/util.js';
 
 const SLOTS = ['ability1', 'ability2', 'ultimate'];
@@ -25,7 +26,7 @@ export class Player {
   constructor(charId) {
     this.charId = charId;
     this.char = CHARACTERS[charId];
-    const { root, rig } = buildCharacter(charId);
+    const { root, rig } = buildCharacter(charId, selectedCostume(charId));
     this.model = root;
     this.rig = rig;
     G.scene.add(root);
@@ -202,6 +203,14 @@ export class Player {
 
   addXp(v) {
     this.xp += v;
+    // the survivor's own (cosmetic) level
+    track('charXp', v);
+    const cl = charLevelFromXp(charXp(this.charId));
+    if (cl > (this.charLevel || 0)) {
+      if (this.charLevel) G.ui?.charLevelUp?.(this.charId, cl);
+      this.charLevel = cl;
+      trackMax('charLevel', cl);
+    }
     while (this.xp >= this.xpNext) {
       this.xp -= this.xpNext;
       this.level++;
@@ -548,10 +557,9 @@ export class Player {
   updateAim() {
     const o = this.camRayOrigin, d = this.camRayDir;
     const settings = G.save.settings;
-    const auto = this.autoFireActive();
+    this.updateAutoAim();
     let target = null;
-    if (auto) target = targetNearAim(55, 40) || nearestEnemy(this.pos, 26);
-    else if (settings.aimAssist && Input.device !== 'kbm') target = targetNearAim(70, Input.device === 'touch' ? 12 : 7);
+    if (settings.aimAssist && Input.device !== 'kbm') target = targetNearAim(70, Input.device === 'touch' ? 12 : 7);
     // ray vs enemies
     _ray.set(o, d);
     let best = Infinity;
@@ -598,6 +606,28 @@ export class Player {
       }
       if (this.aim.target) this.aim.groundPoint.set(this.aim.target.pos.x, w.heightAt(this.aim.target.pos.x, this.aim.target.pos.z), this.aim.target.pos.z);
       this.aimYaw = this.camYaw;
+    }
+  }
+
+  /**
+   * The primary attack always aims and fires on its own: it picks the enemy
+   * closest to your crosshair (within a wide cone), or failing that the nearest
+   * one. Melee survivors only swing at enemies within reach.
+   */
+  updateAutoAim() {
+    const range = this.char.primary.range || 45;
+    let t = targetNearAim(range, 55);
+    if (!t) t = nearestEnemy(this.pos, Math.min(range, 30));
+    if (t && t.pos.distanceTo(this.pos) > range + t.radius * t.scale) t = null;
+    this.autoTarget = t;
+    if (!this.autoAim) {
+      this.autoAim = { point: new THREE.Vector3(), groundPoint: new THREE.Vector3(), target: null, dirFrom: (from) => _v2.copy(this.autoAim.point).sub(from).normalize().clone() };
+    }
+    const a = this.autoAim;
+    a.target = t;
+    if (t) {
+      a.point.set(t.pos.x, t.pos.y + t.height * t.scale * 0.5, t.pos.z);
+      a.groundPoint.set(t.pos.x, G.world.heightAt(t.pos.x, t.pos.z), t.pos.z);
     }
   }
 
@@ -830,13 +860,17 @@ export class Player {
     // primary
     this.primaryT -= dt;
     const prim = this.char.primary;
-    const auto = this.autoFireActive() && this.aim.target;
-    const firing = (Input.held.primary || auto) && !this.channelS && !this.dashS;
+    const auto = this.autoTarget && !this.autoTarget.dead ? this.autoTarget : null;
+    const firing = (auto || Input.held.primary) && !this.channelS && !this.dashS;
     if (this.charId === 'bulwark') this.cs.spin = firing ? Math.min(3, (this.cs.spin || 0) + dt) : Math.max(0, (this.cs.spin || 0) - dt * 2);
     if (firing && this.primaryT <= 0) {
       const rate = (prim.rateFn ? prim.rateFn(this) : prim.rate) * this.stats.attackSpeed;
       this.primaryT = 1 / rate;
-      prim.fire(this, this.aim);
+      if (auto) {
+        // face the auto-target for this attack (melee arcs and muzzles use aimYaw)
+        this.aimYaw = Math.atan2(-(auto.pos.x - this.pos.x), -(auto.pos.z - this.pos.z));
+        prim.fire(this, this.autoAim);
+      } else prim.fire(this, this.aim);
       this.lastAttackT = 0;
     }
   }

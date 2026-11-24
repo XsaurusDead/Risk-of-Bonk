@@ -106,7 +106,7 @@ export const CHARACTERS = {
       onDamaged: (amt, p) => p.addStackBuff('rage', 6, 10, { damage: 0.05 }),
     },
     primary: {
-      name: 'Bonk', icon: '🏏', rate: 1.8, desc: 'Swing your club in a wide arc for 230% damage with knockback.',
+      name: 'Bonk', icon: '🏏', rate: 1.8, range: 5.5,  desc: 'Swing your club in a wide arc for 230% damage with knockback.',
       fire(p) {
         meleeArc(p.pos, p.aimYaw, 5, 140, p.stats.damage * 2.3, { knockback: 9, color: 0xffc070 });
         sfx('swing');
@@ -423,7 +423,7 @@ export const CHARACTERS = {
       desc: 'Every 3rd primary strike deals triple damage and heals 2% max HP. Triple jump.',
     },
     primary: {
-      name: 'Swift Palm', icon: '👊', rate: 3.2, desc: 'Fast palm strikes for 125% damage. Every 3rd strike is empowered.',
+      name: 'Swift Palm', icon: '👊', rate: 3.2, range: 5,  desc: 'Fast palm strikes for 125% damage. Every 3rd strike is empowered.',
       fire(p) {
         p.cs.combo = ((p.cs.combo || 0) + 1) % 3;
         const empowered = p.cs.combo === 0;
@@ -711,7 +711,7 @@ Object.assign(CHARACTERS, {
       onKill: (e, p) => { if (e.pos.distanceTo(p.pos) < 6 * p.stats.area) p.heal(p.stats.maxHp * 0.01); },
     },
     primary: {
-      name: 'Judgment Hammer', icon: '🔨', rate: 1.6, desc: 'Smash in a wide arc for 210% damage.',
+      name: 'Judgment Hammer', icon: '🔨', rate: 1.6, range: 5.5,  desc: 'Smash in a wide arc for 210% damage.',
       fire(p) {
         meleeArc(p.pos, p.aimYaw, 5, 120, p.stats.damage * 2.1, { knockback: 6, color: 0xffe08a });
         sfx('swing');

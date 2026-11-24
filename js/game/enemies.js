@@ -8,6 +8,7 @@ import { enemyGeometry, MAT } from './models.js';
 import { skinTexture } from './textures.js';
 import { spawnProjectile, damagePlayer, dealDamage, spawnZone, findTargets } from './combat.js';
 import { particles, ring, telegraph, shake, floatText, gibs } from './fx.js';
+import { addRimLight } from './models.js';
 import { dropCoins, dropXp, dropHeal } from './pickups.js';
 import { sfx } from '../core/audio.js';
 import { track } from '../core/save.js';
@@ -48,6 +49,11 @@ export function spawnEnemy(id, pos, opts = {}) {
     }
     mat.needsUpdate = true;
   }
+  // rim light makes enemies pop off the background; colour hints at elites/champions
+  const rimCol = elite ? elite.color : champ ? 0xffcc55 : opts.boss ? 0xff5577 : 0xfff1dd;
+  addRimLight(mat, rimCol, elite || champ || opts.boss ? 0.9 : 0.45);
+  // a little individual variety in tint
+  if (!opts.boss) mat.color.setRGB(0.9 + Math.random() * 0.2, 0.9 + Math.random() * 0.2, 0.9 + Math.random() * 0.2);
   const group = new THREE.Group();
   // fully-glowing models (e.g. wisps) use their glow geometry as the body
   const body = new THREE.Mesh(geo || glow, mat);
@@ -70,7 +76,7 @@ export function spawnEnemy(id, pos, opts = {}) {
     group.add(node);
     rig[r.role] = node;
   }
-  const scale = (elite ? 1.25 : 1) * (champ ? 2.1 : 1);
+  const scale = (elite ? 1.25 : 1) * (champ ? 2.1 : 1) * (opts.boss ? 1 : 0.92 + Math.random() * 0.16);
   group.scale.setScalar(scale);
   group.rotation.order = 'YXZ';
   if (elite) mat.emissive = new THREE.Color(elite.color).multiplyScalar(0.35);
@@ -92,6 +98,7 @@ export function spawnEnemy(id, pos, opts = {}) {
     sq: 0, sqv: 0, tilt: 0, tiltv: 0, walkPh: Math.random() * 6, lastX: pos.x, lastZ: pos.z, bank: 0, pitch: 0,
     jelly: JELLY.has(id) || def.ai === 'hopper', bodyColor: def.model[0][1],
     rig: roles.length ? rig : null, animT: Math.random() * 10, armX: 0, champion: champ, overtime: ot > 1,
+    mv: new THREE.Vector3(), wantX: 0, wantZ: 0, breathe: Math.random() * 6,
   };
   if (champ) {
     e.mass = 40;
@@ -107,6 +114,8 @@ export function spawnEnemy(id, pos, opts = {}) {
   group.position.copy(e.pos);
   G.enemies.push(e);
   particles(e.pos, elite ? elite.color : 0x553366, opts.boss ? 50 : 10, opts.boss ? 12 : 4, 0.8, opts.boss ? 0.8 : 0.35);
+  // summoning circle so close spawns are readable
+  if (!opts.instant) telegraph(e.pos.clone().setY(G.world.heightAt(e.pos.x, e.pos.z)), e.radius * e.scale * 1.8, elite ? elite.color : opts.boss ? 0xff3355 : 0x9a5aff, e.spawnT);
   return e;
 }
 
@@ -330,9 +339,11 @@ function updateEnemy(e, dt, p) {
   }
 
   if (!frozen && !stunned && p) runAI(e, dt, p);
-  else if (e.state !== 'chase' && e.state !== 'hover') {
-    // interrupted
-    e.state = e.flying ? 'chase' : 'chase';
+  integrateSteering(e, frozen ? 0 : dt);
+  if (frozen || stunned) e.mv.multiplyScalar(0.8);
+  if ((frozen || stunned) && e.state !== 'chase' && e.state !== 'hover') {
+    // attacks are interrupted by freezes and stuns
+    e.state = 'chase';
     e.t = 0;
   }
 
@@ -419,6 +430,8 @@ function updateEnemy(e, dt, p) {
   if (e.ai === 'hopper' && e.pos.y <= gy + 0.05 && e.aux < 0.22) sq -= (0.22 - e.aux) * 1.2; // crouch before a hop
   m.rotation.x = pitch;
   m.rotation.z = roll;
+  e.breathe += dt * 2.2;
+  sq += Math.sin(e.breathe) * 0.018;
   m.scale.set(e.scale * (1 - sq * 0.45), e.scale * (1 + sq), e.scale * (1 - sq * 0.45));
   if (e.rig) animateRig(e, dt, Math.min(1, moved / Math.max(dt, 1e-4) / 4), frozen || stunned);
   if (e.flash > 0) e.flash -= dt;
@@ -438,16 +451,29 @@ function speedMult(e) {
   return (1 - e.status.slow) * (e.enraged ? 1.25 : 1);
 }
 
+/** Steering: request movement toward a point; the actual velocity accelerates/brakes smoothly. */
 function moveToward(e, tx, tz, dt, mult = 1) {
   const dx = tx - e.pos.x, dz = tz - e.pos.z;
   const d = Math.hypot(dx, dz);
   if (d < 0.01) return d;
-  const sp = e.speed * speedMult(e) * mult * dt;
-  const step = Math.min(sp, d);
-  e.pos.x += (dx / d) * step;
-  e.pos.z += (dz / d) * step;
-  faceDir(e, dx, dz, dt);
+  // slow down when arriving instead of jittering on the spot
+  const arrive = Math.min(1, d / 1.5);
+  const sp = e.speed * speedMult(e) * mult * arrive;
+  e.wantX += (dx / d) * sp;
+  e.wantZ += (dz / d) * sp;
   return d;
+}
+
+function integrateSteering(e, dt) {
+  const accel = e.isBoss || e.champion ? 5 : e.flying ? 6 : 9;
+  const k = Math.min(1, dt * accel);
+  e.mv.x += (e.wantX - e.mv.x) * k;
+  e.mv.z += (e.wantZ - e.mv.z) * k;
+  e.pos.x += e.mv.x * dt;
+  e.pos.z += e.mv.z * dt;
+  const sp = Math.hypot(e.mv.x, e.mv.z);
+  if (sp > 0.4 && (e.state === 'chase' || e.state === 'wander')) faceDir(e, e.mv.x, e.mv.z, dt, 7);
+  e.wantX = e.wantZ = 0;
 }
 function faceDir(e, dx, dz, dt, rate = 8) {
   const target = Math.atan2(dx, dz);

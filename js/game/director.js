@@ -79,7 +79,7 @@ export class Director {
         this.otWaveT = 4;
         const ot = (this.t - STAGE_TIME) / 60;
         const n = Math.min(this.cap - aliveCount(), 3 + Math.floor(ot * 3));
-        const center = this.spawnCenter(18, 32);
+        const center = this.spawnCenter(11, 20);
         if (center) for (let i = 0; i < n; i++) spawnEnemy('reaper', this.jitter(center, 5), { otMult: this.otMult });
         if (Math.random() < 0.5) this.spawnGroup(4, { otMult: this.otMult, elite: true });
       }
@@ -116,7 +116,8 @@ export class Director {
     const def = ENEMIES[id];
     if (!def) return;
     const flyer = def.ai === 'flyer' || def.ai === 'swooper';
-    const center = this.spawnCenter(26, 48, flyer);
+    // close to the player so standing still gets you surrounded
+    const center = this.spawnCenter(13, 24, flyer);
     if (!center) return;
     const eliteChance = Math.min(0.4, 0.02 + (run.diff - 1) * 0.05 + (this.t > STAGE_TIME ? 0.15 : 0));
     for (let i = 0; i < count; i++) {
@@ -136,7 +137,7 @@ export class Director {
     for (let d = 0; d < dirs; d++) {
       const a = (d / dirs) * Math.PI * 2 + Math.random();
       const p = G.player.pos;
-      const c = new THREE.Vector3(p.x + Math.cos(a) * 30, 0, p.z + Math.sin(a) * 30);
+      const c = new THREE.Vector3(p.x + Math.cos(a) * 19, 0, p.z + Math.sin(a) * 19);
       G.world.clampBounds(c);
       const id = ids[d % ids.length];
       for (let i = 0; i < Math.ceil(n / dirs); i++) spawnEnemy(id, this.jitter(c, 6), { elite: Math.random() < 0.06 ? pick(Object.keys(ELITES)) : null });
@@ -150,7 +151,7 @@ export class Director {
   champion(angry = false) {
     const ids = Object.keys(this.stage.enemies).sort((a, b) => ENEMIES[b].hp - ENEMIES[a].hp);
     const id = ids[0];
-    const c = this.spawnCenter(22, 30);
+    const c = this.spawnCenter(15, 22);
     if (!c) return;
     const e = spawnEnemy(id, c, { champion: true, elite: angry ? pick(Object.keys(ELITES)) : null });
     if (e) {

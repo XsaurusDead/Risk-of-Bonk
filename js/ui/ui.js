@@ -7,12 +7,14 @@ import { CHARACTERS, CHARACTER_ORDER } from '../data/characters.js';
 import { ITEMS, ITEM_LIST } from '../data/items.js';
 import { ACHIEVEMENTS } from '../data/achievements.js';
 import {
-  isCharacterUnlocked, isItemUnlocked, unlockSourceFor, achievementProgress, persist, resetSave, setAchievementHandler, DEFAULT_SETTINGS,
+  isCharacterUnlocked, isItemUnlocked, isCostumeUnlocked, selectedCostume, unlockSourceFor, achievementProgress, persist, resetSave, setAchievementHandler, DEFAULT_SETTINGS,
 } from '../core/save.js';
 import { Game } from '../game/game.js';
 import { loadRunData } from '../core/runsave.js';
 import { diffLabel, DIFF_LABELS, STAGE_TIME } from '../game/director.js';
 import { Minimap } from './minimap.js';
+import { COSTUMES, COSTUME_LEVELS } from '../game/models.js';
+import { charLevelInfo } from '../core/charlevel.js';
 import { formatTime, formatNum, RARITY, RARITY_ORDER } from '../core/util.js';
 import * as THREE from 'three';
 
@@ -32,6 +34,10 @@ function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 function rewardText(a) {
+  if (a.reward.costume) {
+    const [cid, i] = a.reward.costume.split(':');
+    return `Unlocks costume <b style="color:${COSTUMES[+i].swatch || CHARACTERS[cid].color}">${COSTUMES[+i].name} ${CHARACTERS[cid].name}</b>`;
+  }
   if (a.reward.character) return `Unlocks <b style="color:${CHARACTERS[a.reward.character].color}">${CHARACTERS[a.reward.character].name}</b>`;
   if (a.reward.item) {
     const it = ITEMS[a.reward.item];
@@ -109,6 +115,7 @@ export const UI = {
     $('#hud-stats').addEventListener('click', () => (this.invToggle = false));
 
     Minimap.bind();
+    this.bindSelect();
     Input.onDeviceChange = (d) => this.onDevice(d);
     Input.onPointerLockLost = () => {
       if (G.mode === 'playing') Game.pause();
@@ -173,45 +180,193 @@ export const UI = {
 
   // ------------------------------------------------------------ character select
   buildCharGrid() {
-    const grid = $('#char-grid');
-    grid.innerHTML = '';
+    const strip = $('#cs-strip');
+    strip.innerHTML = '';
     for (const id of CHARACTER_ORDER) {
       const c = CHARACTERS[id];
-      const unlocked = isCharacterUnlocked(id);
       const b = document.createElement('button');
-      b.className = 'char-card' + (unlocked ? '' : ' locked') + (id === this.selChar ? ' sel' : '');
+      b.className = 'cs-mini' + (isCharacterUnlocked(id) ? '' : ' locked');
       b.dataset.char = id;
-      b.innerHTML = `<div class="portrait" style="background:${c.color}">${CHAR_EMOJI[id]}</div><div class="nm">${c.name}</div>`;
+      b.title = c.name;
+      b.style.background = c.color;
+      b.style.setProperty('--c', c.color);
+      b.textContent = CHAR_EMOJI[id];
       b.addEventListener('click', () => {
         sfx('ui');
-        this.selectChar(id);
+        const dir = CHARACTER_ORDER.indexOf(id) >= CHARACTER_ORDER.indexOf(this.selChar) ? 1 : -1;
+        this.selectChar(id, dir);
       });
-      b.addEventListener('dblclick', () => this.startRun());
-      grid.appendChild(b);
+      strip.appendChild(b);
     }
   },
 
-  selectChar(id) {
+  cycleChar(step) {
+    const i = CHARACTER_ORDER.indexOf(this.selChar);
+    const n = CHARACTER_ORDER.length;
+    this.selectChar(CHARACTER_ORDER[(i + step + n) % n], step);
+    sfx('ui');
+  },
+
+  selectChar(id, dir = 0) {
     if (!CHARACTERS[id]) id = 'vanguard';
     this.selChar = id;
-    $$('.char-card').forEach((c) => c.classList.toggle('sel', c.dataset.char === id));
     const c = CHARACTERS[id];
     const unlocked = isCharacterUnlocked(id);
+    const idx = CHARACTER_ORDER.indexOf(id);
+    $$('.cs-mini').forEach((m) => m.classList.toggle('sel', m.dataset.char === id));
+    const sel = $(`.cs-mini[data-char="${id}"]`);
+    sel?.scrollIntoView?.({ inline: 'center', block: 'nearest' });
+    $('#cs-count').textContent = `${idx + 1} / ${CHARACTER_ORDER.length}`;
+
+    // ---- hero block (name, title, character level)
+    const lv = charLevelInfo(id);
     const src = unlockSourceFor('character', id);
-    const pips = (n) => `<div class="pips">${[1, 2, 3, 4, 5].map((i) => `<i class="pip ${i <= n ? 'on' : ''}"></i>`).join('')}</div>`;
+    let hero = `<div class="nm" style="color:${c.color}">${esc(c.name)}</div><div class="tt">${esc(c.title)}</div>`;
+    if (unlocked) {
+      const pct = lv.max ? 100 : Math.min(100, (lv.into / lv.need) * 100);
+      const nextCos = COSTUME_LEVELS.find((l) => l > lv.level);
+      hero += `<div class="cs-lvl" style="--c:${c.color}"><span class="badge">Lv ${lv.level}</span><div class="bar"><i style="width:${pct}%"></i></div>
+        <small>${lv.max ? 'Max level' : `${formatNum(lv.into)} / ${formatNum(lv.need)} XP`}${nextCos ? ` · next costume at Lv ${nextCos}` : ''}</small></div>`;
+    } else if (src) {
+      const prog = achievementProgress(src);
+      hero += `<div class="cs-lock">🔒 <b>${esc(src.name)}</b> — ${esc(src.desc)}<div class="bar"><i style="width:${Math.min(100, (prog / src.cond.value) * 100)}%"></i></div><small>${formatNum(prog)} / ${formatNum(src.cond.value)}</small></div>`;
+    }
+    const heroEl = $('#cs-hero');
+    heroEl.innerHTML = hero;
+    heroEl.style.animation = 'none';
+    void heroEl.offsetWidth;
+    heroEl.style.animation = '';
+
+    // ---- info panel
+    const b = c.base;
+    const keys = { kbm: ['AUTO', 'RMB / Q', 'SHIFT', 'R'], pad: ['AUTO', 'LT', 'RB', 'Y'], touch: ['AUTO', '⚡', '2nd', 'ULT'] }[Input.device] || ['AUTO', 'RMB', 'SHIFT', 'R'];
+    const stat = (label, val, frac, txt) => `<span>${label}</span><div class="sb"><i style="width:${Math.round(Math.min(1, frac) * 100)}%"></i></div><b>${txt ?? val}</b>`;
+    const stars = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
+    let panel = `<div class="cs-sec"><h4>Playstyle</h4><p class="cs-lore">${esc(c.lore)}</p></div>
+      <div class="cs-sec" style="--c:${c.color}"><h4>Base stats</h4><div class="cs-stats">
+        ${stat('Health', b.hp, b.hp / 190)}${stat('Damage', b.damage, b.damage / 15)}${stat('Move speed', b.speed, b.speed / 10.5)}
+        ${stat('Armor', b.armor, b.armor / 25)}${stat('Regen', b.regen, b.regen / 2, b.regen + '/s')}${stat('Jumps', b.jumps, b.jumps / 3)}
+        ${stat('Range', c.ratings.range, c.ratings.range / 5, stars(c.ratings.range))}${stat('Complexity', c.difficulty, c.difficulty / 3, stars(c.difficulty))}
+      </div></div>
+      <div class="cs-sec"><h4>Passive</h4>
+        <div class="cs-card" style="--c:${c.color}"><div class="ico">${c.passive.icon}</div><div><div class="hd">${esc(c.passive.name)}<span class="tag">PASSIVE</span></div><div class="ds">${esc(c.passive.desc)}</div></div></div></div>
+      <div class="cs-sec"><h4>Abilities</h4>`;
     const skills = [c.primary, ...c.abilities];
-    let html = `<div class="cd-head"><span class="name" style="color:${c.color}">${c.name}</span><span class="title">${c.title}</span></div>
-      <div class="lore">${c.lore}</div>`;
-    if (!unlocked && src) html += `<div class="locked-note">🔒 <b>Locked.</b> Achievement <b>${src.name}</b>: ${src.desc}<br><small>Progress: ${formatNum(achievementProgress(src))} / ${formatNum(src.cond.value)}</small></div>`;
-    html += `<div class="stat-bars"><span>Health</span>${pips(c.ratings.hp)}<span>Damage</span>${pips(c.ratings.dmg)}<span>Mobility</span>${pips(c.ratings.speed)}<span>Range</span>${pips(c.ratings.range)}<span>Complexity</span>${pips(c.difficulty)}</div>`;
-    html += `<div class="skill"><div class="ico">${c.passive.icon}</div><div><div class="hd">${c.passive.name}<span class="slot">Passive</span></div><div class="ds">${c.passive.desc}</div></div></div>`;
-    skills.forEach((s, i) => {
-      const cd = i === 0 ? `${s.rate}/s` : `${s.cd}s cooldown${s.charges ? ` · ${s.charges} charges` : ''}`;
-      html += `<div class="skill"><div class="ico">${s.icon}</div><div><div class="hd">${s.name}<span class="slot">${SLOT_NAMES[i]}</span><span class="cdv">${cd}</span></div><div class="ds">${s.desc}</div></div></div>`;
+    skills.forEach((sk, i) => {
+      const cd = i === 0 ? `${sk.rate}/s` : `${sk.cd}s${sk.charges ? ` · ${sk.charges} charges` : ''}`;
+      const tag = i === 0 ? '<span class="tag auto">AUTO-ATTACK</span>' : `<span class="tag key">${keys[i]}</span>`;
+      const slot = ['Primary', 'Ability 1', 'Ability 2', 'Ultimate'][i];
+      const extra = i === 0 ? ' Fires automatically at the nearest enemy.' : '';
+      panel += `<div class="cs-card ${i === 3 ? 'ult' : ''}" style="--c:${i === 3 ? '#ffb22e' : c.color}"><div class="ico">${sk.icon}</div><div>
+        <div class="hd">${esc(sk.name)}<span class="tag">${slot.toUpperCase()}</span>${tag}<span class="cdv">⏱ ${cd}</span></div><div class="ds">${esc(sk.desc)}${extra}</div></div></div>`;
     });
-    $('#char-detail').innerHTML = html;
+    panel += '</div>';
+    const pEl = $('#cs-panel');
+    pEl.innerHTML = panel;
+    pEl.scrollTop = 0;
+    pEl.style.animation = 'none';
+    void pEl.offsetWidth;
+    pEl.style.animation = '';
+
+    this.renderCostumes();
     $('#btn-start').disabled = !unlocked;
-    if (G.mode === 'menu' && Game.menuChar !== id) Game.setMenuCharacter(id);
+    $('#btn-start').textContent = unlocked ? 'Start Run ▶' : '🔒 Locked';
+    if (G.mode === 'menu') Game.setMenuCharacter(id, selectedCostume(id), !unlocked, dir);
+  },
+
+  renderCostumes(hoverIdx = null) {
+    const id = this.selChar;
+    const c = CHARACTERS[id];
+    const cur = selectedCostume(id);
+    const wrap = $('#cs-costumes');
+    wrap.innerHTML = COSTUMES.map((co, i) => {
+      const un = isCharacterUnlocked(id) && isCostumeUnlocked(id, i);
+      const bg = co.swatch ? co.swatch : c.color;
+      return `<button class="cs-swatch ${i === cur ? 'sel' : ''} ${un ? '' : 'locked'}" data-i="${i}" title="${esc(co.name)}" style="background:${bg}">${i === 0 ? CHAR_EMOJI[id] : ''}</button>`;
+    }).join('');
+    wrap.querySelectorAll('.cs-swatch').forEach((b) => {
+      b.addEventListener('click', () => this.setCostume(+b.dataset.i));
+      b.addEventListener('mouseenter', () => this.costumeLabel(+b.dataset.i));
+      b.addEventListener('mouseleave', () => this.costumeLabel(null));
+    });
+    $('#cs-cos-name').textContent = `${COSTUMES[cur].name} ${c.name}`;
+    this.costumeLabel(hoverIdx);
+  },
+
+  costumeLabel(i) {
+    const el = $('#cs-cos-label');
+    const id = this.selChar;
+    if (i === null || i === undefined) {
+      el.textContent = '';
+      return;
+    }
+    const co = COSTUMES[i];
+    if (isCostumeUnlocked(id, i)) el.textContent = `${co.name} ${CHARACTERS[id].name}${i ? ' — unlocked' : ''}`;
+    else el.textContent = `🔒 ${co.name}: reach character level ${COSTUME_LEVELS[i]} with ${CHARACTERS[id].name} (you are Lv ${charLevelInfo(id).level})`;
+  },
+
+  setCostume(i) {
+    const id = this.selChar;
+    if (!isCharacterUnlocked(id) || !isCostumeUnlocked(id, i)) {
+      sfx('deny');
+      this.costumeLabel(i);
+      return;
+    }
+    G.save.costumes[id] = i;
+    persist();
+    sfx('item');
+    this.renderCostumes(i);
+    if (G.mode === 'menu') Game.setMenuCharacter(id, i, false, 0);
+  },
+
+  cycleCostume(step) {
+    const n = COSTUMES.length;
+    let i = selectedCostume(this.selChar);
+    for (let k = 0; k < n; k++) {
+      i = (i + step + n) % n;
+      if (isCostumeUnlocked(this.selChar, i)) break;
+    }
+    this.setCostume(i);
+  },
+
+  /** Arrows, swipes, drag-to-rotate and keyboard/gamepad for the select screen. */
+  bindSelect() {
+    $('#cs-prev').addEventListener('click', () => this.cycleChar(-1));
+    $('#cs-next').addEventListener('click', () => this.cycleChar(1));
+    const drag = $('#cs-drag');
+    let sx = 0, lx = 0, t0 = 0, pid = null;
+    drag.addEventListener('pointerdown', (e) => {
+      pid = e.pointerId;
+      sx = lx = e.clientX;
+      t0 = performance.now();
+      drag.setPointerCapture?.(e.pointerId);
+    });
+    drag.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== pid) return;
+      Game.menuSpin += (e.clientX - lx) * 0.012;
+      lx = e.clientX;
+    });
+    const up = (e) => {
+      if (e.pointerId !== pid) return;
+      pid = null;
+      const dx = e.clientX - sx;
+      if (Math.abs(dx) > 70 && performance.now() - t0 < 450) this.cycleChar(dx < 0 ? 1 : -1);
+    };
+    drag.addEventListener('pointerup', up);
+    drag.addEventListener('pointercancel', up);
+    window.addEventListener('keydown', (e) => {
+      if (this.screen !== 'select' || e.target?.tagName === 'INPUT') return;
+      if (e.code === 'KeyA') this.cycleChar(-1);
+      else if (e.code === 'KeyD') this.cycleChar(1);
+      else if (e.code === 'KeyQ') this.cycleCostume(-1);
+      else if (e.code === 'KeyE') this.cycleCostume(1);
+    });
+  },
+
+  charLevelUp(id, lvl) {
+    const c = CHARACTERS[id];
+    const cos = COSTUME_LEVELS.indexOf(lvl);
+    this.toastText(`⭐ ${c.name} reached character level ${lvl}!${cos > 0 ? ` (unlocks the ${COSTUMES[cos].name} costume)` : ''}`);
   },
 
   startRun() {
@@ -295,7 +450,6 @@ export const UI = {
       ['touchSensitivity', 'Touch look speed', 'range', 0.3, 3, 0.05],
       ['volume', 'Volume', 'range', 0, 1, 0.05],
       ['invertY', 'Invert Y axis', 'toggle'],
-      ['autoFire', 'Auto-fire', 'select', [['off', 'Off'], ['touch', 'Touch only'], ['always', 'Always']]],
       ['aimAssist', 'Aim assist (controller/touch)', 'toggle'],
       ['quality', 'Graphics quality', 'select', [['auto', 'Auto'], ['low', 'Low (phones)'], ['high', 'High']]],
       ['damageNumbers', 'Damage numbers', 'toggle'],
@@ -479,6 +633,11 @@ export const UI = {
     if (a.reward.character) {
       const c = CHARACTERS[a.reward.character];
       reward = `<div class="ap-reward" style="--c:${c.color}"><div class="ap-ri portrait" style="background:${c.color}">${CHAR_EMOJI[a.reward.character] || '?'}</div><div class="ap-rt"><small>NEW SURVIVOR</small><b style="color:${c.color}">${esc(c.name)}</b><span>${esc(c.title)}</span></div></div>`;
+    } else if (a.reward.costume) {
+      const [cid, ci] = a.reward.costume.split(':');
+      const co = COSTUMES[+ci];
+      const c = CHARACTERS[cid];
+      reward = `<div class="ap-reward" style="--c:${co.swatch}"><div class="ap-ri portrait" style="background:${co.swatch}">${CHAR_EMOJI[cid] || '?'}</div><div class="ap-rt"><small>NEW COSTUME</small><b style="color:${co.swatch}">${esc(co.name)} ${esc(c.name)}</b><span>Equip it on the survivor select screen</span></div></div>`;
     } else if (a.reward.item) {
       const it = ITEMS[a.reward.item];
       const col = RARITY[it.rarity].color;
@@ -895,6 +1054,15 @@ export const UI = {
     if (G.mode === 'playing' || G.mode === 'transition') return;
     const scr = $('#screen-' + this.screen);
     if (!scr || scr.classList.contains('hidden')) return;
+    if (this.screen === 'select') {
+      if (nav.left) return this.cycleChar(-1);
+      if (nav.right) return this.cycleChar(1);
+      if (nav.up) return this.cycleCostume(1);
+      if (nav.down) return this.cycleCostume(-1);
+      if (nav.confirm) return this.startRun();
+      if (nav.back) return this.showScreen('title');
+      return;
+    }
     if (nav.back) {
       if (this.screen === 'pause') return Game.resume();
       const b = scr.querySelector('[data-back]');
