@@ -7,8 +7,9 @@ import { CHARACTERS } from '../data/characters.js';
 import { ITEMS } from '../data/items.js';
 import { applyModsObj } from '../data/modutil.js';
 import { UPGRADES } from '../data/upgrades.js';
+import { applyTomes, newWeapon, weaponMods, WEAPON_SLOTS, TOME_MAX, WEAPON_MAX } from '../data/tomes.js';
 import { buildCharacter } from './models.js';
-import { targetNearAim, nearestEnemy, applyFreeze, dealDamage, findTargets, explode } from './combat.js';
+import { targetNearAim, nearestEnemy, applyFreeze, dealDamage, findTargets, explode, after } from './combat.js';
 import { particles, shake, floatText, ring } from './fx.js';
 import { sfx } from '../core/audio.js';
 import { track, trackMax, discover, selectedCostume } from '../core/save.js';
@@ -50,7 +51,10 @@ export class Player {
     this.items = {};
     this.itemCount = 0;
     this.itemOrder = [];
-    this.upgrades = [];
+    this.upgrades = []; // legacy level-up picks (old saves)
+    this.tomes = {}; // id -> { level, value }
+    this.weapons = {}; // slot -> weapon levels/stats
+    for (const s of WEAPON_SLOTS) this.weapons[s] = newWeapon();
     this.buffs = {};
     this.cs = {}; // per-character scratch state
     this.itemTimers = {};
@@ -127,6 +131,7 @@ export class Player {
       cdr: 1, ultCdr: 1, jumps: 0, jumpPower: 0, pickup: 0, luck: 0, xp: 0, coins: 0, area: 0, lifeOnHit: 0, dodge: 0,
       shield: 0, chestDiscount: 0, execute: 0, kbImmune: false, glide: false, burnVuln: 0,
       dmgTakenMult: 1, procMult: 0, extraCharges: 0, burnImmune: false, poisonCap: 0,
+      tomeDodge: 0, projectiles: 0, lifesteal: 0,
     };
     m.damage += this.eaterDmg || 0;
     if (this.char.passive.mods) this.char.passive.mods(m, this);
@@ -142,6 +147,7 @@ export class Player {
       const def = UPGRADES.find((x) => x.id === u.id);
       if (def) def.apply(m, u.value);
     }
+    applyTomes(m, this.tomes);
     for (const id in this.buffs) {
       const bf = this.buffs[id];
       for (const k in bf.mods) m[k] += bf.mods[k] * bf.stacks;
@@ -154,8 +160,9 @@ export class Player {
     s.moveSpeed = b.speed * (1 + m.moveSpeed);
     s.armor = b.armor + m.armor;
     s.regen = (b.regen + m.regen) * (1 + 0.1 * lvl);
-    s.crit = Math.min(1, 0.05 + m.crit);
-    s.critMult = 2 + m.critMult;
+    const rawCrit = 0.05 + m.crit;
+    s.crit = Math.min(1, rawCrit);
+    s.critMult = 2 + m.critMult + Math.max(0, rawCrit - 1); // overflow crit chance becomes crit damage
     s.cdMult = m.cdr;
     s.ultCdMult = m.cdr * m.ultCdr;
     s.jumps = b.jumps + m.jumps;
@@ -166,7 +173,10 @@ export class Player {
     s.coinMult = 1 + m.coins;
     s.area = 1 + m.area;
     s.lifeOnHit = m.lifeOnHit;
-    s.dodge = m.dodge;
+    // item dodge and tome evasion stack with diminishing returns
+    s.dodge = Math.min(0.8, 1 - (1 - Math.min(0.9, m.dodge)) / (1 + m.tomeDodge));
+    s.projectiles = m.projectiles;
+    s.lifesteal = Math.min(0.3, m.lifesteal);
     s.maxShield = s.maxHp * m.shield;
     s.chestDiscount = m.chestDiscount;
     s.execute = m.execute;
@@ -199,6 +209,53 @@ export class Player {
   applyUpgrade(id, value) {
     this.upgrades.push({ id, value });
     this.dirty = true;
+  }
+
+  /** +1 tome level, adding `value` of its effect. */
+  addTome(id, value) {
+    const t = this.tomes[id] || (this.tomes[id] = { level: 0, value: 0 });
+    if (t.level >= TOME_MAX) return;
+    t.level++;
+    t.value += value;
+    this.dirty = true;
+  }
+
+  /** +1 weapon level, improving one stat by `value`. */
+  levelWeapon(slot, stat, value) {
+    const w = this.weapons[slot];
+    if (!w || w.level >= WEAPON_MAX) return;
+    const before = weaponMods(w, slot).charges;
+    w.level++;
+    w[stat] = (w[stat] || 0) + value;
+    const gained = weaponMods(w, slot).charges - before;
+    if (gained > 0) this.charges[slot] = (this.charges[slot] || 0) + gained;
+    this.dirty = true;
+  }
+
+  weaponMods(slot) {
+    return weaponMods(this.weapons[slot], slot);
+  }
+
+  /**
+   * Run `fn` with this weapon's damage / size / crit applied to the player's stats.
+   * Delayed effects started inside (timers, zones, channels) remember the weapon.
+   */
+  withWeapon(slot, fn) {
+    if (G.weaponSlot) return fn();
+    const s = this.stats, w = this.weaponMods(slot);
+    const d = s.damage, a = s.area, c = s.crit;
+    s.damage = d * w.dmg;
+    s.area = a * w.area;
+    s.crit = Math.min(1, c + w.crit);
+    G.weaponSlot = slot;
+    try {
+      return fn();
+    } finally {
+      G.weaponSlot = null;
+      s.damage = d;
+      s.area = a;
+      s.crit = c;
+    }
   }
 
   addXp(v) {
@@ -263,13 +320,13 @@ export class Player {
   cooldownFor(slot) {
     const i = SLOTS.indexOf(slot);
     const base = this.char.abilities[i].cd;
-    return base * (slot === 'ultimate' ? this.stats.ultCdMult : this.stats.cdMult);
+    return base * (slot === 'ultimate' ? this.stats.ultCdMult : this.stats.cdMult) * this.weaponMods(slot).cd;
   }
   reduceCooldowns(amount, slots = SLOTS) {
     for (const s of slots) if (this.cd[s] > 0) this.cd[s] = Math.max(0.001, this.cd[s] - amount);
   }
   maxCharges(i) {
-    return (this.char.abilities[i].charges || 1) + (this.stats.extraCharges || 0);
+    return (this.char.abilities[i].charges || 1) + (this.stats.extraCharges || 0) + this.weaponMods(SLOTS[i]).charges;
   }
   resetCooldown(slot) {
     const i = SLOTS.indexOf(slot);
@@ -864,14 +921,53 @@ export class Player {
     const firing = (auto || Input.held.primary) && !this.channelS && !this.dashS;
     if (this.charId === 'bulwark') this.cs.spin = firing ? Math.min(3, (this.cs.spin || 0) + dt) : Math.max(0, (this.cs.spin || 0) - dt * 2);
     if (firing && this.primaryT <= 0) {
-      const rate = (prim.rateFn ? prim.rateFn(this) : prim.rate) * this.stats.attackSpeed;
+      const wm = this.weaponMods('primary');
+      const rate = (prim.rateFn ? prim.rateFn(this) : prim.rate) * this.stats.attackSpeed * wm.rate;
       this.primaryT = 1 / rate;
       if (auto) {
         // face the auto-target for this attack (melee arcs and muzzles use aimYaw)
         this.aimYaw = Math.atan2(-(auto.pos.x - this.pos.x), -(auto.pos.z - this.pos.z));
-        prim.fire(this, this.autoAim);
-      } else prim.fire(this, this.aim);
+        this.withWeapon('primary', () => prim.fire(this, this.autoAim));
+      } else this.withWeapon('primary', () => prim.fire(this, this.aim));
+      this.fireExtraProjectiles(prim, auto, this.stats.projectiles + wm.proj);
       this.lastAttackT = 0;
+    }
+  }
+
+  /**
+   * Multishot: extra primary attacks (from tomes / weapon levels) at the next-closest
+   * enemies, slightly staggered. A fractional count is a chance for one more.
+   */
+  fireExtraProjectiles(prim, auto, count) {
+    if (!(count > 0)) return;
+    let n = Math.floor(count) + (Math.random() < count % 1 ? 1 : 0);
+    n = Math.min(n, 12);
+    if (!n) return;
+    const range = (prim.range || this.char.primary.range || 45) + 4;
+    const targets = G.enemies
+      .filter((e) => !e.dead && e.spawnT <= 0 && e !== auto && e.pos.distanceTo(this.pos) < range)
+      .sort((a, b) => a.pos.distanceToSquared(this.pos) - b.pos.distanceToSquared(this.pos));
+    for (let k = 0; k < n; k++) {
+      const tgt = targets[k % Math.max(1, targets.length)] || auto;
+      after(0.05 * (k + 1), () => {
+        if (this.dead) return;
+        const yaw = this.aimYaw;
+        let aim = this.aim;
+        if (tgt && !tgt.dead) {
+          const pt = new THREE.Vector3(tgt.pos.x, tgt.pos.y + tgt.height * tgt.scale * 0.5, tgt.pos.z);
+          aim = { point: pt, groundPoint: tgt.pos.clone(), target: tgt, dirFrom: (from) => pt.clone().sub(from).normalize() };
+          this.aimYaw = Math.atan2(-(tgt.pos.x - this.pos.x), -(tgt.pos.z - this.pos.z));
+        } else {
+          // nothing else to hit: fan out around the current aim
+          const off = (k % 2 ? 1 : -1) * (0.12 + 0.06 * k);
+          const dir = new THREE.Vector3(-Math.sin(yaw + off), 0, -Math.cos(yaw + off));
+          const pt = this.pos.clone().addScaledVector(dir, 30).setY(this.pos.y + 1.2);
+          aim = { point: pt, groundPoint: pt.clone(), target: null, dirFrom: (from) => pt.clone().sub(from).normalize() };
+          this.aimYaw = yaw + off;
+        }
+        this.withWeapon('primary', () => prim.fire(this, aim));
+        this.aimYaw = yaw;
+      });
     }
   }
 
@@ -879,7 +975,13 @@ export class Player {
     if (this.charges[slot] <= 0) return false;
     const ab = this.char.abilities[i];
     this.aimYaw = this.aim.target ? this.aimYaw : this.camYaw;
-    const res = ab.cast(this, this.aim);
+    const chanBefore = this.channelS;
+    const res = this.withWeapon(slot, () => ab.cast(this, this.aim));
+    if (this.channelS && this.channelS !== chanBefore) {
+      // channelled abilities keep the weapon's bonuses for every tick
+      const c = this.channelS, fn = c.fn;
+      c.fn = () => this.withWeapon(slot, fn);
+    }
     if (res === false) return false;
     let refund = !!(this.char.passive.onCast && this.char.passive.onCast(slot, this) === 'refund');
     for (const id in this.items) {

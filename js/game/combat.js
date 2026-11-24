@@ -114,6 +114,7 @@ export function dealDamage(e, amount, o = {}) {
   if (o.slow) applySlow(e, o.slow, 2);
 
   if (procCoef > 0 && p.stats.lifeOnHit > 0) p.heal(p.stats.lifeOnHit * procCoef);
+  if (procCoef > 0 && p.stats.lifesteal > 0) p.heal(Math.min(shown, e.maxHp) * p.stats.lifesteal * procCoef);
 
   // execute
   if (!e.isBoss && p.stats.execute > 0 && e.hp > 0 && e.hp / e.maxHp < p.stats.execute) {
@@ -482,7 +483,7 @@ export function spawnZone(o) {
   g.scale.set(r, 1, r);
   if (o.kind === 'blackhole') g.children[1].scale.set(2 / r, 2, 2 / r);
   G.scene.add(g);
-  const z = { ...o, radius: r, t: 0, acc: 0, mesh: g };
+  const z = { ...o, radius: r, t: 0, acc: 0, mesh: g, wslot: o.hostile ? null : G.weaponSlot };
   zones.push(z);
   return z;
 }
@@ -494,7 +495,9 @@ function updateZones(dt) {
     z.acc += dt;
     while (z.acc >= z.tick && z.t <= z.duration) {
       z.acc -= z.tick;
-      try { z.onTick && z.onTick(z); } catch (err) { console.error(err); }
+      try {
+        if (z.onTick) z.wslot && G.player ? G.player.withWeapon(z.wslot, () => z.onTick(z)) : z.onTick(z);
+      } catch (err) { console.error(err); }
     }
     // ambient visuals
     const r = z.radius;
@@ -537,7 +540,8 @@ function updateZones(dt) {
 // ------------------------------------------------------------------ timers
 const timers = [];
 export function after(delay, fn) {
-  timers.push({ t: delay, fn });
+  const slot = G.weaponSlot; // keep the weapon's bonuses for delayed hits
+  timers.push({ t: delay, fn: slot ? () => (G.player ? G.player.withWeapon(slot, fn) : fn()) : fn });
 }
 function updateTimers(dt) {
   for (let i = timers.length - 1; i >= 0; i--) {

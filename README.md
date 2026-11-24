@@ -49,13 +49,24 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 
 - **Stages:** Verdant Meadows → Scorched Dunes → Frostfang Peaks → Fungal Hollow → Molten Caldera → Void Sanctum → **Celestial Throne** (final). Each stage has its own terrain, palette, hazards (water / toxic sludge / lava / void / starlight) and enemy roster.
 - **Final boss:** on the Celestial Throne the *Apex Sovereign* descends after a few seconds. Its health and damage are re-scaled to your current power (DPS estimate × ~110 s, heavy hits ≈ 12% of your effective HP), it enrages at 50% and enters a *Final Form* at 25%. Beat it and you can **end the run** (victory) or **continue the run** into a harder loop for as long as you survive.
-- **Saving runs:** your run is checkpointed at every stage start, every 15 s and on *Save & Quit* (pause menu). *Continue Run* on the title screen picks it up again (the current stage gets a fresh map; character, level, items, upgrades, coins and timer are kept). Dying, abandoning or ending the run clears the save.
+- **Saving runs:** your run is checkpointed at every stage start, every 15 s and on *Save & Quit* (pause menu). *Continue Run* on the title screen picks it up again (the current stage gets a fresh map; character, level, items, tomes, weapon levels, coins and timer are kept). Dying, abandoning or ending the run clears the save.
 - **Coins & chests:** enemies drop coins and XP. Opening a chest freezes the game and spins a CS:GO-style item roulette that lands on your prize (skip with E / Space / A / tap).
   - Small chest: Common 70% · Rare 23% · Epic 6% · Legendary 1%
   - Large chest: Common 15% · Rare 55% · Epic 24% · Legendary 6%
   - Boss drop: Rare 55% · Epic 33% · Legendary 12%
   - *Luck* shifts the odds toward higher rarities.
-- **Level-ups:** Megabonk-style. Pick 1 of 3 upgrades, each rolled at its own rarity (bigger values at higher rarity).
+- **Level-ups:** Megabonk-style. Pick 1 of 3 cards. Each level-up randomly offers **only tomes**, **only weapons**, or **a mix of both**.
+  Every card is rolled at a rarity (Common ×1, Rare ×1.6, Epic ×2.4, Legendary ×4) that scales how much it gives; luck improves the odds.
+  - **Tomes** — pick up to **4 different tomes** per run; each levels up to **Lv 99** (every pick is +1 level). The 16 tomes:
+    Power (damage), Precision (crit chance; above 100% turns into crit damage), Evasion (dodge, diminishing, max 80%), Defense (armor),
+    Greed (gold), Multishot (extra primary projectiles; fractions are a chance for one more), Fury (attack speed), the Skies (jumps, max +10),
+    Fortune (luck: chests, Moai, items and tome/weapon roll rarity), Wisdom (XP), Blood (life steal, max 30%), the Aegis (shield),
+    the Giant (size), Attraction (pickup range), Vitality (max HP) and Agility (move speed).
+  - **Weapons** — your Primary, Ability 1, Ability 2 and Ultimate each level up to **Lv 50**. A pick improves one stat of that weapon:
+    damage, fire rate / cooldown, size, crit chance, or projectiles (primary only). Every 10th level adds +10% damage, and
+    Ability 1 & 2 gain an extra charge at Lv 25 and Lv 50.
+  - Your tomes sit above the ability bar; weapon levels are shown on the ability buttons; *Tab* (or the bag button) lists everything.
+  - Tome and weapon data lives in `js/data/tomes.js`.
 - **Portal & boss:** find the portal (marker on screen), interact to summon the stage boss. Stand in the ring to charge the portal, kill the boss, then enter the portal.
 - **Scaling:** difficulty = `1.035^minutes × 1.2^stagesCleared`. Enemy HP, damage, spawn credits, coin/XP drops and chest prices all scale off it, so everything grows exponentially. Elites (Blazing, Glacial, Overloading, Vampiric) show up as it rises.
 
@@ -148,7 +159,7 @@ css/style.css       all styling (desktop + phone layouts)
 vendor/             three.js r170 (MIT)
 js/main.js          boot + main loop
 js/core/            input (kb/mouse/gamepad/touch), audio (procedural SFX), save/achievements, utils
-js/data/            characters, items, enemies & bosses, stages, achievements, level-up upgrades
+js/data/            characters, items, enemies & bosses, stages, achievements, tomes & weapon levels
 js/game/            world gen, player, enemies & AI, combat, director, pickups, minions, fx, models
 js/ui/ui.js         menus, character select, logbook, settings, HUD
 ```

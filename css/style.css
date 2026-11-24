@@ -503,3 +503,17 @@ body.touch #hud-prompt { top: 40%; }
   .hud-item > .pxi { width: 20px; height: 20px; }
   .ab > span > .pxi { width: 26px; height: 26px; }
 }
+
+/* ---------------- tomes & weapon levels ---------------- */
+#hud-tomes { position: absolute; bottom: calc(86px + var(--safe-b)); left: 50%; transform: translateX(-50%); display: flex; gap: 6px; pointer-events: none; }
+.hud-tome { position: relative; width: 30px; height: 30px; border-radius: 8px; background: rgba(10, 20, 40, 0.6); border: 2px solid #7fd6ff; display: grid; place-items: center; box-shadow: 0 0 8px #7fd6ff44; }
+.hud-tome.empty { border: 2px dashed rgba(255, 255, 255, 0.22); background: rgba(0, 0, 0, 0.25); box-shadow: none; }
+.hud-tome .pxi { width: 22px; height: 22px; }
+.hud-tome b { position: absolute; right: -6px; bottom: -7px; font-size: 10px; background: #0b1a2c; border: 1px solid #7fd6ff; border-radius: 6px; padding: 0 3px; color: #cfefff; }
+.ab .wl { position: absolute; left: 0; right: 0; bottom: -1px; font-size: 9px; font-weight: 900; text-align: center; color: #ffd27a; text-shadow: 0 1px 0 #000; pointer-events: none; }
+.up-tag { display: inline-block; font-size: 11px; font-weight: 900; letter-spacing: 1px; padding: 2px 8px; border-radius: 6px; margin: 4px 0; }
+.up-tag.tome { background: #12324a; color: #9fe2ff; border: 1px solid #4fb6ff; }
+.up-tag.weapon { background: #3a2610; color: #ffd27a; border: 1px solid #ffb22e; }
+.item-entry .lvl { font-size: 12px; color: var(--accent); margin-left: 4px; }
+body.touch #hud-tomes { bottom: auto; top: 118px; left: 12px; transform: none; }
+@media (max-width: 700px) { #hud-tomes { bottom: calc(70px + var(--safe-b)); } .hud-tome { width: 24px; height: 24px; } .hud-tome .pxi { width: 18px; height: 18px; } }

@@ -5,6 +5,7 @@
 import { G } from './state.js';
 import { CHARACTERS } from '../data/characters.js';
 import { ITEMS } from '../data/items.js';
+import { TOME_BY_ID } from '../data/tomes.js';
 
 const KEY = 'riskofbonk_run_v1';
 
@@ -15,6 +16,7 @@ export function saveRun() {
     v: 1, savedAt: Date.now(), charId: r.charId, stageNum: r.stageNum, stagesCleared: r.stagesCleared, time: r.time, coins: r.coins,
     stats: r.stats, killsThisRun: (G.save.stats.kills || 0) - r.kills0,
     level: p.level, xp: p.xp, pendingLevelUps: p.pendingLevelUps, items: p.items, itemOrder: p.itemOrder, upgrades: p.upgrades,
+    tomes: p.tomes, weapons: p.weapons,
     infusionHp: p.infusionHp, eaterDmg: p.eaterDmg || 0, chestsOpened: r.chestsOpened || 0, devilMarks: r.devilMarks || 0,
   };
   try {
@@ -36,6 +38,9 @@ export function loadRunData() {
   d.items = items;
   d.itemOrder = (d.itemOrder || []).filter((id) => items[id]);
   d.upgrades = Array.isArray(d.upgrades) ? d.upgrades : [];
+  const tomes = {};
+  for (const id in d.tomes || {}) if (TOME_BY_ID[id] && d.tomes[id].level > 0) tomes[id] = { level: d.tomes[id].level | 0, value: +d.tomes[id].value || 0 };
+  d.tomes = tomes;
   return d;
 }
 

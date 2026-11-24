@@ -6,7 +6,8 @@ import { Input } from '../core/input.js';
 import { STAGES } from '../data/stages.js';
 import { BOSSES } from '../data/enemies.js';
 import { ITEMS } from '../data/items.js';
-import { UPGRADES, UPGRADE_RARITY } from '../data/upgrades.js';
+import { TOMES, TOME_BY_ID, TOME_SLOTS, TOME_MAX, WEAPON_MAX, WEAPON_SLOTS, WEAPON_STATS, ROLL_RARITY } from '../data/tomes.js';
+import { icon } from '../data/icons.js';
 import { CHARACTERS } from '../data/characters.js';
 import { World } from './world.js';
 import { Player, xpFor } from './player.js';
@@ -267,6 +268,8 @@ export const Game = {
     p.itemOrder = d.itemOrder;
     p.itemCount = Object.values(d.items).reduce((a, b) => a + b, 0);
     p.upgrades = d.upgrades;
+    if (d.tomes) p.tomes = d.tomes;
+    if (d.weapons) for (const s of WEAPON_SLOTS) if (d.weapons[s]) Object.assign(p.weapons[s], d.weapons[s]);
     p.infusionHp = d.infusionHp || 0;
     p.eaterDmg = d.eaterDmg || 0;
     p.markDirty();
@@ -775,24 +778,67 @@ export const Game = {
   },
 
   // ------------------------------------------------------------ level ups
+  /**
+   * Level-up choices: randomly only tomes, only weapons, or a mix of both.
+   * Tomes: max 4 different per run, each up to Lv 99. Weapons (your 4 skills): up to Lv 50.
+   * The rolled rarity scales how much of the effect a pick grants; luck improves the odds.
+   */
   rollUpgrades() {
-    const luck = G.player.stats.luck;
+    const p = G.player;
+    const luck = p.stats.luck;
     const weights = {};
-    for (const r in UPGRADE_RARITY) {
+    for (const r in ROLL_RARITY) {
       const o = ['common', 'rare', 'epic', 'legendary'].indexOf(r);
-      weights[r] = UPGRADE_RARITY[r].weight * (o === 0 ? 1 : Math.pow(1 + 0.3 * luck, o));
+      weights[r] = ROLL_RARITY[r].weight * (o === 0 ? 1 : Math.pow(1 + 0.3 * luck, o));
     }
-    const pool = shuffle([...UPGRADES]).slice(0, 3);
-    return pool.map((u) => {
+    const owned = Object.keys(p.tomes);
+    const tomePool = TOMES.filter((t) => (p.tomes[t.id] ? p.tomes[t.id].level < TOME_MAX : owned.length < TOME_SLOTS));
+    const weaponPool = WEAPON_SLOTS.filter((s) => p.weapons[s].level < WEAPON_MAX);
+    let mode = ['tomes', 'weapons', 'mixed'][Math.floor(Math.random() * 3)];
+    if (!tomePool.length) mode = 'weapons';
+    if (!weaponPool.length) mode = tomePool.length ? 'tomes' : 'none';
+    if (mode === 'none') return [];
+    let nTomes = mode === 'tomes' ? 3 : mode === 'weapons' ? 0 : 1 + Math.floor(Math.random() * 2);
+    nTomes = Math.min(nTomes, tomePool.length);
+    let nWeapons = Math.min(3 - nTomes, weaponPool.length);
+    nTomes = Math.min(3 - nWeapons, tomePool.length);
+    const choices = [];
+    for (const t of shuffle([...tomePool]).slice(0, nTomes)) {
       const rarity = weightedPick(weights);
-      const value = u.base * UPGRADE_RARITY[rarity].mult;
-      return { id: u.id, name: u.name, icon: u.icon, rarity, value, text: u.fmt(value) };
-    });
+      const value = t.base * ROLL_RARITY[rarity].mult;
+      const lv = p.tomes[t.id]?.level || 0;
+      choices.push({
+        kind: 'tome', id: t.id, rarity, value, name: t.name, icon: icon(t.icon),
+        tag: lv ? `TOME · Lv ${lv} → ${lv + 1}` : `NEW TOME · ${owned.length + 1}/${TOME_SLOTS}`, text: t.fmt(value),
+      });
+    }
+    const names = [p.char.primary, ...p.char.abilities];
+    for (const slot of shuffle([...weaponPool]).slice(0, nWeapons)) {
+      const stats = WEAPON_STATS.filter((st) => !st.slots || st.slots.includes(slot));
+      const st = weightedPick(Object.fromEntries(stats.map((x) => [x.id, x.weight])));
+      const def = WEAPON_STATS.find((x) => x.id === st);
+      const rarity = weightedPick(weights);
+      const value = def.base * ROLL_RARITY[rarity].mult;
+      const lv = p.weapons[slot].level;
+      const sk = names[WEAPON_SLOTS.indexOf(slot)];
+      let bonus = (lv + 1) % 10 === 0 ? ' · +10% damage milestone' : '';
+      if ((slot === 'ability1' || slot === 'ability2') && (lv + 1 === 25 || lv + 1 === 50)) bonus += ' · +1 charge';
+      choices.push({
+        kind: 'weapon', slot, stat: st, rarity, value, name: sk.name, icon: sk.icon,
+        tag: `WEAPON · Lv ${lv} → ${lv + 1}`, text: def.fmt(value) + bonus,
+      });
+    }
+    return shuffle(choices);
   },
 
   openLevelUp() {
-    G.mode = 'levelup';
     this.levelChoices = this.rollUpgrades();
+    if (!this.levelChoices.length) {
+      // every tome and weapon is maxed: nothing left to choose
+      G.player.pendingLevelUps = 0;
+      return;
+    }
+    G.mode = 'levelup';
     Input.releaseLock();
     if (G.ui) G.ui.showLevelUp(this.levelChoices, G.player.level);
   },
@@ -801,11 +847,12 @@ export const Game = {
     const c = this.levelChoices?.[i];
     if (!c || G.mode !== 'levelup') return;
     const p = G.player;
-    p.applyUpgrade(c.id, c.value);
+    if (c.kind === 'tome') p.addTome(c.id, c.value);
+    else if (c.kind === 'weapon') p.levelWeapon(c.slot, c.stat, c.value);
     p.pendingLevelUps--;
     sfx('item');
-    if (p.pendingLevelUps > 0) {
-      this.levelChoices = this.rollUpgrades();
+    if (p.pendingLevelUps > 0) this.levelChoices = this.rollUpgrades();
+    if (p.pendingLevelUps > 0 && this.levelChoices.length) {
       G.ui.showLevelUp(this.levelChoices, p.level - p.pendingLevelUps + 1);
     } else {
       G.ui.hideLevelUp();

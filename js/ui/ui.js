@@ -19,6 +19,7 @@ import { charLevelInfo } from '../core/charlevel.js';
 import { formatTime, formatNum, RARITY, RARITY_ORDER } from '../core/util.js';
 import * as THREE from 'three';
 import { icon, achievementIcon, characterIcon, UI_ICONS } from '../data/icons.js';
+import { TOME_BY_ID, TOME_SLOTS, TOME_MAX, WEAPON_MAX, WEAPON_SLOTS, weaponMods } from '../data/tomes.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -550,6 +551,7 @@ export const UI = {
     this.showScreen('none');
     this.buildAbilityBar();
     this.lastItemCount = -1;
+    this.lastTomeKey = null;
     $('#hud-stage').textContent = G.run.stage.name + ` · Stage ${G.run.stageNum + 1}`;
     $('#hud-fps').classList.toggle('hidden', !G.save.settings.showFps);
     this.setBoss(null);
@@ -695,7 +697,7 @@ export const UI = {
     $('#lvl-num').textContent = level;
     const keys = Input.device === 'pad' ? ['A', 'A', 'A'] : ['1', '2', '3'];
     $('#levelup-cards').innerHTML = choices.map((c, i) => `<button class="up-card" data-i="${i}" style="--c:${RARITY[c.rarity].color}">
-      <div class="ic">${c.icon}</div><div><div class="rr">${RARITY[c.rarity].name}</div><div class="nm">${c.name}</div><div class="tx">${c.text}</div></div><div class="key">[${keys[i]}]</div></button>`).join('');
+      <div class="ic">${c.icon}</div><div><div class="rr">${RARITY[c.rarity].name}</div><div class="nm">${c.name}</div>${c.tag ? `<div class="up-tag ${c.kind}">${c.tag}</div>` : ''}<div class="tx">${c.text}</div></div><div class="key">[${keys[i]}]</div></button>`).join('');
     $$('#levelup-cards .up-card').forEach((b) => b.addEventListener('click', () => Game.chooseUpgrade(+b.dataset.i)));
     this.showScreen('levelup');
     this.levelOpenT = performance.now();
@@ -756,8 +758,27 @@ export const UI = {
       ['Armor', `${Math.round(s.armor)} (${pct(armorRed)})`], ['Crit chance', pct(s.crit)], ['Crit damage', pct(s.critMult)], ['Move speed', s.moveSpeed.toFixed(1)],
       ['Cooldowns', pct(s.cdMult)], ['Jumps', s.jumps], ['Area', pct(s.area)], ['Luck', s.luck.toFixed(2)], ['Pickup range', s.pickup.toFixed(1) + 'm'],
       ['XP gain', pct(s.xpMult)], ['Coin gain', pct(s.coinMult)], ['Dodge', pct(s.dodge)],
+      ['Projectiles', '+' + (Math.round((s.projectiles + p.weapons.primary.proj) * 100) / 100)], ['Life steal', pct(s.lifesteal)], ['Shield', Math.round(s.maxShield)],
     ];
     let html = `<h3>Stats — Level ${p.level}</h3><div class="st-grid">${rows.map(([a, b]) => `<span>${a} <b>${b}</b></span>`).join('')}</div>`;
+    const tids = Object.keys(p.tomes);
+    html += `<h3>Tomes (${tids.length}/${TOME_SLOTS})</h3>`;
+    html += tids.length ? `<div class="inv-list">${tids.map((id) => {
+      const t = TOME_BY_ID[id], o = p.tomes[id];
+      return `<div class="item-entry" style="--c:#7fd6ff"><div class="ic">${icon(t.icon)}</div><div><div class="nm">${t.name} <span class="lvl">Lv ${o.level}${o.level >= TOME_MAX ? ' MAX' : ''}</span></div><div class="ds">${t.fmt(o.value)}${t.note ? ` · ${t.note}` : ''}</div></div></div>`;
+    }).join('')}</div>` : `<p style="color:var(--muted)">No tomes yet — pick them when you level up (max ${TOME_SLOTS} different).</p>`;
+    const sk = [p.char.primary, ...p.char.abilities];
+    html += `<h3>Weapons</h3><div class="inv-list">${WEAPON_SLOTS.map((slot, i) => {
+      const w = p.weapons[slot], m = weaponMods(w, slot);
+      const parts = [`${pct(m.dmg - 1)} damage`];
+      if (w.rate) parts.push(`+${pct(w.rate)} fire rate`);
+      if (w.cd) parts.push(`-${pct(1 - m.cd)} cooldown`);
+      if (w.area) parts.push(`+${pct(w.area)} size`);
+      if (w.proj) parts.push(`+${Math.round(w.proj * 100) / 100} projectiles`);
+      if (w.crit) parts.push(`+${pct(w.crit)} crit`);
+      if (m.charges) parts.push(`+${m.charges} charge${m.charges > 1 ? 's' : ''}`);
+      return `<div class="item-entry" style="--c:#ffb22e"><div class="ic">${sk[i].icon}</div><div><div class="nm">${sk[i].name} <span class="lvl">Lv ${w.level}${w.level >= WEAPON_MAX ? ' MAX' : ''}</span></div><div class="ds">${'+' + parts.join(' · ')}</div></div></div>`;
+    }).join('')}</div>`;
     if (p.itemOrder.length) {
       html += `<h3>Items (${p.itemCount})</h3><div class="inv-list">${p.itemOrder.map((id) => {
         const it = ITEMS[id];
@@ -945,6 +966,26 @@ export const UI = {
         if (c) c.textContent = chg;
         el.classList.toggle('ready', ready);
       }
+    }
+
+    // tomes bar + weapon levels on the ability buttons
+    const tkey = Object.entries(p.tomes).map(([k, o]) => k + o.level).join() + '|' + WEAPON_SLOTS.map((s) => p.weapons[s].level).join();
+    if (tkey !== this.lastTomeKey) {
+      this.lastTomeKey = tkey;
+      const ids = Object.keys(p.tomes);
+      let th = ids.map((id) => `<div class="hud-tome" title="${esc(TOME_BY_ID[id].name)}">${icon(TOME_BY_ID[id].icon)}<b>${p.tomes[id].level}</b></div>`).join('');
+      for (let k = ids.length; k < TOME_SLOTS; k++) th += '<div class="hud-tome empty"></div>';
+      $('#hud-tomes').innerHTML = th;
+      $$('#hud-abilities .ab').forEach((el) => {
+        let b = el.querySelector('.wl');
+        if (!b) {
+          b = document.createElement('span');
+          b.className = 'wl';
+          el.appendChild(b);
+        }
+        const lv = p.weapons[el.dataset.slot]?.level || 1;
+        b.textContent = lv >= WEAPON_MAX ? 'MAX' : 'Lv' + lv;
+      });
     }
 
     // items bar
