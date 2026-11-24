@@ -22,6 +22,10 @@ function ensure() {
   }
 }
 
+export function getAudioContext() {
+  return ensure() ? ctx : null;
+}
+
 export function unlockAudio() {
   if (!ensure()) return;
   if (ctx.state === 'suspended') ctx.resume();

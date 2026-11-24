@@ -21,6 +21,7 @@ import { sfx } from '../core/audio.js';
 import { track, trackMax, commitRunBests, persist, selectedCostume } from '../core/save.js';
 import { weightedPick, shuffle, rand } from '../core/util.js';
 import { saveRun, clearRun, loadRunData } from '../core/runsave.js';
+import { Music } from '../core/music.js';
 
 const _v = new THREE.Vector3();
 const SILHOUETTE = new THREE.MeshBasicMaterial({ color: 0x07040c });
@@ -108,6 +109,7 @@ export const Game = {
 
   // ------------------------------------------------------------ menu backdrop
   enterMenu() {
+    Music.stop();
     this.cleanupRun();
     G.mode = 'menu';
     if (!this.menuWorld) {
@@ -344,6 +346,8 @@ export const Game = {
     }
     sfx('portal');
     Input.requestLock();
+    Music.duck(false);
+    Music.playStage(!!stage.final);
     saveRun();
   },
 
@@ -819,12 +823,14 @@ export const Game = {
   pause() {
     if (G.mode !== 'playing') return;
     G.mode = 'paused';
+    Music.duck(true);
     Input.releaseLock();
     if (G.ui) G.ui.showPause(true);
   },
   resume() {
     if (G.mode !== 'paused') return;
     G.mode = 'playing';
+    Music.duck(false);
     if (G.ui) G.ui.showPause(false);
     Input.requestLock();
   },
@@ -835,6 +841,7 @@ export const Game = {
     run.ended = true;
     clearRun();
     track('deaths');
+    Music.stop(2.5);
     setTimeout(() => {
       if (G.run !== run) return;
       G.mode = 'gameover';

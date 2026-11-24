@@ -25,6 +25,7 @@ export const DEFAULT_SETTINGS = {
   touchSensitivity: 1,
   invertY: false,
   volume: 0.6,
+  musicVolume: 0.5,
   quality: 'auto', // auto | low | high
   autoFire: 'touch', // off | touch | always
   aimAssist: true,

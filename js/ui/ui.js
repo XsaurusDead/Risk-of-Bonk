@@ -13,6 +13,7 @@ import { Game } from '../game/game.js';
 import { loadRunData } from '../core/runsave.js';
 import { diffLabel, DIFF_LABELS, STAGE_TIME } from '../game/director.js';
 import { Minimap } from './minimap.js';
+import { Music } from '../core/music.js';
 import { COSTUMES, COSTUME_LEVELS } from '../game/models.js';
 import { charLevelInfo } from '../core/charlevel.js';
 import { formatTime, formatNum, RARITY, RARITY_ORDER } from '../core/util.js';
@@ -448,7 +449,8 @@ export const UI = {
       ['sensitivity', 'Mouse sensitivity', 'range', 0.2, 3, 0.05],
       ['padSensitivity', 'Controller look speed', 'range', 0.3, 3, 0.05],
       ['touchSensitivity', 'Touch look speed', 'range', 0.3, 3, 0.05],
-      ['volume', 'Volume', 'range', 0, 1, 0.05],
+      ['musicVolume', 'Music volume', 'range', 0, 1, 0.05],
+      ['volume', 'Sound effects volume', 'range', 0, 1, 0.05],
       ['invertY', 'Invert Y axis', 'toggle'],
       ['aimAssist', 'Aim assist (controller/touch)', 'toggle'],
       ['quality', 'Graphics quality', 'select', [['auto', 'Auto'], ['low', 'Low (phones)'], ['high', 'High']]],
@@ -472,6 +474,7 @@ export const UI = {
         ctl.addEventListener('input', () => {
           s[key] = parseFloat(ctl.value);
           persist();
+          if (key === 'musicVolume') Music.applyVolume();
         });
         ctl.dataset.nav = '1';
       } else if (type === 'toggle') {

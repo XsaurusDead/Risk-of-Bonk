@@ -6,6 +6,7 @@ import { loadSave } from './core/save.js';
 import { Game } from './game/game.js';
 import { UI } from './ui/ui.js';
 import { initMaterials } from './game/models.js';
+import { Music } from './core/music.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -74,6 +75,7 @@ function boot() {
   });
 
   Input.init(canvas);
+  Music.init();
   Game.init();
   UI.init();
   document.getElementById('loading').classList.add('hidden');

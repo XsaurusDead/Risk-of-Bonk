@@ -64,6 +64,14 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 - **Graphics:** procedurally generated textures (unique skins for every enemy and boss, detail textures for every stage's ground), PBR materials, ACES tone mapping, gradient sky with a sun, smooth terrain with colour variation, wind-swaying grass and trees, animated water and glowing lava, bloom on glowing parts, soft contact shadows. *Graphics quality* in Settings switches phones to a lighter renderer (no bloom, Lambert shading).
 - **Physics & juice:** enemies and bosses have rigged limbs with walk cycles, arm swings, wing flaps, tail sways and attack poses; slimes squash on landing and wobble like jelly, enemies flinch and squish when hit, waddle while walking, and flyers bank into turns. Dead enemies get flung, tumble and bounce. Debris, coins and items bounce on the terrain. The player squashes and stretches, leans into movement and gets a FOV kick on dashes. Chest lids spring open, big hits briefly freeze the game (hit-stop), and the camera pulls in when trees block the view.
 
+## Music
+
+Tracks live in `assets/music/` and are streamed (they start instantly, even large files).
+Stages 1–6 pick a random track from `STAGE_TRACKS` in `js/core/music.js` every time a stage starts (never the same one twice in a row) and crossfade into it.
+The final stage uses `FINAL_TRACKS` (empty for now, so the music fades out there). Music volume has its own slider in Settings and is quieter while paused.
+
+To add a track: upload it to `assets/music/` and add its path to the list in `js/core/music.js`.
+
 ## Survivors (17)
 
 The survivor select screen shows one survivor at a time: an animated 3D preview (it shows off its attack every few seconds, drag to rotate), base stats, the passive, auto-attack and all three abilities with cooldowns and keys, its character level and its costumes. Switch with the ‹ › arrows, A/D or the arrow keys, the D-pad, a swipe, or the portrait strip at the top. Q/E or D-pad up/down cycles costumes.
