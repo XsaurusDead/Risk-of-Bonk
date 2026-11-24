@@ -4,7 +4,7 @@ import { G } from '../core/state.js';
 import { ITEMS, ITEM_LIST } from '../data/items.js';
 import { isItemUnlocked, track } from '../core/save.js';
 import { buildPickupGeo, litMaterial, glowMaterial } from './models.js';
-import { particles } from './fx.js';
+import { particles, floatText } from './fx.js';
 import { sfx } from '../core/audio.js';
 import { weightedPick, RARITY, RARITY_ORDER } from '../core/util.js';
 import { createLootFx, updateLootFx } from './lootfx.js';
@@ -59,6 +59,104 @@ export function clearPickups() {
   for (const k in list) list[k].length = 0;
   for (const it of items) G.scene.remove(it.group);
   items = [];
+  for (const pw of powers) G.scene.remove(pw.group);
+  powers = [];
+}
+
+// ---------------- power-ups (temporary buffs dropped by enemies) ----------------
+// magnet: every coin and XP orb on the map flies to you; slowmo: enemies, their shots
+// and their attacks move in slow motion (the clock, spawns and you stay at full speed)
+export const POWERUPS = {
+  magnet: { name: 'Magnet', icon: 117, color: 0xff5566, css: '#ff6677', dur: 15, desc: 'All gold & XP fly to you' },
+  slowmo: { name: 'Time Warp', icon: 1089, color: 0x66ccff, css: '#7fd6ff', dur: 15, desc: 'Enemies in slow motion' },
+};
+export const SLOWMO_FACTOR = 0.35;
+let powers = [];
+
+/** Drop a power-up pickup (it floats and glows until you walk into it). */
+export function dropPowerup(pos, type) {
+  const P = POWERUPS[type];
+  if (!P) return;
+  const group = new THREE.Group();
+  const icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: powerIconTexture(type), transparent: true, depthWrite: false }));
+  icon.scale.setScalar(1.3);
+  icon.renderOrder = 8;
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), color: P.color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  halo.scale.setScalar(3);
+  halo.renderOrder = 7;
+  const ringM = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.06, 6, 32), new THREE.MeshBasicMaterial({ color: P.color, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
+  ringM.rotation.x = Math.PI / 2;
+  group.add(halo, icon, ringM);
+  group.position.copy(pos);
+  G.scene.add(group);
+  const a = Math.random() * Math.PI * 2;
+  powers.push({ type, group, icon, halo, ring: ringM, pos: group.position, vel: new THREE.Vector3(Math.cos(a) * 2, 8, Math.sin(a) * 2), age: 0, grounded: false });
+}
+
+const powerTex = {};
+function powerIconTexture(type) {
+  if (!powerTex[type]) {
+    const t = texLoader.load(iconSrc(POWERUPS[type].icon));
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.magFilter = THREE.NearestFilter;
+    t.minFilter = THREE.NearestFilter;
+    t.generateMipmaps = false;
+    powerTex[type] = t;
+  }
+  return powerTex[type];
+}
+
+/** Start (or extend) a timed power-up. */
+export function activatePower(type, dur) {
+  const run = G.run;
+  if (!run) return;
+  run.powers ||= {};
+  run.powers[type] = Math.max(run.powers[type] || 0, dur ?? POWERUPS[type].dur);
+  const P = POWERUPS[type];
+  sfx(type === 'slowmo' ? 'freeze' : 'item');
+  if (G.player) {
+    particles(G.player.pos, P.color, 30, 7, 0.8, 0.4);
+    floatText(G.player.pos.clone().setY(G.player.pos.y + 2.6), P.name.toUpperCase() + '!', P.css, true);
+  }
+}
+
+/** Enemy time scale (slow motion power-up). */
+export function enemyTimeScale() {
+  return G.run?.powers?.slowmo > 0 ? SLOWMO_FACTOR : 1;
+}
+
+function updatePowers(dt) {
+  const run = G.run, p = G.player, w = G.world;
+  if (run?.powers) for (const k in run.powers) run.powers[k] = Math.max(0, run.powers[k] - dt);
+  for (let i = powers.length - 1; i >= 0; i--) {
+    const pw = powers[i];
+    pw.age += dt;
+    if (!pw.grounded) {
+      pw.vel.y -= 20 * dt;
+      pw.pos.addScaledVector(pw.vel, dt);
+      const h = w.groundAt(pw.pos.x, pw.pos.z, pw.pos.y) + 1;
+      if (pw.pos.y <= h) {
+        pw.pos.y = h;
+        if (pw.vel.y < -3) pw.vel.set(pw.vel.x * 0.5, -pw.vel.y * 0.35, pw.vel.z * 0.5);
+        else pw.grounded = true;
+      }
+    }
+    const bob = pw.grounded ? Math.sin(pw.age * 3) * 0.2 : 0;
+    pw.icon.position.y = bob;
+    pw.halo.position.y = bob;
+    pw.halo.material.opacity = 0.7 + Math.sin(pw.age * 5) * 0.25;
+    pw.ring.rotation.z += dt * 2;
+    pw.ring.position.y = -0.6 + Math.sin(pw.age * 2) * 0.1;
+    // despawn after a minute (blink for the last 5 s)
+    if (pw.age > 55) pw.group.visible = Math.sin(pw.age * 20) > 0;
+    const range = Math.max(2.4, Math.min(p ? p.stats.pickup : 3, 6));
+    if (p && !p.dead && pw.age > 0.5 && Math.hypot(pw.pos.x - p.pos.x, pw.pos.z - p.pos.z) < range && Math.abs(pw.pos.y - p.pos.y - 1) < 3) {
+      activatePower(pw.type);
+    } else if (pw.age < 60) continue;
+    G.scene.remove(pw.group);
+    pw.group.traverse((o) => o.material && o.material.dispose());
+    powers.splice(i, 1);
+  }
 }
 
 function spawn(kind, pos, value) {
@@ -170,6 +268,8 @@ export function updatePickups(dt) {
   if (!p || !w) return;
   const range = p.stats.pickup;
   const px = p.pos.x, py = p.pos.y + 1, pz = p.pos.z;
+  updatePowers(dt);
+  const globalMagnet = G.run?.powers?.magnet > 0;
   let coinSfx = false, xpSfx = false;
   for (const kind of ['coin', 'xp', 'heal']) {
     const arr = list[kind];
@@ -182,10 +282,13 @@ export function updatePickups(dt) {
       const dx = px - c.x, dy = py - c.y, dz = pz - c.z;
       const d2 = dx * dx + dy * dy + dz * dz;
       const r = kind === 'heal' ? Math.min(range, 6) : range;
-      if (!c.magnet && c.age > 0.35 && d2 < r * r && !p.dead) c.magnet = true;
+      if (!c.magnet && c.age > 0.35 && !p.dead && (d2 < r * r || (globalMagnet && kind !== 'heal'))) {
+        c.magnet = true;
+        c.age = Math.min(c.age, 1);
+      }
       if (c.magnet) {
         const d = Math.sqrt(d2) || 1;
-        const sp = 18 + c.age * 6;
+        const sp = 18 + c.age * 6 + (globalMagnet ? d * 1.2 : 0);
         c.x += (dx / d) * sp * dt;
         c.y += (dy / d) * sp * dt;
         c.z += (dz / d) * sp * dt;

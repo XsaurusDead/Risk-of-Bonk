@@ -16,6 +16,7 @@ const MARK = {
   boss: { icon: '💀', col: '#b455ff', label: 'Boss shrine' },
   xp: { icon: '📘', col: '#55e6ff', label: 'Wisdom shrine' },
   moai: { icon: '🗿', col: '#ff8070', label: 'Moai' },
+  magnet: { icon: '🧲', col: '#ff5566', label: 'Magnet statue' },
   portal: { icon: '🌀', col: '#ff3355', label: 'Portal' },
   pad: { icon: '⏫', col: '#55ffdd', label: 'Jump pad' },
   cave: { icon: '🕳️', col: '#9fdcff', label: 'Cave' },

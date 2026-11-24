@@ -6,14 +6,14 @@ import { G } from '../core/state.js';
 import { makeNoise2D, fbm, smoothstep, mulberry32, SpatialHash, lerp, clamp } from '../core/util.js';
 import {
   buildMerged, decorParts, MAT, buildChest, buildPortal, litMaterial, swayMaterial, setGlowColor,
-  buildShrine, buildMoai, buildJumpPad, structureParts,
+  buildShrine, buildMoai, buildMagnetStatue, buildJumpPad, structureParts,
 } from './models.js';
 import { terrainDetailTexture } from './textures.js';
 import { assetsReady, getModel, desertRockTexture } from './assets.js';
 import { attachGlyph, recolorGlyph } from './glyphs.js';
 
 // animated rune pillars (spell pack) floating above shrines: colour + design per kind
-const SHRINE_GLYPH = { heal: ['D', 17], combat: ['H', 24], boss: ['K', 29], xp: ['C', 20], moai: ['E', 10] };
+const SHRINE_GLYPH = { heal: ['D', 17], combat: ['H', 24], boss: ['K', 29], xp: ['C', 20], moai: ['E', 10], magnet: ['H', 20] };
 
 export const SIZE = 520;
 const SEGS = 220;
@@ -42,7 +42,7 @@ function desertVariant(mat) {
 const SWAY = { grass: 0.32, dry_grass: 0.32, flower: 0.25, tree: 0.0035, pine: 0.003, dead_tree: 0.004, giant_mushroom: 0.002, glow_shroom: 0.08, cactus: 0.0008 };
 
 // how many of each interactable a stage rolls (min..max)
-const COUNTS = { chest: [15, 20], heal: [1, 2], combat: [1, 3], boss: [1, 3], xp: [2, 5], moai: [3, 7] };
+const COUNTS = { chest: [15, 20], heal: [1, 2], combat: [1, 3], boss: [1, 3], xp: [2, 5], moai: [3, 7], magnet: [0, 3] };
 // chest tier odds
 const CHEST_TIERS = { normal: 82, large: 13, epic: 4, legendary: 1 };
 
@@ -479,6 +479,7 @@ export class World {
       let built;
       if (kind === 'chest') built = buildChest(extra.tier);
       else if (kind === 'moai') built = buildMoai();
+      else if (kind === 'magnet') built = buildMagnetStatue();
       else built = buildShrine(kind);
       built.group.position.copy(pos);
       built.group.rotation.y = this.rng() * Math.PI * 2;
@@ -513,7 +514,7 @@ export class World {
       const p = spot();
       if (p) add('chest', p, { tier: this.rollChestTier(1) });
     }
-    for (const kind of ['heal', 'combat', 'boss', 'xp', 'moai']) {
+    for (const kind of ['heal', 'magnet', 'combat', 'boss', 'xp', 'moai']) {
       const have = this.interactables.filter((i) => i.kind === kind).length;
       for (let i = have; i < total(kind); i++) {
         const p = spot(18);

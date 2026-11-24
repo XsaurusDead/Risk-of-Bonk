@@ -22,6 +22,7 @@ import { icon, achievementIcon, characterIcon, UI_ICONS } from '../data/icons.js
 import { TOME_BY_ID, TOME_SLOTS, TOME_MAX, WEAPON_MAX, WEAPON_SLOTS } from '../data/tomes.js';
 import { WEAPONS } from '../data/weapons.js';
 import { loadCharModel } from '../game/charmodels.js';
+import { POWERUPS } from '../game/pickups.js';
 import { leaderboard } from '../core/leaderboard.js';
 
 const $ = (s) => document.querySelector(s);
@@ -1015,6 +1016,18 @@ export const UI = {
       }
     }
 
+    // active power-ups (magnet / time warp) with their remaining time
+    const pw = run.powers || {};
+    const pkey = Object.keys(POWERUPS).map((k) => Math.ceil(pw[k] || 0)).join();
+    if (pkey !== this.lastPowerKey) {
+      this.lastPowerKey = pkey;
+      $('#hud-buffs').innerHTML = Object.keys(POWERUPS).filter((k) => pw[k] > 0).map((k) => {
+        const P = POWERUPS[k];
+        return `<div class="hud-buff" style="--c:${P.css}">${icon(P.icon)}<b>${P.name}</b><span>${Math.ceil(pw[k])}s</span></div>`;
+      }).join('');
+      document.body.classList.toggle('slowmo', pw.slowmo > 0);
+    }
+
     // tomes bar + weapon levels on the ability buttons
     const tkey = Object.entries(p.tomes).map(([k, o]) => k + o.level).join() + '|' + p.weaponOrder.map((id) => id + p.weapons[id].level).join();
     if (tkey !== this.lastTomeKey) {
@@ -1090,6 +1103,7 @@ export const UI = {
         const T = {
           heal: 'Shrine of Healing — restore 50% HP', xp: 'Shrine of Wisdom — gain experience', combat: 'Shrine of Combat — summon challengers for loot',
           boss: `Shrine of the Mountain — ${Math.min(8, (run.bossCount || 1) * 2)}x portal bosses (more loot)`, moai: 'Moai — choose a gift',
+          magnet: 'Magnet Statue — pull every coin and XP orb to you for 20s',
         };
         text = `<span class="k">${key}</span>${T[it.kind] || it.kind}`;
       }

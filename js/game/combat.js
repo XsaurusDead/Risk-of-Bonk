@@ -2,6 +2,7 @@
 // hitscan/melee/explosion helpers and delayed callbacks.
 import * as THREE from 'three';
 import { G } from '../core/state.js';
+const slowmo = () => (G.run?.powers?.slowmo > 0 ? 0.35 : 1); // Time Warp power-up
 import { ITEMS } from '../data/items.js';
 import { particles, ring, beam, damageNumber, floatText } from './fx.js';
 import { sfx } from '../core/audio.js';
@@ -378,11 +379,13 @@ function projectileImpact(pr, enemy) {
   return false;
 }
 
-function updateProjectiles(dt) {
+function updateProjectiles(dt0) {
+  const enemyScale = slowmo();
   const w = G.world;
   const p = G.player;
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const pr = projectiles[i];
+    const dt = pr.owner === 'enemy' ? dt0 * enemyScale : dt0;
     pr.life -= dt;
     pr.age += dt;
     // homing
@@ -488,9 +491,11 @@ export function spawnZone(o) {
   return z;
 }
 
-function updateZones(dt) {
+function updateZones(dt0) {
+  const enemyScale = slowmo();
   for (let i = zones.length - 1; i >= 0; i--) {
     const z = zones[i];
+    const dt = z.hostile ? dt0 * enemyScale : dt0;
     z.t += dt;
     z.acc += dt;
     while (z.acc >= z.tick && z.t <= z.duration) {

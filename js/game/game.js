@@ -16,7 +16,7 @@ import { Director } from './director.js';
 import { initEnemies, updateEnemies, clearEnemies, spawnEnemy } from './enemies.js';
 import { updateCombat, clearCombat } from './combat.js';
 import { initFx, updateFx, updateHpBars, updateBlobShadows, clearFx, particles, gibs, ring, shake, floatText } from './fx.js';
-import { initPickups, updatePickups, clearPickups, dropItem, rollRarity, rollItem, dropCoins, collectAll } from './pickups.js';
+import { initPickups, updatePickups, clearPickups, dropItem, rollRarity, rollItem, dropCoins, collectAll, activatePower } from './pickups.js';
 import { updateMinions, clearMinions } from './minions.js';
 import { windUniform } from './models.js';
 import { buildCharacter, loadCharModel, hasCharModel } from './charmodels.js';
@@ -347,6 +347,7 @@ export const Game = {
     run.bossCount = 1;
     run.stageTime = 0;
     run.finalSpawnT = 0;
+    run.powers = {};
     run.saveT = 0;
     if (stage.final) {
       // no portal on the final stage: the Apex Sovereign comes to you
@@ -556,6 +557,10 @@ export const Game = {
       });
       case 'combat': return this.useShrine(o, () => this.startCombatShrine(o));
       case 'moai': return this.openMoai(o);
+      case 'magnet': return this.useShrine(o, () => {
+        activatePower('magnet', 20);
+        G.ui?.banner('Magnet Statue', 'Every coin and orb is yours — 20 seconds');
+      });
     }
   },
 

@@ -633,6 +633,27 @@ export function buildMoai() {
   return { group: g, emblem: eyes };
 }
 
+/** Magnet statue: stone plinth holding a big red horseshoe magnet. */
+export function buildMagnetStatue() {
+  const g = new THREE.Group();
+  const stone = 0x8a8478, dark = 0x5a554c;
+  g.add(mesh('box', dark, [0, 0.3, 0], [2.4, 0.6, 2.4]));
+  g.add(mesh('box', stone, [0, 1.4, 0], [1.4, 1.6, 1.4]));
+  g.add(mesh('box', dark, [0, 2.3, 0], [1.8, 0.3, 1.8]));
+  const magnet = new THREE.Group();
+  magnet.position.y = 3.6;
+  const arc = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.32, 10, 24, Math.PI), new THREE.MeshStandardMaterial({ color: 0xd8283a, roughness: 0.4, metalness: 0.3 }));
+  arc.rotation.z = 0; // opening points down
+  magnet.add(arc);
+  for (const sx of [-1, 1]) {
+    magnet.add(mesh('box', 0xd8283a, [sx * 0.9, -0.45, 0], [0.62, 0.9, 0.62]));
+    magnet.add(mesh('box', 0xe8eef8, [sx * 0.9, -1.05, 0], [0.64, 0.35, 0.64], null, true));
+  }
+  g.add(magnet);
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return { group: g, emblem: magnet };
+}
+
 export function buildJumpPad() {
   const g = new THREE.Group();
   g.add(mesh('cyl', 0x4a4a55, [0, 0.15, 0], [2.6, 0.3, 2.6]));

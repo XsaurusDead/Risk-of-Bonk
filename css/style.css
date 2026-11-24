@@ -569,3 +569,14 @@ body.touch #hud-tomes .ht-sep { display: none; }
 .lb-score .pxi { width: 16px; height: 16px; vertical-align: -2px; }
 .lb-sub { color: var(--muted); }
 body.touch #hud-kills { font-size: 16px; }
+
+/* ---------------- power-ups ---------------- */
+#hud-buffs { position: absolute; top: calc(108px + var(--safe-t, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; pointer-events: none; }
+.hud-buff { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 6px; border-radius: 10px; background: rgba(0, 0, 0, 0.55); border: 2px solid var(--c); box-shadow: 0 0 12px var(--c); font-size: 14px; animation: buffIn 0.25s ease-out; }
+.hud-buff .pxi { width: 24px; height: 24px; }
+.hud-buff b { color: var(--c); }
+.hud-buff span { font-weight: 900; min-width: 2.6ch; text-align: right; font-variant-numeric: tabular-nums; }
+@keyframes buffIn { from { transform: scale(1.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+#slowmo-tint { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.4s; background: radial-gradient(ellipse at center, transparent 45%, rgba(80, 170, 255, 0.28) 100%); mix-blend-mode: screen; }
+body.slowmo #slowmo-tint { opacity: 1; }
+body.touch #hud-buffs { top: 92px; }

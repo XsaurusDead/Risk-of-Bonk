@@ -9,7 +9,10 @@ import { skinTexture } from './textures.js';
 import { spawnProjectile, damagePlayer, dealDamage, spawnZone, findTargets } from './combat.js';
 import { particles, ring, telegraph, shake, floatText, gibs } from './fx.js';
 import { addRimLight } from './models.js';
-import { dropCoins, dropXp, dropHeal, dropItem, rollItem, rollRarity } from './pickups.js';
+import { dropCoins, dropXp, dropHeal, dropItem, rollItem, rollRarity, dropPowerup, enemyTimeScale } from './pickups.js';
+
+// power-up drop chances per kill (elites x8, champions/bosses always drop one)
+const POWERUP_DROP = { magnet: 0.006, slowmo: 0.004 };
 import { attachGlyph } from './glyphs.js';
 
 export const ELITE_ITEM_CHANCE = 0.05; // random item, rarity rolled like a small chest (legendary rarest, luck helps)
@@ -180,6 +183,11 @@ export function killEnemy(e, o = {}) {
       track('eliteKills');
       if (!e.isBoss && !e.champion) eliteLoot(e);
     }
+    // power-ups
+    const up = e.isBoss || e.champion ? 1 : e.elite ? 8 : 1;
+    if (e.isBoss || e.champion) dropPowerup(e.pos.clone().setY(e.pos.y + 1.5), Math.random() < 0.6 ? 'magnet' : 'slowmo');
+    else if (Math.random() < POWERUP_DROP.magnet * up) dropPowerup(e.pos.clone().setY(e.pos.y + 1.2), 'magnet');
+    else if (Math.random() < POWERUP_DROP.slowmo * up) dropPowerup(e.pos.clone().setY(e.pos.y + 1.2), 'slowmo');
     if (p && !p.dead) {
       try {
         if (p.char.passive.onKill) p.char.passive.onKill(e, p);
@@ -276,6 +284,7 @@ export function updateEnemies(dt) {
   for (const e of G.enemies) if (!e.dead) hash.insert(e, e.pos.x, e.pos.z);
 
   const p = G.player;
+  const timeScale = enemyTimeScale(); // Time Warp power-up: enemies in slow motion
   for (let i = G.enemies.length - 1; i >= 0; i--) {
     const e = G.enemies[i];
     if (e.dead) {
@@ -312,7 +321,7 @@ export function updateEnemies(dt) {
       }
       continue;
     }
-    updateEnemy(e, dt, p);
+    updateEnemy(e, dt * timeScale, p, dt);
   }
 }
 
@@ -320,7 +329,8 @@ function groundY(e) {
   return G.world.heightAt(e.pos.x, e.pos.z);
 }
 
-function updateEnemy(e, dt, p) {
+function updateEnemy(e, dt, p, rdt = dt) {
+  // dt = enemy time (slowed by Time Warp), rdt = real time for your burns, poisons, freezes and stuns
   const s = e.status;
   e.lastHitT += dt;
   // spawn-in
@@ -334,8 +344,8 @@ function updateEnemy(e, dt, p) {
   }
   // statuses
   if (s.burnT > 0) {
-    s.burnT -= dt;
-    s.burnAcc += dt;
+    s.burnT -= rdt;
+    s.burnAcc += rdt;
     if (s.burnAcc >= 0.5) {
       s.burnAcc -= 0.5;
       dealDamage(e, s.burnDps * 0.5, { procCoef: 0, canCrit: false, color: '#ff8a3a', noHooks: true });
@@ -344,8 +354,8 @@ function updateEnemy(e, dt, p) {
     }
   }
   if (s.poisonT > 0) {
-    s.poisonT -= dt;
-    s.poisonAcc += dt;
+    s.poisonT -= rdt;
+    s.poisonAcc += rdt;
     if (s.poisonAcc >= 0.5) {
       s.poisonAcc -= 0.5;
       dealDamage(e, s.poison * G.player.stats.damage * 0.15 * 0.5, { procCoef: 0, canCrit: false, color: '#9dff5a', noHooks: true });
@@ -354,12 +364,12 @@ function updateEnemy(e, dt, p) {
     }
     if (s.poisonT <= 0) s.poison = 0;
   }
-  if (s.slowT > 0) s.slowT -= dt;
+  if (s.slowT > 0) s.slowT -= rdt;
   if (s.slowT <= 0) s.slow = 0;
-  if (e.vulnT > 0) e.vulnT -= dt;
+  if (e.vulnT > 0) e.vulnT -= rdt;
   const frozen = s.freeze > 0, stunned = s.stun > 0;
-  if (frozen) s.freeze -= dt;
-  if (stunned) s.stun -= dt;
+  if (frozen) s.freeze -= rdt;
+  if (stunned) s.stun -= rdt;
   if (s.slowT <= 0) s.chill = 0;
 
   // knockback integration
