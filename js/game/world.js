@@ -9,10 +9,25 @@ import {
   buildShrine, buildMoai, buildJumpPad, structureParts,
 } from './models.js';
 import { terrainDetailTexture } from './textures.js';
+import { assetsReady, getModel, desertRockTexture } from './assets.js';
 
 export const SIZE = 520;
 const SEGS = 220;
 const AREA_MULT = 3.2; // decor density scale vs. the old 260m maps
+// model decoration is bucketed into N x N map sections; sections out of range aren't drawn
+const FAR_CHUNKS = 5; // trees, rocks: culled at the fog distance
+const NEAR_CHUNKS = 8; // small ground cover: culled close to the camera
+const NEAR_RANGE = 55;
+const desertCache = new Map();
+function desertVariant(mat) {
+  if (!desertCache.has(mat.uuid)) {
+    const m = mat.clone();
+    m.map = desertRockTexture();
+    m.needsUpdate = true;
+    desertCache.set(mat.uuid, m);
+  }
+  return desertCache.get(mat.uuid);
+}
 // wind sway strength per vegetation type (0 = static)
 const SWAY = { grass: 0.32, dry_grass: 0.32, flower: 0.25, tree: 0.0035, pine: 0.003, dead_tree: 0.004, giant_mushroom: 0.002, glow_shroom: 0.08, cactus: 0.0008 };
 
@@ -473,6 +488,9 @@ export class World {
     for (const it of this.interactables) avoid.push({ x: it.pos.x, z: it.pos.z, r: 4 });
     for (const c of this.caves) avoid.push({ x: c.x, z: c.z, r: c.len / 2 + 4 });
     for (const d of this.stage.decor) {
+      // real 3D models from the asset pack when available
+      if (d.models && assetsReady() && this.buildModelDecor(d, density, avoid)) continue;
+      if (d.proc === false) continue; // model-only decoration
       const count = Math.floor(d.count * density);
       const { geo, glow } = buildMerged(decorParts(d.type, d.tint));
       if (geo) this.disposables.push(geo);
@@ -513,6 +531,90 @@ export class World {
         this.group.add(m);
       }
     }
+  }
+
+  /** Instanced glTF decoration, bucketed into map chunks so far-away chunks can be skipped. */
+  buildModelDecor(d, density, avoid) {
+    let variants = d.models.map(getModel).filter(Boolean);
+    if (!variants.length) return false;
+    if (G.quality === 'low') variants = variants.slice(0, 2); // fewer draw calls on phones
+    // small ground cover lives in a finer grid that is culled much closer to the camera
+    const small = d.collide === 0 && d.scale[1] * Math.max(...variants.map((v) => v.height)) < 2.5;
+    const CHUNKS = small ? NEAR_CHUNKS : FAR_CHUNKS;
+    const count = Math.floor(d.count * density * (G.quality === 'low' && d.collide > 0 ? 0.75 : 1));
+    const H = SIZE / 2, CH = SIZE / CHUNKS;
+    const buckets = new Map();
+    const dummy = new THREE.Object3D();
+    const col = new THREE.Color();
+    const tint = new THREE.Color(d.tint ?? 0xffffff);
+    const ground = d.collide === 0;
+    let placed = 0;
+    for (let k = 0; k < count * 3 && placed < count; k++) {
+      const x = (this.rng() * 2 - 1) * (this.half - 4);
+      const z = (this.rng() * 2 - 1) * (this.half - 4);
+      const h = this.heightAt(x, z);
+      if (h < this.liquidLevel + 0.2) continue;
+      if (this.slopeAt(x, z) > (ground ? 0.75 : 0.6)) continue;
+      if (!ground && avoid.some((a) => Math.hypot(a.x - x, a.z - z) < a.r)) continue;
+      const vi = Math.floor(this.rng() * variants.length);
+      const s = lerp(d.scale[0], d.scale[1], this.rng());
+      dummy.position.set(x, h - 0.15 * s, z);
+      dummy.rotation.set(d.tilt ? (this.rng() - 0.5) * d.tilt : 0, this.rng() * Math.PI * 2, d.tilt ? (this.rng() - 0.5) * d.tilt : 0);
+      dummy.scale.setScalar(s);
+      dummy.updateMatrix();
+      const ci = Math.min(CHUNKS - 1, Math.floor((x + H) / CH)) + Math.min(CHUNKS - 1, Math.floor((z + H) / CH)) * CHUNKS;
+      const key = vi + ':' + ci;
+      if (!buckets.has(key)) buckets.set(key, { vi, ci, mats: [], cols: [] });
+      const b = buckets.get(key);
+      b.mats.push(dummy.matrix.clone());
+      b.cols.push(col.copy(tint).multiplyScalar(0.85 + this.rng() * 0.25).clone());
+      if (d.collide > 0) this.addCollider(x, z, d.collide * s);
+      placed++;
+    }
+    for (const b of buckets.values()) {
+      const chunk = this.chunk(b.ci, small);
+      for (const part of variants[b.vi].parts) {
+        let mat = part.material;
+        if (d.tex === 'desertRock' && desertRockTexture()) mat = desertVariant(mat);
+        const inst = new THREE.InstancedMesh(part.geometry, mat, b.mats.length);
+        b.mats.forEach((m, i) => {
+          inst.setMatrixAt(i, m);
+          inst.setColorAt(i, b.cols[i]);
+        });
+        inst.instanceMatrix.needsUpdate = true;
+        if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+        inst.castShadow = MAT.high && part.castShadow && d.collide > 0;
+        inst.receiveShadow = MAT.high && !ground;
+        inst.computeBoundingSphere();
+        chunk.add(inst);
+      }
+    }
+    return true;
+  }
+
+  chunk(ci, small) {
+    this.chunkGroups = this.chunkGroups || [];
+    this.chunkMap = this.chunkMap || {};
+    const key = (small ? 'n' : 'f') + ci;
+    if (!this.chunkMap[key]) {
+      const n = small ? NEAR_CHUNKS : FAR_CHUNKS;
+      const CH = SIZE / n;
+      const g = new THREE.Group();
+      g.userData.cx = -SIZE / 2 + ((ci % n) + 0.5) * CH;
+      g.userData.cz = -SIZE / 2 + (Math.floor(ci / n) + 0.5) * CH;
+      g.userData.range = (small ? NEAR_RANGE : (this.stage.fogFar || 160)) + CH * 0.75;
+      this.group.add(g);
+      this.chunkGroups.push(g);
+      this.chunkMap[key] = g;
+    }
+    return this.chunkMap[key];
+  }
+
+  /** Skip whole chunks of models that are beyond the fog. */
+  cullChunks() {
+    if (!this.chunkGroups) return;
+    const cam = G.camera.position;
+    for (const g of this.chunkGroups) g.visible = Math.hypot(g.userData.cx - cam.x, g.userData.cz - cam.z) < g.userData.range;
   }
 
   buildPortalMesh() {
@@ -594,6 +696,7 @@ export class World {
       }
     }
     for (const p of this.jumpPads) p.ring.scale.setScalar(1.6 + Math.sin(this.t * 6) * 0.15);
+    this.cullChunks();
     // hide cave roofs while the player is inside
     const pl = G.player;
     for (const c of this.caves) {

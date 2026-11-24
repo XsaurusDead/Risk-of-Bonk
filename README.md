@@ -72,6 +72,18 @@ The final stage uses `FINAL_TRACKS` (empty for now, so the music fades out there
 
 To add a track: upload it to `assets/music/` and add its path to the list in `js/core/music.js`.
 
+## 3D models (asset packs)
+
+Trees, pines, dead and twisted trees, rocks, bushes, flowers, ferns, clover, mushrooms and pebbles come from the
+**Stylized Nature MegaKit by Quaternius** (CC0, `assets/packs/stylized-nature/`).
+The game loads optimised copies from `assets/packs/stylized-nature/web/` (38 models, textures downscaled to 512px, ~13 MB total)
+while the loading screen is shown; the original upload stays untouched next to it.
+
+- Every stage maps its own models: Meadows gets broadleaf trees, rocks, bushes, flowers, ferns and pebbles; Dunes gets bleached dead trees and desert-textured rocks; Peaks gets pines; Hollow gets giant shelf mushrooms and twisted trees; Caldera gets charred dead trees and dark rocks; Void and the Throne get tinted twisted trees and flowers.
+- Models are drawn with GPU instancing and bucketed into map sections: trees and rocks in sections beyond the fog, and small ground cover more than ~55 m away, aren't drawn at all. Phones use fewer variants and about half as many models.
+- If a model fails to load, the stage falls back to the built-in procedural decoration.
+- Which models a stage uses lives in the `decor` lists in `js/data/stages.js` (`models: [...]`); the loading and material set-up is in `js/game/assets.js`.
+
 ## Survivors (17)
 
 The survivor select screen shows one survivor at a time: an animated 3D preview (it shows off its attack every few seconds, drag to rotate), base stats, the passive, auto-attack and all three abilities with cooldowns and keys, its character level and its costumes. Switch with the ‹ › arrows, A/D or the arrow keys, the D-pad, a swipe, or the portrait strip at the top. Q/E or D-pad up/down cycles costumes.
