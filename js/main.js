@@ -9,6 +9,7 @@ import { initMaterials } from './game/models.js';
 import { Music } from './core/music.js';
 import { preloadAssets } from './game/assets.js';
 import { applyIcons, preloadIcons } from './data/icons.js';
+import { preloadCharacterModels } from './game/charmodels.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -81,7 +82,7 @@ async function boot() {
   Music.init();
   // load the 3D nature models before the first world is generated
   const loadingEl = document.getElementById('loading');
-  await Promise.all([preloadAssets((f) => { loadingEl.textContent = `Loading… ${Math.round(f * 100)}%`; }), preloadIcons()]);
+  await Promise.all([preloadAssets((f) => { loadingEl.textContent = `Loading… ${Math.round(f * 100)}%`; }), preloadIcons(), preloadCharacterModels()]);
   Game.init();
   UI.init();
   document.getElementById('loading').classList.add('hidden');

@@ -8,7 +8,7 @@ import { ITEMS } from '../data/items.js';
 import { applyModsObj } from '../data/modutil.js';
 import { UPGRADES } from '../data/upgrades.js';
 import { applyTomes, newWeapon, weaponMods, WEAPON_SLOTS, TOME_MAX, WEAPON_MAX } from '../data/tomes.js';
-import { buildCharacter } from './models.js';
+import { buildCharacter } from './charmodels.js';
 import { targetNearAim, nearestEnemy, applyFreeze, dealDamage, findTargets, explode, after } from './combat.js';
 import { particles, shake, floatText, ring } from './fx.js';
 import { sfx } from '../core/audio.js';
@@ -360,6 +360,7 @@ export class Player {
     this.animType = type;
     this.animT = 0;
     this.lastAttackT = 0;
+    if (this.rig.anim) this.rig.anim.once('attack', 1.7);
   }
 
   // ------------------------------------------------------------ damage intake
@@ -846,6 +847,7 @@ export class Player {
         this.leapS = null;
         this.landT = 0;
         particles(this.pos, 0xddddcc, 3, 2, 0.3, 0.25);
+        if (this.rig.anim) this.rig.anim.once('land', 1.2);
       }
       this.grounded = true;
     } else if (this.pos.y > gh + 0.15) {
@@ -1017,6 +1019,21 @@ export class Player {
     // walk cycle
     const r = this.rig;
     const moving = this.grounded && hs > 0.5;
+    if (r.anim) {
+      const state = !this.grounded ? (this.vel.y > 1 ? 'jump' : 'fall') : moving ? 'run' : 'idle';
+      r.anim.update(dt, state, Math.max(0.7, Math.min(2.2, hs / 7)));
+      this.animT += dt;
+      this.sqv += (-200 * this.sq - 13 * this.sqv) * dt;
+      this.sq = Math.max(-0.35, Math.min(0.35, this.sq + this.sqv * dt));
+      m.scale.set(1 - this.sq * 0.4, 1 + this.sq, 1 - this.sq * 0.4);
+      const fyaw = this.yaw + Math.PI;
+      const side = this.vel.x * Math.cos(fyaw) - this.vel.z * Math.sin(fyaw);
+      this.lean += (Math.max(-0.25, Math.min(0.25, side * 0.025)) - this.lean) * Math.min(1, dt * 8);
+      m.rotation.order = 'YXZ';
+      m.rotation.x = this.dashS ? 0.35 : 0;
+      m.rotation.z = -this.lean;
+      return;
+    }
     this.walkPhase += dt * (moving ? hs * 1.3 : 0);
     const k = moving ? Math.min(1, hs / 6) : 0;
     const sw = Math.sin(this.walkPhase) * 0.9 * k;

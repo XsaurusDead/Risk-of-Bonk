@@ -91,6 +91,19 @@ so the menu song starts on your first input. Music volume has its own slider in 
 
 To add a track: upload it to the right folder and add its path to the matching list in `js/core/music.js`.
 
+## Character models
+
+Survivors can use a rigged 3D model (glTF/.glb with animations) instead of the built-in block model.
+They live in `assets/models/<name>/` and are mapped in `CHAR_MODELS` in `js/game/charmodels.js`.
+
+- **Kestrel** is the **Hooded Fox by Heytibo** (itch.io, `assets/models/fox/`). The model's own animations are used:
+  idle, run (speeds up with your movement speed), jump, fall, attack and landing. The fox's sword is swapped for a bow.
+- Costumes recolour the model's textures: Rival = blue fox, Arctic = white fox, Inferno = red, Shadow = purple, Golden = gold with a crown.
+- If a model can't be loaded, the survivor falls back to the block model.
+
+To give another survivor a model: put the .glb (with its textures) in its own folder under `assets/models/` and add an entry
+to `CHAR_MODELS` with the clip names for idle / run / jump / fall / attack / land.
+
 ## Icons
 
 All item, ability, upgrade, achievement, minimap and menu icons are 16×16 pixel art from the **Raven Fantasy icon pack**

@@ -17,7 +17,8 @@ import { updateCombat, clearCombat } from './combat.js';
 import { initFx, updateFx, updateHpBars, updateBlobShadows, clearFx, particles, gibs, ring, shake, floatText } from './fx.js';
 import { initPickups, updatePickups, clearPickups, dropItem, rollRarity, rollItem, dropCoins, collectAll } from './pickups.js';
 import { updateMinions, clearMinions } from './minions.js';
-import { buildCharacter, windUniform } from './models.js';
+import { windUniform } from './models.js';
+import { buildCharacter } from './charmodels.js';
 import { sfx } from '../core/audio.js';
 import { track, trackMax, commitRunBests, persist, selectedCostume } from '../core/save.js';
 import { weightedPick, shuffle, rand } from '../core/util.js';
@@ -126,6 +127,7 @@ export const Game = {
   setMenuCharacter(id, costume = 0, locked = false, dir = 0) {
     if (this.menuModel) G.scene.remove(this.menuModel.root);
     this.menuModel = buildCharacter(id, costume);
+    if (locked && this.menuModel.rig.anim) this.menuModel.rig.anim.frozen = true;
     const h = this.menuWorld.heightAt(0, 0);
     this.menuModel.root.position.set(0, h, 0);
     if (locked) {
@@ -204,6 +206,7 @@ export const Game = {
         this.menuShowT = 3.2;
         this.menuAnimT = 0;
         this.menuAnimType = MENU_ANIM[this.menuChar] || 'shoot';
+        if (r.anim) r.anim.once('attack', 1.2);
       }
       if (this.menuAnimT !== undefined && this.menuAnimT < 1.2) {
         this.menuAnimT += dt;
@@ -233,6 +236,12 @@ export const Game = {
     r.armR.rotation.x = armR;
     r.armL.rotation.x = armL;
     r.body.rotation.y = twist;
+    if (r.anim) {
+      // rigged model: a little jump at the end of the showcase, otherwise idle
+      const a = this.menuAnimT ?? 9;
+      r.anim.update(r.anim.frozen ? 0 : dt, selecting && !this.menuLocked && a > 0.75 && a < 1.1 ? 'jump' : 'idle');
+      root.position.y = h + (selecting && a > 0.8 && a < 1.2 ? Math.sin(((a - 0.8) / 0.4) * Math.PI) * 0.35 : 0);
+    }
   },
 
   // ------------------------------------------------------------ run lifecycle
