@@ -34,12 +34,34 @@ export class Director {
 
   get cap() {
     const base = G.quality === 'low' ? 75 : 140;
-    return this.t > STAGE_TIME ? base + 25 : base;
+    return this.t > STAGE_TIME ? base + (G.quality === 'low' ? 35 : 60) : base;
   }
 
-  /** Overtime multiplier for new spawns: x1.35 every 30 seconds past 10:00. */
+  /** Seconds spent in overtime (past 10:00). */
+  get otT() {
+    return Math.max(0, this.t - STAGE_TIME);
+  }
+
+  /**
+   * Overtime strength multiplier for new spawns (HP and damage), growing exponentially:
+   *   0:00-1:00  doubles every 30 s   (x4 at 1:00)
+   *   1:00-3:00  doubles every 12 s   (x4096 at 3:00)
+   *   3:00+      doubles every 4 s    -- only a ridiculously strong build survives
+   */
   get otMult() {
-    return this.t > STAGE_TIME ? Math.pow(1.35, (this.t - STAGE_TIME) / 30) : 1;
+    const o = this.otT;
+    if (o <= 0) return 1;
+    if (o < 60) return Math.pow(2, o / 30);
+    if (o < 180) return 4 * Math.pow(2, (o - 60) / 12);
+    return 4096 * Math.pow(2, Math.min(o - 180, 240) / 4);
+  }
+
+  /** Overtime ghosts fly faster and faster. */
+  get otSpeed() {
+    const o = this.otT;
+    if (o < 60) return 1 + o / 120;
+    if (o < 180) return 1.5 + (o - 60) / 120;
+    return Math.min(4, 2.5 + (o - 180) / 60);
   }
 
   update(dt) {
@@ -59,10 +81,20 @@ export class Director {
       this.event(475, 'warn8', () => G.ui?.banner('A CHAMPION APPROACHES', 'This one is angrier', true));
       this.event(480, 'mini8', () => this.champion(true));
       this.event(STAGE_TIME, 'ot', () => {
-        G.ui?.banner('OVERTIME', 'Enemies grow stronger every 30 seconds — reach the portal!', true);
+        G.ui?.banner('OVERTIME', 'The dead are coming for you — reach the portal!', true);
         sfx('roar');
         shake(0.6);
         track('overtimes');
+      });
+      this.event(STAGE_TIME + 60, 'ot2', () => {
+        G.ui?.banner('OVERTIME II', 'They double in strength every 12 seconds', true);
+        sfx('roar');
+        shake(0.8);
+      });
+      this.event(STAGE_TIME + 180, 'ot3', () => {
+        G.ui?.banner('OVERTIME III', 'RUN.', true);
+        sfx('roar');
+        shake(1.2);
       });
     }
 
@@ -87,16 +119,28 @@ export class Director {
       if (this.t + dt >= this.surgeUntil) G.ui?.banner('Wave survived', 'The swarm thins out… for now');
     }
 
-    // --- overtime waves
+    // --- overtime: waves of homing ghosts from every side, faster and bigger each phase
     if (this.t > STAGE_TIME && !this.final) {
+      const o = this.otT;
       this.otWaveT -= dt;
       if (this.otWaveT <= 0) {
-        this.otWaveT = 4;
-        const ot = (this.t - STAGE_TIME) / 60;
-        const n = Math.min(this.cap - aliveCount(), 3 + Math.floor(ot * 3));
-        const center = this.spawnCenter(11, 20);
-        if (center) for (let i = 0; i < n; i++) spawnEnemy('reaper', this.jitter(center, 5), { otMult: this.otMult });
-        if (Math.random() < 0.5) this.spawnGroup(4, { otMult: this.otMult, elite: true });
+        this.otWaveT = o < 60 ? 2.5 : o < 180 ? 1.0 : 0.35;
+        const want = o < 60 ? 3 + o / 15 : o < 180 ? 6 + (o - 60) / 10 : 14 + (o - 180) / 3;
+        const n = Math.min(this.cap - aliveCount(), Math.floor(want));
+        const p = G.player.pos;
+        const opts = { otMult: this.otMult };
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2, d = rand(18, 28);
+          const pos = new THREE.Vector3(p.x + Math.cos(a) * d, 0, p.z + Math.sin(a) * d);
+          G.world.clampBounds(pos);
+          const e = spawnEnemy('reaper', pos, opts);
+          if (e) {
+            e.pos.y = p.y + rand(2, 8); // they come in from the air
+            e.otSpeed = this.otSpeed;
+          }
+        }
+        const room = this.cap - aliveCount();
+        if (room > 0 && Math.random() < (o < 60 ? 0.4 : 0.7)) this.spawnGroup(Math.min(room, o < 60 ? 4 : 7), { otMult: this.otMult, elite: true });
       }
     }
   }

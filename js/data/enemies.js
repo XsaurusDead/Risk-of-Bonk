@@ -195,7 +195,8 @@ export const ENEMIES = {
 
   // ================= Overtime (spawns only after the 10 minute mark) =================
   reaper: {
-    name: 'Overtime Reaper', hp: 140, dmg: 22, speed: 11, radius: 0.8, height: 2.4, ai: 'melee', attackRange: 2.4, flying: true, hover: 1.2, xp: 10, coins: 4, cost: 0,
+    // Megabonk-style overtime ghost: flies straight at you through terrain and obstacles
+    name: 'Overtime Reaper', hp: 140, dmg: 22, speed: 8.5, radius: 0.8, height: 2.4, ai: 'homing', flying: true, hover: 1.2, xp: 10, coins: 4, cost: 0,
     model: [
       ['cone', 0x120a18, [0, 1.3, 0], [1.3, 2.6, 1.3], [Math.PI, 0, 0]], ['sphere', 0x1a1024, [0, 2.4, 0], [0.75, 0.8, 0.75]],
       ['cone', 0x1a1024, [0, 2.75, -0.1], [0.8, 0.8, 0.8]], ['sphere', 0xff2244, [-0.13, 2.45, 0.32], [0.12, 0.08, 0.05], null, true], ['sphere', 0xff2244, [0.13, 2.45, 0.32], [0.12, 0.08, 0.05], null, true],

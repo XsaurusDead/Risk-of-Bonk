@@ -368,8 +368,11 @@ function updateEnemy(e, dt, p) {
     e.knock.multiplyScalar(Math.max(0, 1 - dt * 6));
   }
 
-  if (!frozen && !stunned && p) runAI(e, dt, p);
-  integrateSteering(e, frozen ? 0 : dt);
+  const homing = e.ai === 'homing';
+  if (homing) {
+    if (p) updateHoming(e, frozen || stunned ? 0 : dt, p);
+  } else if (!frozen && !stunned && p) runAI(e, dt, p);
+  if (!homing) integrateSteering(e, frozen ? 0 : dt);
   if (frozen || stunned) e.mv.multiplyScalar(0.8);
   if ((frozen || stunned) && e.state !== 'chase' && e.state !== 'hover') {
     // attacks are interrupted by freezes and stuns
@@ -391,13 +394,15 @@ function updateEnemy(e, dt, p) {
       e.pos.z += dz * push;
     }
   }
-  // obstacles / bounds
-  G.world.collide(e.pos, e.radius * e.scale * 0.8);
+  // obstacles / bounds (homing ghosts phase through everything)
+  if (!homing) G.world.collide(e.pos, e.radius * e.scale * 0.8);
   G.world.clampBounds(e.pos);
 
   // vertical
   const gy = groundY(e);
-  if (e.flying) {
+  if (homing) {
+    if (e.pos.y < gy + 0.4) e.pos.y = gy + 0.4;
+  } else if (e.flying) {
     const target = gy + e.hover + Math.sin(e.bob += dt * 2) * 0.5;
     if (e.state !== 'dive') e.pos.y += (target - e.pos.y) * Math.min(1, dt * 2.5);
     if (e.pos.y < gy + 0.3) e.pos.y = gy + 0.3;
@@ -477,6 +482,31 @@ function updateEnemy(e, dt, p) {
 }
 
 // ------------------------------------------------------------------ AI
+/**
+ * Overtime ghosts: steer in 3D straight at the player (curving pursuit, no pathing,
+ * through walls and terrain) and hurt on contact, then bounce off and come again.
+ */
+function updateHoming(e, dt, p) {
+  if (!e.hv) e.hv = new THREE.Vector3();
+  const tx = p.pos.x, ty = p.pos.y + 1.1, tz = p.pos.z;
+  _v.set(tx - e.pos.x, ty - (e.pos.y + e.height * e.scale * 0.4), tz - e.pos.z);
+  const dist = _v.length();
+  const speed = e.speed * speedMult(e) * (e.otSpeed || 1);
+  _v.multiplyScalar(speed / (dist || 1));
+  // turn rate: tight enough to chase, loose enough that strafing makes them overshoot
+  e.hv.lerp(_v, Math.min(1, dt * (2.2 + (e.otSpeed || 1) * 0.6)));
+  e.pos.addScaledVector(e.hv, dt);
+  faceDir(e, e.hv.x, e.hv.z, dt, 12);
+  e.mv.set(0, 0, 0);
+  e.atkCd -= dt;
+  if (dist < e.radius * e.scale + 1.0 && e.atkCd <= 0 && !p.dead) {
+    damagePlayer(e.dmg, e, enemyStatus(e));
+    e.atkCd = 0.8;
+    e.hv.multiplyScalar(-0.6); // recoil, then swoop back in
+  }
+  e.state = 'chase';
+}
+
 function speedMult(e) {
   return (1 - e.status.slow) * (e.enraged ? 1.25 : 1);
 }
