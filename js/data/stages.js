@@ -1,4 +1,12 @@
-// Stage definitions. Stages are played in order and loop forever afterwards
+const TREES = [1, 2, 3, 4, 5].map((i) => 'CommonTree_' + i);
+const PINES = [1, 2, 3, 4, 5].map((i) => 'Pine_' + i);
+const DEAD = [1, 2, 3, 4, 5].map((i) => 'DeadTree_' + i);
+const TWISTED = [1, 2, 3, 4, 5].map((i) => 'TwistedTree_' + i);
+const ROCKS = ['Rock_Medium_1', 'Rock_Medium_2', 'Rock_Medium_3'];
+const PEBBLES = ['Pebble_Round_1', 'Pebble_Round_2', 'Pebble_Square_3'];
+
+// Stage definitions. Decor entries with `models` use the Stylized Nature
+// MegaKit (Quaternius, CC0); `type` is the procedural fallback. Stages are played in order and loop forever afterwards
 // (each loop makes everything harder via the difficulty curve).
 
 export const STAGES = [
@@ -11,10 +19,14 @@ export const STAGES = [
     structures: { ruins: [6, 9], caves: [2, 3], islands: [3, 5] },
     liquid: { level: -3.2, color: 0x3fa9ff, opacity: 0.75, emissive: 0x0a2a55, dps: 0, slow: 0.25 },
     decor: [
-      { type: 'tree', count: 120, collide: 0.8, scale: [0.8, 1.5] },
-      { type: 'rock', count: 50, collide: 1.0, scale: [0.7, 1.8] },
+      { type: 'tree', models: TREES, count: 75, collide: 0.55, scale: [0.85, 1.35] },
+      { type: 'rock', models: ROCKS, count: 40, collide: 1.2, scale: [0.7, 1.8], tilt: 0.3 },
+      { type: 'bush', models: ['Bush_Common', 'Bush_Common_Flowers'], proc: false, count: 90, collide: 0, scale: [0.9, 1.6] },
+      { type: 'fern', models: ['Fern_1', 'Plant_1_Big'], proc: false, count: 50, collide: 0, scale: [0.4, 0.7] },
+      { type: 'clover', models: ['Clover_1', 'Clover_2', 'Plant_1'], proc: false, count: 150, collide: 0, scale: [0.6, 1.0] },
+      { type: 'pebble', models: PEBBLES, proc: false, count: 120, collide: 0, scale: [1.5, 3] },
       { type: 'grass', count: 1600, collide: 0, scale: [0.7, 1.4], tint: 0x5fae3f },
-      { type: 'flower', count: 260, collide: 0, scale: [0.6, 1.2] },
+      { type: 'flower', models: ['Flower_3_Group', 'Flower_4_Group'], count: 140, collide: 0, scale: [0.4, 0.65] },
       { type: 'ruin_pillar', count: 18, collide: 1.0, scale: [0.8, 1.4] },
     ],
     enemies: { slime: 5, goblin_archer: 3, wisp: 3, stone_golem: 1 },
@@ -32,6 +44,8 @@ export const STAGES = [
       { type: 'cactus', count: 90, collide: 0.6, scale: [0.8, 1.6] },
       { type: 'grass', count: 350, collide: 0, scale: [0.6, 1.1], tint: 0xc9a55a },
       { type: 'bones', count: 30, collide: 0.8, scale: [0.8, 1.5] },
+      { type: 'dead_tree', models: DEAD, count: 16, collide: 0.6, scale: [0.45, 0.75], tint: 0xd8c0a0 },
+      { type: 'rock', models: ROCKS, tex: 'desertRock', count: 45, collide: 1.3, scale: [0.9, 2.4], tilt: 0.3 },
       { type: 'sandstone', count: 40, collide: 1.6, scale: [0.8, 2.2] },
       { type: 'obelisk', count: 10, collide: 1.2, scale: [1, 1.6] },
     ],
@@ -47,10 +61,10 @@ export const STAGES = [
     structures: { ruins: [4, 6], caves: [3, 4], islands: [2, 4] }, ruinTint: 0x9aa8b8,
     liquid: { level: -4, color: 0x9fdcff, opacity: 0.9, emissive: 0x1a3a55, dps: 0, slow: 0.4 },
     decor: [
-      { type: 'pine', count: 130, collide: 0.7, scale: [0.8, 1.8] },
+      { type: 'pine', models: PINES, count: 120, collide: 0.55, scale: [0.9, 1.6] },
       { type: 'grass', count: 300, collide: 0, scale: [0.5, 0.9], tint: 0x8aa38a },
       { type: 'ice_spike', count: 50, collide: 0.9, scale: [0.7, 2.0] },
-      { type: 'rock', count: 30, collide: 1.0, scale: [0.7, 1.6], tint: 0x9aa8b8 },
+      { type: 'rock', models: ROCKS, count: 35, collide: 1.2, scale: [0.8, 2.0], tint: 0xc8d4e4, tilt: 0.3 },
     ],
     enemies: { snow_slime: 4, ice_imp: 3, yeti: 1, frost_wisp: 3 },
     boss: 'frost_titan',
@@ -67,6 +81,9 @@ export const STAGES = [
     decor: [
       { type: 'giant_mushroom', count: 70, collide: 1.0, scale: [0.8, 2.0] },
       { type: 'glow_shroom', count: 200, collide: 0, scale: [0.6, 1.4] },
+      { type: 'shroom', models: ['Mushroom_Laetiporus', 'Mushroom_Common'], proc: false, count: 90, collide: 0, scale: [2.5, 5.5], tint: 0xd8b8ff },
+      { type: 'twisted', models: TWISTED, proc: false, count: 12, collide: 0.7, scale: [0.4, 0.65], tint: 0xd0d8f0 },
+      { type: 'fern', models: ['Fern_1', 'Plant_1_Big'], proc: false, count: 70, collide: 0, scale: [0.45, 0.8], tint: 0x60c0b0 },
       { type: 'grass', count: 700, collide: 0, scale: [0.6, 1.3], tint: 0x2a6a5a },
       { type: 'crystal', count: 40, collide: 0.8, scale: [0.6, 1.6], tint: 0x2fffe0 },
     ],
@@ -84,7 +101,8 @@ export const STAGES = [
     decor: [
       { type: 'obsidian_spike', count: 70, collide: 0.9, scale: [0.8, 2.2] },
       { type: 'lava_rock', count: 60, collide: 1.2, scale: [0.7, 1.8] },
-      { type: 'dead_tree', count: 50, collide: 0.5, scale: [0.8, 1.5] },
+      { type: 'dead_tree', models: DEAD, count: 40, collide: 0.6, scale: [0.4, 0.7], tint: 0x4a3434 },
+      { type: 'rock', models: ROCKS, proc: false, count: 25, collide: 1.2, scale: [0.8, 2.0], tint: 0x5a4848, tilt: 0.4 },
       { type: 'grass', count: 250, collide: 0, scale: [0.5, 0.9], tint: 0x3a2a22 },
     ],
     enemies: { magma_hound: 4, fire_imp: 3, obsidian_brute: 1, ember_wisp: 3 },
@@ -103,6 +121,8 @@ export const STAGES = [
       { type: 'void_crystal', count: 70, collide: 0.9, scale: [0.8, 2.2] },
       { type: 'ruin_pillar', count: 30, collide: 1.0, scale: [1, 1.8], tint: 0x3a2a5a },
       { type: 'floating_rock', count: 40, collide: 0, scale: [0.8, 2.5] },
+      { type: 'twisted', models: TWISTED, proc: false, count: 14, collide: 0.7, scale: [0.4, 0.65], tint: 0xf0b0ff },
+      { type: 'plant', models: ['Plant_1_Big', 'Fern_1'], proc: false, count: 60, collide: 0, scale: [0.4, 0.8], tint: 0xb080ff },
       { type: 'grass', count: 500, collide: 0, scale: [0.6, 1.2], tint: 0x5a2a8a },
     ],
     enemies: { void_reaver: 3, eye_stalker: 3, null_shade: 3, void_bomber: 3 },
@@ -119,6 +139,8 @@ export const STAGES = [
     decor: [
       { type: 'ruin_pillar', count: 45, collide: 1.0, scale: [1.1, 2.0], tint: 0xf2e6c0 },
       { type: 'crystal', count: 40, collide: 0.8, scale: [0.8, 1.8], tint: 0xffd27a },
+      { type: 'twisted', models: TWISTED, proc: false, count: 8, collide: 0.7, scale: [0.4, 0.6], tint: 0xfff0c8 },
+      { type: 'flower', models: ['Flower_3_Group', 'Flower_4_Group', 'Bush_Common_Flowers'], proc: false, count: 90, collide: 0, scale: [0.45, 0.8], tint: 0xfff4e0 },
       { type: 'floating_rock', count: 35, collide: 0, scale: [1, 2.6] },
       { type: 'grass', count: 400, collide: 0, scale: [0.5, 1.1], tint: 0xcfc6f0 },
     ],

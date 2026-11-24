@@ -149,7 +149,10 @@ export function addRimLight(mat, color, strength = 0.5) {
 // Wind sway for instanced vegetation: bends vertices by their height.
 export const windUniform = { value: 0 };
 export function swayMaterial(amp) {
-  const m = MAT.vc.clone();
+  return addSway(MAT.vc.clone(), amp);
+}
+/** Add height-based wind sway to any (instanced) material. */
+export function addSway(m, amp) {
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = windUniform;
     shader.vertexShader = shader.vertexShader
@@ -169,7 +172,7 @@ export function swayMaterial(amp) {
         transformed.z += cos(ph * 0.8) * hgt * hgt * ${(amp * 0.6).toFixed(4)} * gust;`
       );
   };
-  m.customProgramCacheKey = () => 'sway' + amp;
+  m.customProgramCacheKey = () => 'sway' + amp + m.type;
   return m;
 }
 

@@ -7,6 +7,7 @@ import { Game } from './game/game.js';
 import { UI } from './ui/ui.js';
 import { initMaterials } from './game/models.js';
 import { Music } from './core/music.js';
+import { preloadAssets } from './game/assets.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -25,7 +26,7 @@ function showError(msg) {
 window.addEventListener('error', (e) => showError(e.message + (e.filename ? `\n${e.filename}:${e.lineno}` : '')));
 window.addEventListener('unhandledrejection', (e) => showError('Promise: ' + (e.reason?.stack || e.reason)));
 
-function boot() {
+async function boot() {
   window.__G = G; // handy for debugging from the console
   window.__Game = Game;
   loadSave();
@@ -76,6 +77,9 @@ function boot() {
 
   Input.init(canvas);
   Music.init();
+  // load the 3D nature models before the first world is generated
+  const loadingEl = document.getElementById('loading');
+  await preloadAssets((f) => { loadingEl.textContent = `Loading… ${Math.round(f * 100)}%`; });
   Game.init();
   UI.init();
   document.getElementById('loading').classList.add('hidden');
