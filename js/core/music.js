@@ -11,6 +11,13 @@ import { getAudioContext } from './audio.js';
 export const STAGE_TRACKS = [
   'assets/music/Imhotep.mp3',
   'assets/music/Obstacular Explosion (Live Reading Feb `86).mp3',
+  'assets/music/Curious Corn.mp3',
+  'assets/music/Feng Shui.mp3',
+  'assets/music/Jurassic Shift.mp3',
+  'assets/music/Oolite Grove & Citadel Jam.mp3',
+  'assets/music/Vibuthi.mp3',
+  'assets/music/Waterfall City.mp3',
+  'assets/music/Yoy Mandala.mp3',
 ];
 export const FINAL_TRACKS = []; // add the final boss track(s) here
 
