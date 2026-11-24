@@ -29,7 +29,7 @@
         <div id="hud-diff"><div id="hud-diff-fill"></div><span id="hud-diff-label">Easy</span></div>
       </div>
       <div id="hud-tr">
-        <div id="hud-coins"><span class="coin-icon"></span><span id="hud-coin-val">0</span><span id="hud-devil" class="hidden" title="Devil's Trademarks">😈<b>0</b></span></div>
+        <div id="hud-coins"><span class="coin-icon"></span><span id="hud-coin-val">0</span><span id="hud-devil" class="hidden" title="Devil's Trademarks"><img class="pxi" src="assets/textures/raven-fantasy/fa1226.png" alt=""><b>0</b></span></div>
         <canvas id="minimap" width="200" height="200" title="Map (M)"></canvas>
         <div id="hud-items"></div>
       </div>
@@ -40,7 +40,7 @@
       <div id="hud-objective"></div>
       <div id="crosshair"><div></div></div>
       <div id="hud-bhop" class="hidden"></div>
-      <div id="portal-marker" class="hidden">🌀<span></span></div>
+      <div id="portal-marker" class="hidden"><img class="pxi" src="assets/textures/raven-fantasy/fa1145.png" alt=""><span></span></div>
       <div id="hud-prompt" class="hidden"></div>
       <div id="hud-bl">
         <div id="hud-level">Lv <b id="hud-level-val">1</b></div>
@@ -64,15 +64,15 @@
       <div id="look-zone"></div>
       <div id="joy-zone"><div id="joy-base"><div id="joy-knob"></div></div></div>
       <div id="touch-btns">
-        <button class="tbtn big" id="tb-primary" data-action="primary" data-drag="1" data-slot="primary"><span class="ic">🔫</span><i class="cd"></i></button>
-        <button class="tbtn" id="tb-a1" data-action="ability1" data-slot="ability1"><span class="ic">⚡</span><i class="cd"></i><b class="cdt"></b></button>
-        <button class="tbtn" id="tb-a2" data-action="ability2" data-slot="ability2"><span class="ic">🌀</span><i class="cd"></i><b class="cdt"></b></button>
-        <button class="tbtn ult" id="tb-ult" data-action="ultimate" data-slot="ultimate"><span class="ic">🌪️</span><i class="cd"></i><b class="cdt"></b></button>
+        <button class="tbtn big" id="tb-primary" data-action="primary" data-drag="1" data-slot="primary"><span class="ic"></span><i class="cd"></i></button>
+        <button class="tbtn" id="tb-a1" data-action="ability1" data-slot="ability1"><span class="ic"></span><i class="cd"></i><b class="cdt"></b></button>
+        <button class="tbtn" id="tb-a2" data-action="ability2" data-slot="ability2"><span class="ic"></span><i class="cd"></i><b class="cdt"></b></button>
+        <button class="tbtn ult" id="tb-ult" data-action="ultimate" data-slot="ultimate"><span class="ic"></span><i class="cd"></i><b class="cdt"></b></button>
         <button class="tbtn" id="tb-jump" data-action="jump"><span class="ic">⤒</span></button>
         <button class="tbtn hidden" id="tb-interact" data-action="interact"><span class="ic">✋</span></button>
       </div>
       <button class="tbtn small" id="tb-pause" data-action="pause"><span class="ic">⏸</span></button>
-      <button class="tbtn small" id="tb-inv" data-action="inventory"><span class="ic">🎒</span></button>
+      <button class="tbtn small" id="tb-inv" data-action="inventory"><span class="ic"><img class="pxi" src="assets/textures/raven-fantasy/fa158.png" alt=""></span></button>
     </div>
 
     <!-- ===================== SCREENS ===================== -->
@@ -81,11 +81,11 @@
         <h1 class="logo">RISK<span>of</span>BONK</h1>
         <p class="tagline">A 3rd-person roguelike. Loot, level, survive. It only gets worse.</p>
         <div class="menu-col">
-          <button class="btn primary hidden" id="btn-continue">⏯ Continue Run<small id="continue-info"></small></button>
-          <button class="btn primary" data-go="select">▶ New Run</button>
-          <button class="btn" data-go="logbook">📖 Logbook</button>
-          <button class="btn" data-go="settings">⚙ Settings</button>
-          <button class="btn" data-go="help">❓ How to Play</button>
+          <button class="btn primary hidden" id="btn-continue"><img class="pxi" src="assets/textures/raven-fantasy/fa11.png" alt=""> Continue Run<small id="continue-info"></small></button>
+          <button class="btn primary" data-go="select"><img class="pxi" src="assets/textures/raven-fantasy/fa1123.png" alt=""> New Run</button>
+          <button class="btn" data-go="logbook"><img class="pxi" src="assets/textures/raven-fantasy/fa100.png" alt=""> Logbook</button>
+          <button class="btn" data-go="settings"><img class="pxi" src="assets/textures/raven-fantasy/fa127.png" alt=""> Settings</button>
+          <button class="btn" data-go="help"><img class="pxi" src="assets/textures/raven-fantasy/fa13.png" alt=""> How to Play</button>
         </div>
         <p class="foot" id="title-foot"></p>
       </div>
@@ -170,7 +170,7 @@
               <li><b>Right side</b>: drag to look</li>
               <li>Your primary attack fires automatically</li>
               <li>Buttons for abilities, ultimate, jump, interact</li>
-              <li>🎒 shows items &amp; stats</li>
+              <li><img class="pxi" src="assets/textures/raven-fantasy/fa158.png" alt=""> shows items &amp; stats</li>
             </ul>
           </div>
           <div>
@@ -178,7 +178,7 @@
             <ul>
               <li>Kill enemies for <b>coins</b> and <b>XP</b>. Level-ups let you pick an upgrade.</li>
               <li>Spend coins on <b>chests</b>: Common · <span class="r-rare">Rare</span> · <span class="r-epic">Epic</span> · <span class="r-legendary">Legendary</span>.</li>
-              <li>Find the <b>portal</b> 🌀, interact to summon the <b>boss</b>.</li>
+              <li>Find the <b>portal</b> <img class="pxi" src="assets/textures/raven-fantasy/fa1145.png" alt="">, interact to summon the <b>boss</b>.</li>
               <li>Stay in the ring to charge the portal, kill the boss, then leave.</li>
               <li>Difficulty rises <b>exponentially</b> with time and stages. Don't dawdle.</li>
               <li>Achievements unlock new survivors and items. Every unlock can be earned from a fresh save.</li>
@@ -194,8 +194,8 @@
         <h2>Paused</h2>
         <div class="menu-col">
           <button class="btn primary" id="btn-resume">Resume</button>
-          <button class="btn" data-go="settings">⚙ Settings</button>
-          <button class="btn" id="btn-savequit">💾 Save &amp; Quit</button>
+          <button class="btn" data-go="settings"><img class="pxi" src="assets/textures/raven-fantasy/fa127.png" alt=""> Settings</button>
+          <button class="btn" id="btn-savequit"><img class="pxi" src="assets/textures/raven-fantasy/fa10.png" alt=""> Save &amp; Quit</button>
           <button class="btn danger" id="btn-quit">Abandon Run</button>
         </div>
         <div id="pause-stats"></div>
@@ -212,20 +212,20 @@
 
     <div id="screen-victory" class="screen dim hidden">
       <div class="panel wide victory">
-        <div class="vic-crown">👑</div>
+        <div class="vic-crown"><img class="pxi" src="assets/textures/raven-fantasy/fa15.png" alt=""></div>
         <h2 class="vic-title">VICTORY</h2>
         <p class="vic-sub">The Apex Sovereign has fallen. The run could end here… or you could keep going.</p>
         <div id="victory-body"></div>
         <div class="menu-row">
-          <button class="btn primary" id="btn-vic-continue">🔁 Continue the Run (harder loop)</button>
-          <button class="btn" id="btn-vic-end">🏁 End Run</button>
+          <button class="btn primary" id="btn-vic-continue"><img class="pxi" src="assets/textures/raven-fantasy/fa1145.png" alt=""> Continue the Run (harder loop)</button>
+          <button class="btn" id="btn-vic-end"><img class="pxi" src="assets/textures/raven-fantasy/fa1108.png" alt=""> End Run</button>
         </div>
       </div>
     </div>
 
     <div id="screen-moai" class="screen dim hidden">
       <div class="levelup-wrap">
-        <h2 class="glow moai-t">🗿 The Moai Speaks</h2>
+        <h2 class="glow moai-t"><img class="pxi" src="assets/textures/raven-fantasy/fa17.png" alt=""> The Moai Speaks</h2>
         <p class="sub">"Choose one gift… or bargain with the devil."</p>
         <div id="moai-cards"></div>
       </div>
@@ -238,7 +238,7 @@
         <h2 class="dead">YOU DIED</h2>
         <div id="gameover-body"></div>
         <div class="menu-row">
-          <button class="btn primary" id="btn-retry">↻ Try Again</button>
+          <button class="btn primary" id="btn-retry"><img class="pxi" src="assets/textures/raven-fantasy/fa1164.png" alt=""> Try Again</button>
           <button class="btn" id="btn-menu">Main Menu</button>
         </div>
       </div>

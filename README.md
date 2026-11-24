@@ -66,11 +66,26 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 
 ## Music
 
-Tracks live in `assets/music/` and are streamed (they start instantly, even large files).
-Stages 1–6 pick a random track from `STAGE_TRACKS` in `js/core/music.js` every time a stage starts (never the same one twice in a row) and crossfade into it.
-The final stage uses `FINAL_TRACKS` (empty for now, so the music fades out there). Music volume has its own slider in Settings and is quieter while paused.
+Tracks live in `assets/music/` and are streamed (they start instantly, even large files). All lists are in `js/core/music.js`:
 
-To add a track: upload it to `assets/music/` and add its path to the list in `js/core/music.js`.
+| When | Folder | List |
+|---|---|---|
+| Title & character select | `assets/music/main-menu/` | `MENU_TRACKS` |
+| Stages 1–6 (random, never the same twice in a row) | `assets/music/` | `STAGE_TRACKS` |
+| A portal boss is summoned (random, never the same twice in a row) | `assets/music/bosses/` | `BOSS_TRACKS` |
+| Final stage / Apex Sovereign | `assets/music/final/` | `FINAL_TRACKS` |
+
+When every portal boss is dead, the stage song fades back in where it left off. Browsers only allow sound after the first click/tap/key,
+so the menu song starts on your first input. Music volume has its own slider in Settings and is quieter while paused.
+
+To add a track: upload it to the right folder and add its path to the matching list in `js/core/music.js`.
+
+## Icons
+
+All item, ability, upgrade, achievement, minimap and menu icons are 16×16 pixel art from the **Raven Fantasy icon pack**
+(`assets/textures/raven-fantasy/faN.png`), scaled up crisply. Every one of the 209 items has its own icon; achievements get an
+icon from what they track (kills, bosses, chests, stages…). The mapping lives in `js/data/icons.js` — change a number there to
+swap an icon (the numbers are the file names).
 
 ## 3D models (asset packs)
 

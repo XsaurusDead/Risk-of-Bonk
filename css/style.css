@@ -297,7 +297,7 @@ body.touch #minimap { width: 118px; height: 118px; }
 #hud-tr { position: absolute; right: calc(14px + var(--safe-r)); top: calc(12px + var(--safe-t)); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: 46vw; }
 #hud-coins { font-size: 26px; display: flex; align-items: center; gap: 8px; transition: color 0.2s; }
 #hud-coins.flash { color: #ff5a5a; animation: shakeX 0.3s; }
-.coin-icon { width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff3a0, #ffcc22 45%, #b07a00); box-shadow: 0 0 6px #ffcc2288; }
+.coin-icon { width: 22px; height: 22px; background: url('../assets/textures/raven-fantasy/fa131.png') center / contain no-repeat; image-rendering: pixelated; filter: drop-shadow(0 0 4px #ffcc2288); }
 #hud-items { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
 .hud-item { position: relative; width: 32px; height: 32px; border-radius: 8px; background: rgba(0, 0, 0, 0.5); border: 2px solid var(--c); display: grid; place-items: center; font-size: 18px; }
 .hud-item b { position: absolute; right: -3px; bottom: -5px; font-size: 11px; color: #fff; }
@@ -471,4 +471,35 @@ body.touch #hud-prompt { top: 40%; }
   #touch-btns { transform: scale(0.85); transform-origin: bottom right; }
   .panel { max-height: 90vh; padding: 14px; }
   .hud-item { width: 26px; height: 26px; font-size: 14px; }
+}
+
+/* ---------------- pixel-art icons (Raven Fantasy pack, 16x16) ---------------- */
+.pxi { width: 1.15em; height: 1.15em; image-rendering: pixelated; image-rendering: crisp-edges; vertical-align: -0.22em; display: inline-block; pointer-events: none; -webkit-user-drag: none; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)); }
+.btn .pxi { width: 1.3em; height: 1.3em; margin-right: 4px; vertical-align: -0.3em; }
+.ic > .pxi, .ico > .pxi, .ap-ri > .pxi, .hud-item > .pxi, .ab > span > .pxi, .cs-mini > .pxi { width: 1.25em; height: 1.25em; vertical-align: middle; }
+.hud-item > .pxi { width: 24px; height: 24px; }
+.ab > span > .pxi { width: 34px; height: 34px; }
+.tbtn .ic .pxi { width: 1.3em; height: 1.3em; }
+.ap-icon .pxi { width: 56px; height: 56px; filter: drop-shadow(0 0 10px #ffd27a) drop-shadow(0 3px 0 rgba(0, 0, 0, 0.6)); }
+.ap-ri .pxi { width: 40px; height: 40px; }
+.ap-ri.portrait .pxi { width: 30px; height: 30px; }
+.rc .ic .pxi { width: 64px; height: 64px; }
+.up-card .ic .pxi { width: 56px; height: 56px; }
+.item-entry .ic .pxi { width: 32px; height: 32px; }
+.cs-card .ico .pxi { width: 32px; height: 32px; }
+.toast .ic .pxi { width: 32px; height: 32px; }
+.vic-crown .pxi { width: 96px; height: 96px; filter: drop-shadow(0 0 18px #ffd27a); }
+#hud-objective .pxi, #hud-prompt .pxi { width: 18px; height: 18px; }
+#portal-marker .pxi { width: 28px; height: 28px; }
+#hud-devil .pxi { width: 20px; height: 20px; }
+.ach { grid-template-columns: 40px 1fr auto; }
+.ach .ach-ic { grid-row: span 1; display: grid; place-items: center; }
+.ach .ach-ic .pxi { width: 32px; height: 32px; }
+.ach:not(.done) .ach-ic .pxi { filter: grayscale(0.9) brightness(0.7); }
+.go-new .pxi { width: 18px; height: 18px; }
+@media (max-width: 700px) {
+  .up-card .ic .pxi { width: 40px; height: 40px; }
+  .rc .ic .pxi { width: 48px; height: 48px; }
+  .hud-item > .pxi { width: 20px; height: 20px; }
+  .ab > span > .pxi { width: 26px; height: 26px; }
 }

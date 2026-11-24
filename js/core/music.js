@@ -1,12 +1,14 @@
 // Background music: streamed MP3s with crossfades and looping.
 //
 // Tracks live in assets/music/. Stages 1-6 pick a random track from
-// STAGE_TRACKS each time a stage starts; the final stage (Celestial Throne)
-// will use FINAL_TRACKS once that music is added.
+// STAGE_TRACKS each time a stage starts. Summoning the portal boss switches to a
+// random BOSS_TRACKS song (the stage song resumes where it left off once every
+// boss is dead). The final stage (Celestial Throne) plays FINAL_TRACKS and the
+// title / character select screens play MENU_TRACKS.
 // Audio is routed through WebAudio gain nodes so fades also work on iOS,
 // where the <audio> volume property is read-only.
 import { G } from './state.js';
-import { getAudioContext } from './audio.js';
+import { getAudioContext, unlockAudio } from './audio.js';
 
 export const STAGE_TRACKS = [
   'assets/music/Imhotep.mp3',
@@ -19,7 +21,14 @@ export const STAGE_TRACKS = [
   'assets/music/Waterfall City.mp3',
   'assets/music/Yoy Mandala.mp3',
 ];
-export const FINAL_TRACKS = []; // add the final boss track(s) here
+export const BOSS_TRACKS = [
+  'assets/music/bosses/Aumriff (Mantric Mutterings in Which Tig Evaporates) (Live Reading Dec `85).mp3',
+  'assets/music/bosses/Ozric Tentacles (Electronic) - Jellylips (Live from Blue Bubble Studios).mp3',
+  'assets/music/bosses/Ullular Gate.mp3',
+  'assets/music/bosses/ozric tentacles   pyramidion.mp3',
+];
+export const FINAL_TRACKS = ['assets/music/final/Mooncalf.mp3'];
+export const MENU_TRACKS = ['assets/music/main-menu/Yaboop Yaboop.mp3'];
 
 const FADE = 1.6;
 
@@ -65,6 +74,50 @@ export const Music = {
 
   init() {
     this.decks = [new Deck(), new Deck()];
+    this.lastBoss = null;
+    this.resumeAfterBoss = null;
+    // browsers block audio until the first click/tap/key: start whatever should be playing then
+    const kick = () => {
+      unlockAudio();
+      const deck = this.decks[this.cur];
+      if (this.current && deck.el.paused) {
+        deck.connect();
+        const p = deck.el.play();
+        if (p && p.catch) p.catch(() => {});
+        deck.fadeTo(this.volume, FADE);
+      }
+    };
+    for (const ev of ['pointerdown', 'keydown', 'touchend']) document.addEventListener(ev, kick, { passive: true });
+  },
+
+  /** Title / character select music (keeps playing if it already is). */
+  playMenu() {
+    this.resumeAfterBoss = null;
+    if (!MENU_TRACKS.length) return this.stop();
+    if (MENU_TRACKS.includes(this.current)) return;
+    this.play(MENU_TRACKS[Math.floor(Math.random() * MENU_TRACKS.length)]);
+  },
+
+  /** A portal boss was summoned: switch to a random boss song, remember the stage song. */
+  playBoss() {
+    if (!BOSS_TRACKS.length) return;
+    if (BOSS_TRACKS.includes(this.current)) return;
+    if (this.current && STAGE_TRACKS.includes(this.current)) {
+      this.resumeAfterBoss = { url: this.current, t: this.decks[this.cur].el.currentTime || 0 };
+    }
+    let pick = BOSS_TRACKS[Math.floor(Math.random() * BOSS_TRACKS.length)];
+    if (BOSS_TRACKS.length > 1) while (pick === this.lastBoss) pick = BOSS_TRACKS[Math.floor(Math.random() * BOSS_TRACKS.length)];
+    this.lastBoss = pick;
+    this.play(pick);
+  },
+
+  /** Every portal boss is dead: back to the stage song where it left off. */
+  endBoss() {
+    if (!BOSS_TRACKS.includes(this.current)) return;
+    const r = this.resumeAfterBoss;
+    this.resumeAfterBoss = null;
+    if (r) this.play(r.url, r.t);
+    else this.playStage(false);
   },
 
   get volume() {
@@ -74,6 +127,7 @@ export const Music = {
 
   /** Pick a random stage track (never the same one twice in a row when there's a choice). */
   playStage(final = false) {
+    this.resumeAfterBoss = null;
     const list = final ? FINAL_TRACKS : STAGE_TRACKS;
     if (!list.length) return this.stop();
     let pick = list[Math.floor(Math.random() * list.length)];
@@ -81,7 +135,7 @@ export const Music = {
     this.play(pick);
   },
 
-  play(url) {
+  play(url, startAt = 0) {
     if (!this.decks) this.init();
     const old = this.decks[this.cur];
     this.cur = 1 - this.cur;
@@ -89,14 +143,15 @@ export const Music = {
     deck.connect();
     deck.src = url;
     deck.el.src = encodeURI(url);
-    deck.el.currentTime = 0;
+    deck.el.currentTime = startAt;
+    if (startAt) deck.el.addEventListener('loadedmetadata', () => { deck.el.currentTime = startAt; }, { once: true });
     deck.fadeTo(0, 0.01);
     const p = deck.el.play();
     if (p && p.catch) p.catch(() => {});
     deck.fadeTo(this.volume, FADE);
     this.fadeOutDeck(old);
     this.current = url;
-    this.last = url;
+    if (STAGE_TRACKS.includes(url)) this.last = url;
   },
 
   fadeOutDeck(deck) {

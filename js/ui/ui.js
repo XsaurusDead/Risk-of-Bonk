@@ -18,6 +18,7 @@ import { COSTUMES, COSTUME_LEVELS } from '../game/models.js';
 import { charLevelInfo } from '../core/charlevel.js';
 import { formatTime, formatNum, RARITY, RARITY_ORDER } from '../core/util.js';
 import * as THREE from 'three';
+import { icon, achievementIcon, characterIcon, UI_ICONS } from '../data/icons.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -191,7 +192,7 @@ export const UI = {
       b.title = c.name;
       b.style.background = c.color;
       b.style.setProperty('--c', c.color);
-      b.textContent = CHAR_EMOJI[id];
+      b.innerHTML = characterIcon(id);
       b.addEventListener('click', () => {
         sfx('ui');
         const dir = CHARACTER_ORDER.indexOf(id) >= CHARACTER_ORDER.indexOf(this.selChar) ? 1 : -1;
@@ -283,7 +284,7 @@ export const UI = {
     wrap.innerHTML = COSTUMES.map((co, i) => {
       const un = isCharacterUnlocked(id) && isCostumeUnlocked(id, i);
       const bg = co.swatch ? co.swatch : c.color;
-      return `<button class="cs-swatch ${i === cur ? 'sel' : ''} ${un ? '' : 'locked'}" data-i="${i}" title="${esc(co.name)}" style="background:${bg}">${i === 0 ? CHAR_EMOJI[id] : ''}</button>`;
+      return `<button class="cs-swatch ${i === cur ? 'sel' : ''} ${un ? '' : 'locked'}" data-i="${i}" title="${esc(co.name)}" style="background:${bg}">${i === 0 ? characterIcon(id) : ''}</button>`;
     }).join('');
     wrap.querySelectorAll('.cs-swatch').forEach((b) => {
       b.addEventListener('click', () => this.setCostume(+b.dataset.i));
@@ -405,7 +406,7 @@ export const UI = {
           const isDone = !!G.save.achievements[a.id];
           const prog = isDone ? a.cond.value : achievementProgress(a);
           const pct = Math.min(100, (prog / a.cond.value) * 100);
-          return `<div class="ach ${isDone ? 'done' : ''}"><div><div class="nm">${esc(a.name)}</div><div class="ds">${esc(a.desc)}</div></div>
+          return `<div class="ach ${isDone ? 'done' : ''}"><div class="ach-ic">${achievementIcon(a)}</div><div><div class="nm">${esc(a.name)}</div><div class="ds">${esc(a.desc)}</div></div>
             <div class="rw">${rewardText(a)}<br><small>${formatNum(prog)} / ${formatNum(a.cond.value)}</small></div>
             <div class="prog"><i style="width:${pct}%"></i></div></div>`;
         }).join('') || '<p style="color:var(--muted)">Nothing here.</p>';
@@ -563,10 +564,10 @@ export const UI = {
     const keys = KEYS[Input.device] || KEYS.kbm;
     bar.innerHTML = skills.map((s, i) => `<div class="ab ${i === 3 ? 'ult' : ''}" data-slot="${SLOTS[i]}"><span>${s.icon}</span><i class="cd"></i><b class="cdt"></b><span class="key">${keys[i]}</span><span class="chg"></span></div>`).join('');
     // touch buttons get the character's icons
-    $('#tb-primary .ic').textContent = c.primary.icon;
-    $('#tb-a1 .ic').textContent = c.abilities[0].icon;
-    $('#tb-a2 .ic').textContent = c.abilities[1].icon;
-    $('#tb-ult .ic').textContent = c.abilities[2].icon;
+    $('#tb-primary .ic').innerHTML = c.primary.icon;
+    $('#tb-a1 .ic').innerHTML = c.abilities[0].icon;
+    $('#tb-a2 .ic').innerHTML = c.abilities[1].icon;
+    $('#tb-ult .ic').innerHTML = c.abilities[2].icon;
   },
 
   banner(title, sub, boss = false) {
@@ -593,7 +594,7 @@ export const UI = {
       const it = ITEMS[id];
       return `<button class="up-card" data-i="${i}" style="--c:${RARITY[it.rarity].color}"><div class="ic">${it.icon}</div><div><div class="rr">${RARITY[it.rarity].name}</div><div class="nm">${esc(it.name)}</div><div class="tx">${esc(it.desc)}</div></div><div class="key">[${i + 1}]</div></button>`;
     });
-    cards.push(`<button class="up-card devil" data-i="3"><div class="ic">😈</div><div><div class="rr">DEVIL'S TRADEMARK</div><div class="nm">Take the Mark</div><div class="tx">A rare currency. What it buys… you'll find out.</div></div><div class="key">[4]</div></button>`);
+    cards.push(`<button class="up-card devil" data-i="3"><div class="ic">${icon(UI_ICONS.devil)}</div><div><div class="rr">DEVIL'S TRADEMARK</div><div class="nm">Take the Mark</div><div class="tx">A rare currency. What it buys… you'll find out.</div></div><div class="key">[4]</div></button>`);
     $('#moai-cards').innerHTML = cards.join('');
     $$('#moai-cards .up-card').forEach((b) => b.addEventListener('click', () => Game.chooseMoai(+b.dataset.i)));
     this.showScreen('moai');
@@ -615,7 +616,7 @@ export const UI = {
     const t = document.createElement('div');
     t.className = 'toast';
     t.style.setProperty('--c', '#aaa');
-    t.innerHTML = `<div class="ic">ℹ️</div><div><div class="ds">${esc(text)}</div></div>`;
+    t.innerHTML = `<div class="ic">${icon(UI_ICONS.info)}</div><div><div class="ds">${esc(text)}</div></div>`;
     this.pushToast(t, '#toasts');
   },
   // Animated achievement popup (queued so several unlocks play one after another)
@@ -635,12 +636,12 @@ export const UI = {
     let reward = '';
     if (a.reward.character) {
       const c = CHARACTERS[a.reward.character];
-      reward = `<div class="ap-reward" style="--c:${c.color}"><div class="ap-ri portrait" style="background:${c.color}">${CHAR_EMOJI[a.reward.character] || '?'}</div><div class="ap-rt"><small>NEW SURVIVOR</small><b style="color:${c.color}">${esc(c.name)}</b><span>${esc(c.title)}</span></div></div>`;
+      reward = `<div class="ap-reward" style="--c:${c.color}"><div class="ap-ri portrait" style="background:${c.color}">${characterIcon(a.reward.character)}</div><div class="ap-rt"><small>NEW SURVIVOR</small><b style="color:${c.color}">${esc(c.name)}</b><span>${esc(c.title)}</span></div></div>`;
     } else if (a.reward.costume) {
       const [cid, ci] = a.reward.costume.split(':');
       const co = COSTUMES[+ci];
       const c = CHARACTERS[cid];
-      reward = `<div class="ap-reward" style="--c:${co.swatch}"><div class="ap-ri portrait" style="background:${co.swatch}">${CHAR_EMOJI[cid] || '?'}</div><div class="ap-rt"><small>NEW COSTUME</small><b style="color:${co.swatch}">${esc(co.name)} ${esc(c.name)}</b><span>Equip it on the survivor select screen</span></div></div>`;
+      reward = `<div class="ap-reward" style="--c:${co.swatch}"><div class="ap-ri portrait" style="background:${co.swatch}">${characterIcon(cid)}</div><div class="ap-rt"><small>NEW COSTUME</small><b style="color:${co.swatch}">${esc(co.name)} ${esc(c.name)}</b><span>Equip it on the survivor select screen</span></div></div>`;
     } else if (a.reward.item) {
       const it = ITEMS[a.reward.item];
       const col = RARITY[it.rarity].color;
@@ -649,7 +650,7 @@ export const UI = {
     const el = document.createElement('div');
     el.className = 'ach-pop';
     el.style.setProperty('--dur', dur + 'ms');
-    el.innerHTML = `<div class="ap-shine"></div><div class="ap-main"><div class="ap-icon">🏆</div><div class="ap-text"><div class="ap-k">ACHIEVEMENT UNLOCKED</div><div class="ap-n">${esc(a.name)}</div><div class="ap-d">${esc(a.desc)}</div></div></div>${reward}`;
+    el.innerHTML = `<div class="ap-shine"></div><div class="ap-main"><div class="ap-icon">${achievementIcon(a)}</div><div class="ap-text"><div class="ap-k">ACHIEVEMENT UNLOCKED</div><div class="ap-n">${esc(a.name)}</div><div class="ap-d">${esc(a.desc)}</div></div></div>${reward}`;
     const root = $('#ach-toasts');
     root.innerHTML = '';
     root.appendChild(el);
@@ -732,9 +733,9 @@ export const UI = {
       }).join('')}</div>`;
     }
     if (s.achievements.length) {
-      html += `<div class="go-new"><b>🏆 New this run:</b><br>${s.achievements.map((id) => {
+      html += `<div class="go-new"><b>${icon(UI_ICONS.trophy)} New this run:</b><br>${s.achievements.map((id) => {
         const a = ACHIEVEMENTS.find((x) => x.id === id);
-        return `${a.name} — ${rewardText(a)}`;
+        return `${achievementIcon(a)} ${a.name} — ${rewardText(a)}`;
       }).join('<br>')}</div>`;
     }
     $('#gameover-body').innerHTML = html;
@@ -778,7 +779,7 @@ export const UI = {
       const it = ITEMS[id];
       return `<div class="rc" data-i="${i}" style="--c:${RARITY[it.rarity].color}"><div class="ic">${it.icon}</div><div class="nm">${esc(it.name)}</div><i class="bar"></i></div>`;
     }).join('');
-    $('#rl-title').textContent = kind === 'large' ? '✨ Large Chest' : '📦 Chest';
+    $('#rl-title').innerHTML = kind === 'large' ? `${icon(UI_ICONS.largeChest)} Large Chest` : `${icon(UI_ICONS.chest)} Chest`;
     $('#rl-result').classList.remove('show');
     $('#rl-result').innerHTML = '';
     $('#rl-hint').textContent = '';
@@ -966,12 +967,12 @@ export const UI = {
     // objective + portal marker
     const P = G.world.portal;
     let obj = '';
-    if (run.stage.final) obj = run.finalSpawnT > 0 ? `👑 The Apex Sovereign descends in ${Math.ceil(run.finalSpawnT)}s…` : run.won ? '👑 Victory!' : '👑 Defeat the Apex Sovereign';
-    else if (P.state === 'idle') obj = '🌀 Find the portal and activate it to summon the boss';
-    else if (P.state === 'charging') obj = `⚡ Charging portal: ${Math.floor(P.charge * 100)}%${!run.bossDead ? ' · Defeat the boss' : ''}${Math.hypot(p.pos.x - P.pos.x, p.pos.z - P.pos.z) > G.world.chargeRadius ? ' · Return to the ring!' : ''}`;
-    else if (P.state === 'ready') obj = '✨ Portal ready — enter it to continue';
+    if (run.stage.final) obj = run.finalSpawnT > 0 ? `${icon(1226)} The Apex Sovereign descends in ${Math.ceil(run.finalSpawnT)}s…` : run.won ? `${icon(UI_ICONS.crown)} Victory!` : `${icon(1226)} Defeat the Apex Sovereign`;
+    else if (P.state === 'idle') obj = `${icon(UI_ICONS.portal)} Find the portal and activate it to summon the boss`;
+    else if (P.state === 'charging') obj = `${icon(1039)} Charging portal: ${Math.floor(P.charge * 100)}%${!run.bossDead ? ' · Defeat the boss' : ''}${Math.hypot(p.pos.x - P.pos.x, p.pos.z - P.pos.z) > G.world.chargeRadius ? ' · Return to the ring!' : ''}`;
+    else if (P.state === 'ready') obj = `${icon(1151)} Portal ready — enter it to continue`;
     const objEl = $('#hud-objective');
-    if (objEl.textContent !== obj) objEl.textContent = obj;
+    if (this.objHtml !== obj) objEl.innerHTML = this.objHtml = obj;
     this.updatePortalMarker(P, p);
 
     // interaction prompt
@@ -984,7 +985,7 @@ export const UI = {
         const cost = Game.chestCost(it.obj);
         const can = run.coins >= cost;
         const tn = { normal: '', large: 'Large ', epic: '<span class="r-epic">Epic</span> ', legendary: '<span class="r-legendary">Legendary</span> ' }[it.obj.tier] || '';
-        text = `<span class="k">${key}</span>Open ${tn}Chest — <span class="${can ? '' : 'cant'}">🪙 ${cost}</span>`;
+        text = `<span class="k">${key}</span>Open ${tn}Chest — <span class="${can ? '' : 'cant'}">${icon(UI_ICONS.coin)} ${cost}</span>`;
       } else if (it.kind === 'portal') {
         const n = run.bossCount || 1;
         text = it.obj.state === 'idle' ? `<span class="k">${key}</span>Activate portal <span class="cant">(summons ${n > 1 ? n + ' bosses' : 'the boss'}!)</span>` : `<span class="k">${key}</span>Enter portal`;

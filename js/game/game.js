@@ -109,7 +109,7 @@ export const Game = {
 
   // ------------------------------------------------------------ menu backdrop
   enterMenu() {
-    Music.stop();
+    Music.playMenu();
     this.cleanupRun();
     G.mode = 'menu';
     if (!this.menuWorld) {
@@ -647,6 +647,7 @@ export const Game = {
       G.ui.banner(def.name, def.title, true);
       G.ui.setBoss(run.boss);
     }
+    Music.playBoss();
     shake(0.6);
     sfx('roar');
   },
@@ -745,6 +746,7 @@ export const Game = {
       this.onFinalBossKilled();
       return;
     }
+    if (run.bossDead) Music.endBoss();
     if (G.ui && run.bossDead) {
       G.ui.setBoss(null);
       G.ui.banner(e.def.name + ' defeated', G.world.portal.charge >= 1 ? 'The portal is ready' : 'Finish charging the portal');

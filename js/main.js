@@ -8,6 +8,7 @@ import { UI } from './ui/ui.js';
 import { initMaterials } from './game/models.js';
 import { Music } from './core/music.js';
 import { preloadAssets } from './game/assets.js';
+import { applyIcons, preloadIcons } from './data/icons.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -29,6 +30,7 @@ window.addEventListener('unhandledrejection', (e) => showError('Promise: ' + (e.
 async function boot() {
   window.__G = G; // handy for debugging from the console
   window.__Game = Game;
+  applyIcons(); // pixel-art icons replace the emoji in items, abilities and upgrades
   loadSave();
   const coarse = window.matchMedia?.('(pointer: coarse)').matches;
   if (coarse) {
@@ -79,7 +81,7 @@ async function boot() {
   Music.init();
   // load the 3D nature models before the first world is generated
   const loadingEl = document.getElementById('loading');
-  await preloadAssets((f) => { loadingEl.textContent = `Loading… ${Math.round(f * 100)}%`; });
+  await Promise.all([preloadAssets((f) => { loadingEl.textContent = `Loading… ${Math.round(f * 100)}%`; }), preloadIcons()]);
   Game.init();
   UI.init();
   document.getElementById('loading').classList.add('hidden');
