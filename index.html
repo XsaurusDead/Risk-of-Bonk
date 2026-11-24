@@ -85,6 +85,7 @@
           <button class="btn primary hidden" id="btn-continue"><img class="pxi" src="assets/textures/raven-fantasy/fa11.png" alt=""> Continue Run<small id="continue-info"></small></button>
           <button class="btn primary" data-go="select"><img class="pxi" src="assets/textures/raven-fantasy/fa1123.png" alt=""> New Run</button>
           <button class="btn" data-go="logbook"><img class="pxi" src="assets/textures/raven-fantasy/fa100.png" alt=""> Logbook</button>
+        <button class="btn" data-go="leaderboard"><img class="pxi" src="assets/textures/raven-fantasy/fa15.png" alt=""> Leaderboard</button>
           <button class="btn" data-go="settings"><img class="pxi" src="assets/textures/raven-fantasy/fa127.png" alt=""> Settings</button>
           <button class="btn" data-go="help"><img class="pxi" src="assets/textures/raven-fantasy/fa13.png" alt=""> How to Play</button>
         </div>
@@ -123,6 +124,15 @@
           <button class="tab" data-tab="stats">Records</button>
         </div>
         <div id="logbook-body" class="scroll"></div>
+      </div>
+      <div class="screen-actions"><button class="btn" data-back="title">← Back</button></div>
+    </div>
+
+    <div id="screen-leaderboard" class="screen hidden">
+      <div class="panel wide">
+        <h2 class="glow lb-title"><img class="pxi" src="assets/textures/raven-fantasy/fa15.png" alt=""> Leaderboard</h2>
+        <div class="lb-top"><span>Best runs on this device</span><select id="lb-filter" aria-label="Filter by survivor"></select></div>
+        <div id="lb-body" class="scroll"></div>
       </div>
       <div class="screen-actions"><button class="btn" data-back="title">← Back</button></div>
     </div>

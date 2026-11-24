@@ -22,6 +22,7 @@ import { icon, achievementIcon, characterIcon, UI_ICONS } from '../data/icons.js
 import { TOME_BY_ID, TOME_SLOTS, TOME_MAX, WEAPON_MAX, WEAPON_SLOTS } from '../data/tomes.js';
 import { WEAPONS } from '../data/weapons.js';
 import { loadCharModel } from '../game/charmodels.js';
+import { leaderboard } from '../core/leaderboard.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -167,6 +168,7 @@ export const UI = {
       this.renderLogbook('ach');
     }
     if (name === 'settings') this.renderSettings();
+    if (name === 'leaderboard') this.renderLeaderboard();
     if (name === 'title') {
       const d = loadRunData();
       $('#btn-continue').classList.toggle('hidden', !d);
@@ -391,6 +393,28 @@ export const UI = {
       $('#hud').classList.remove('hidden');
       Game.startRun(id);
     });
+  },
+
+  // ------------------------------------------------------------ leaderboard
+  renderLeaderboard() {
+    const all = leaderboard();
+    const sel = $('#lb-filter');
+    const chars = [...new Set(all.map((e) => e.charId))].filter((id) => CHARACTERS[id]);
+    const cur = this.lbFilter && (this.lbFilter === 'all' || chars.includes(this.lbFilter)) ? this.lbFilter : 'all';
+    sel.innerHTML = `<option value="all">All survivors</option>` + chars.map((id) => `<option value="${id}" ${id === cur ? 'selected' : ''}>${esc(CHARACTERS[id].name)}</option>`).join('');
+    sel.onchange = () => { this.lbFilter = sel.value; this.renderLeaderboard(); };
+    const rows = all.filter((e) => cur === 'all' || e.charId === cur);
+    const medal = (i) => (i < 3 ? `<span class="lb-medal m${i}">${i + 1}</span>` : `<span class="lb-rank">${i + 1}</span>`);
+    const date = (t) => new Date(t).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: '2-digit' });
+    $('#lb-body').innerHTML = rows.length ? `<div class="lb-row lb-hd"><span>#</span><span>Survivor</span><span>Score</span><span>Stage</span><span>Time</span><span>Lv</span><span>Kills</span><span>Items</span><span>Date</span></div>` + rows.map((e, i) => {
+      const c = CHARACTERS[e.charId] || { name: e.charId, color: '#ccc' };
+      const co = COSTUMES[e.costume || 0];
+      const outcome = e.victory ? `<span class="lb-won" title="Beat the final boss">${icon(UI_ICONS.crown)}</span>` : e.reason === 'quit' ? '<span class="lb-quit" title="Abandoned">⏏</span>' : '';
+      return `<div class="lb-row ${e.victory ? 'won' : ''}">${medal(i)}
+        <span class="lb-char">${characterIcon(e.charId)}<b style="color:${c.color}">${esc(c.name)}</b>${e.costume ? `<small>${esc(co?.name || '')}</small>` : ''}</span>
+        <span class="lb-score">${e.score.toLocaleString()}</span>
+        <span>${e.stage}${outcome}</span><span>${formatTime(e.time)}</span><span>${e.level}</span><span>${(e.kills || 0).toLocaleString()}</span><span>${e.items}</span><span class="lb-date">${date(e.date)}</span></div>`;
+    }).join('') : `<p class="lb-empty">No runs yet — finish a run (win, die or abandon it) to get on the board.</p>`;
   },
 
   // ------------------------------------------------------------ logbook
@@ -748,6 +772,10 @@ export const UI = {
         const a = ACHIEVEMENTS.find((x) => x.id === id);
         return `${achievementIcon(a)} ${a.name} — ${rewardText(a)}`;
       }).join('<br>')}</div>`;
+    }
+    if (s.lbRank) {
+      const medal = s.lbRank <= 3 ? ['🥇', '🥈', '🥉'][s.lbRank - 1] : icon(UI_ICONS.trophy);
+      html = `<div class="go-lb">${medal} New <b>#${s.lbRank}</b> on the leaderboard!</div>` + html;
     }
     $('#gameover-body').innerHTML = html;
     const t = $('#screen-gameover .dead');

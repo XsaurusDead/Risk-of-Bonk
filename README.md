@@ -54,6 +54,9 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 
 - **Stages:** Verdant Meadows → Scorched Dunes → Frostfang Peaks → Fungal Hollow → Molten Caldera → Void Sanctum → **Celestial Throne** (final). Each stage has its own terrain, palette, hazards (water / toxic sludge / lava / void / starlight) and enemy roster.
 - **Final boss:** on the Celestial Throne the *Apex Sovereign* descends after a few seconds. Its health and damage are re-scaled to your current power (DPS estimate × ~110 s, heavy hits ≈ 12% of your effective HP), it enrages at 50% and enters a *Final Form* at 25%. Beat it and you can **end the run** (victory) or **continue the run** into a harder loop for as long as you survive.
+- **Leaderboard** (main menu): the 25 best runs on this device, filterable by survivor. A run is recorded when it ends
+  (death, victory, or abandoning it after at least 20 s). Score = 1000 per stage cleared + 5000 for beating the final boss
+  + kills + 20 per level + 15 per minute survived. The game-over screen tells you when you made the board.
 - **Saving runs:** your run is checkpointed at every stage start, every 15 s and on *Save & Quit* (pause menu). *Continue Run* on the title screen picks it up again (the current stage gets a fresh map; character, level, items, tomes, weapon levels, coins and timer are kept). Dying, abandoning or ending the run clears the save.
 - **Coins & chests:** enemies drop coins and XP. Opening a chest freezes the game and spins a CS:GO-style item roulette that lands on your prize (skip with E / Space / A / tap).
   - Small chest: Common 70% · Rare 23% · Epic 6% · Legendary 1%

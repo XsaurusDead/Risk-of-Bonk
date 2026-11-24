@@ -25,6 +25,7 @@ import { track, trackMax, commitRunBests, persist, selectedCostume } from '../co
 import { weightedPick, shuffle, rand } from '../core/util.js';
 import { saveRun, clearRun, loadRunData } from '../core/runsave.js';
 import { Music } from '../core/music.js';
+import { recordRun } from '../core/leaderboard.js';
 import { updateGlyphs, clearGlyphs, glyphRing } from './glyphs.js';
 
 const _v = new THREE.Vector3();
@@ -415,7 +416,11 @@ export const Game = {
   quitToMenu(keepSave = false) {
     if (G.run) {
       if (keepSave && !G.run.ended && !G.player?.dead) saveRun();
-      else clearRun();
+      else {
+        clearRun();
+        // abandoning a run still puts it on the leaderboard
+        if (!G.run.ended && G.player && !G.player.dead) recordRun(this.summary(), 'quit');
+      }
       commitRunBests();
     }
     this.enterMenu();
@@ -756,7 +761,9 @@ export const Game = {
     commitRunBests();
     clearRun();
     G.mode = 'gameover';
-    if (G.ui) G.ui.showGameOver({ ...this.summary(), victory: true });
+    const s = { ...this.summary(), victory: true };
+    s.lbRank = recordRun(s, 'victory');
+    if (G.ui) G.ui.showGameOver(s);
   },
 
   onBossKilled(e) {
@@ -950,7 +957,9 @@ export const Game = {
       G.mode = 'gameover';
       commitRunBests();
       Input.releaseLock();
-      if (G.ui) G.ui.showGameOver(this.summary());
+      const s = this.summary();
+      s.lbRank = recordRun(s, 'death');
+      if (G.ui) G.ui.showGameOver(s);
     }, 2200);
   },
 
