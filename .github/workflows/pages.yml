@@ -28,8 +28,11 @@ jobs:
         run: |
           mkdir -p _site/assets/models/fox _site/assets/packs/stylized-nature _site/assets/textures
           cp -r index.html css js vendor _site/
-          cp -r assets/music _site/assets/
-          cp -r assets/textures/raven-fantasy _site/assets/textures/
+          mkdir -p _site/assets/music
+          find assets/music -maxdepth 1 -type f -exec cp {} _site/assets/music/ \;
+          cp -r assets/music/bosses assets/music/final assets/music/main-menu _site/assets/music/
+          cp -r assets/sfx _site/assets/
+          cp -r assets/textures/raven-fantasy assets/textures/weapons assets/textures/glyphs _site/assets/textures/
           cp -r assets/packs/stylized-nature/web _site/assets/packs/stylized-nature/
           cp -r assets/models/game _site/assets/models/
           cp assets/models/fox/fox.glb _site/assets/models/fox/

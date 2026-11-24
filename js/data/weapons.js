@@ -49,7 +49,7 @@ function randomTargets(p, n, range = RANGE) {
 // ups: which stats a level-up can improve
 export const WEAPONS = {
   orbit: {
-    name: 'Orbiting Blades', icon: 1504, cd: 0.1, proj: 2, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
+    name: 'Orbiting Blades', icon: 'weapons/e_0_3', cd: 0.1, proj: 2, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
     desc: 'Blades circle around you and cut through everything they touch (50% damage).',
     always: true,
     fire() {}, // damage is dealt continuously in update()
@@ -85,7 +85,7 @@ export const WEAPONS = {
     },
   },
   aura: {
-    name: 'Burning Aura', icon: 1179, cd: 0.5, proj: 0, ups: ['dmg', 'rate', 'area', 'crit'],
+    name: 'Burning Aura', icon: 'weapons/e_3_9', cd: 0.5, proj: 0, ups: ['dmg', 'rate', 'area', 'crit'],
     desc: 'Scorches every enemy around you for 60% damage twice a second and sets them on fire.',
     always: true,
     fire(p) {
@@ -110,7 +110,7 @@ export const WEAPONS = {
     },
   },
   thunder: {
-    name: 'Thunder Staff', icon: 1656, cd: 1.4, proj: 2, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
+    name: 'Thunder Staff', icon: 'weapons/e_1_7', cd: 1.4, proj: 2, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
     desc: 'Calls lightning down on random enemies for 220% damage in a small area.',
     fire(p, s) {
       const ts = randomTargets(p, s.count);
@@ -125,7 +125,7 @@ export const WEAPONS = {
     },
   },
   firestaff: {
-    name: 'Fire Staff', icon: 1712, cd: 1.1, proj: 1, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
+    name: 'Fire Staff', icon: 'weapons/e_0_5', cd: 1.1, proj: 1, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
     desc: 'Hurls fireballs at the nearest enemies that explode for 200% damage and burn.',
     fire(p, s) {
       const ts = targets(p, s.count);
@@ -138,7 +138,7 @@ export const WEAPONS = {
     },
   },
   frost: {
-    name: 'Frost Shards', icon: 1011, cd: 1.5, proj: 5, ups: ['dmg', 'rate', 'proj', 'crit'],
+    name: 'Frost Shards', icon: 'weapons/e_1_9', cd: 1.5, proj: 5, ups: ['dmg', 'rate', 'proj', 'crit'],
     desc: 'Fires a ring of piercing ice shards for 110% damage that chill enemies.',
     fire(p, s) {
       if (!findTargets(p.pos, RANGE, 1).length) return false;
@@ -153,7 +153,7 @@ export const WEAPONS = {
     },
   },
   axe: {
-    name: 'Throwing Axe', icon: 1701, cd: 1.5, proj: 1, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
+    name: 'Throwing Axe', icon: 'weapons/e_2_1', cd: 1.5, proj: 1, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
     desc: 'Lobs heavy axes in an arc that cleave through 4 enemies for 320% damage.',
     fire(p, s) {
       const ts = targets(p, s.count, 22);
@@ -171,7 +171,7 @@ export const WEAPONS = {
     },
   },
   spikes: {
-    name: 'Earth Spikes', icon: 1016, cd: 1.8, proj: 3, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
+    name: 'Earth Spikes', icon: 'weapons/e_2_5', cd: 1.8, proj: 3, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
     desc: 'Spikes erupt under random enemies for 240% damage and toss them into the air.',
     fire(p, s) {
       const ts = randomTargets(p, s.count);
@@ -184,7 +184,7 @@ export const WEAPONS = {
     },
   },
   poison: {
-    name: 'Poison Flask', icon: 121, cd: 2.8, proj: 1, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
+    name: 'Poison Flask', icon: 'weapons/e_2_7', cd: 2.8, proj: 1, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
     desc: 'Throws flasks that leave a toxic pool for 4s (60% damage per tick + poison).',
     fire(p, s) {
       const ts = randomTargets(p, s.count, 24);
@@ -206,7 +206,7 @@ export const WEAPONS = {
     },
   },
   laser: {
-    name: 'Prism Laser', icon: 1149, cd: 2.0, proj: 1, ups: ['dmg', 'rate', 'proj', 'crit'],
+    name: 'Prism Laser', icon: 'weapons/e_1_5', cd: 2.0, proj: 1, ups: ['dmg', 'rate', 'proj', 'crit'],
     desc: 'Fires a piercing laser at the toughest enemy for 500% damage to everything in its path.',
     fire(p, s) {
       const strongest = strongestEnemy(p.pos, RANGE + 6);
@@ -221,7 +221,7 @@ export const WEAPONS = {
     },
   },
   dragon: {
-    name: 'Dragon Breath', icon: 1004, cd: 0.3, proj: 0, ups: ['dmg', 'rate', 'area', 'crit'],
+    name: 'Dragon Breath', icon: 'weapons/e_3_6', cd: 0.3, proj: 0, ups: ['dmg', 'rate', 'area', 'crit'],
     desc: 'Breathes fire at nearby enemies in a cone for 45% damage several times a second and burns them.',
     fire(p) {
       const e = nearestEnemy(p.pos, 8 * p.stats.area);
@@ -235,7 +235,7 @@ export const WEAPONS = {
     },
   },
   void: {
-    name: 'Void Orb', icon: 1052, cd: 5.5, proj: 1, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
+    name: 'Void Orb', icon: 'weapons/e_4_7', cd: 5.5, proj: 1, ups: ['dmg', 'rate', 'area', 'proj', 'crit'],
     desc: 'Opens a black hole in a crowd that pulls enemies in and crushes them (50% damage, 10x per second-ish).',
     fire(p, s) {
       const ts = randomTargets(p, s.count, 24);
@@ -251,8 +251,8 @@ export const WEAPONS = {
     },
   },
   revolver: {
-    name: 'Revolver', icon: 1171, cd: 0.6, proj: 1, crit: 0.15, ups: ['dmg', 'rate', 'proj', 'crit'],
-    desc: 'Quick, precise shots at the nearest enemies for 160% damage. +15% crit chance.',
+    name: 'Repeater Crossbow', icon: 'weapons/e_0_4', cd: 0.6, proj: 1, crit: 0.15, ups: ['dmg', 'rate', 'proj', 'crit'],
+    desc: 'Rapid, precise bolts at the nearest enemies for 160% damage. +15% crit chance.',
     fire(p, s) {
       const ts = targets(p, s.count, 32);
       ts.forEach((e, i) => after(i * 0.05, () => {

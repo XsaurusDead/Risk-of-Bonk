@@ -7,6 +7,23 @@ import { buildPickupGeo, litMaterial, glowMaterial } from './models.js';
 import { particles } from './fx.js';
 import { sfx } from '../core/audio.js';
 import { weightedPick, RARITY, RARITY_ORDER } from '../core/util.js';
+import { createLootFx, updateLootFx } from './lootfx.js';
+import { ITEM_ICONS, iconSrc } from '../data/icons.js';
+
+// the item's pixel-art icon floats inside its loot glow
+const iconTextures = new Map();
+const texLoader = new THREE.TextureLoader();
+function itemIconTexture(id) {
+  if (!iconTextures.has(id)) {
+    const t = texLoader.load(iconSrc(ITEM_ICONS[id] ?? 12));
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.magFilter = THREE.NearestFilter;
+    t.minFilter = THREE.NearestFilter;
+    t.generateMipmaps = false;
+    iconTextures.set(id, t);
+  }
+  return iconTextures.get(id);
+}
 
 const MAX = { coin: 350, xp: 450, heal: 40 };
 const list = { coin: [], xp: [], heal: [] };
@@ -101,20 +118,50 @@ export function rollItem(rarity) {
 }
 
 const beamGeo = new THREE.CylinderGeometry(0.25, 0.25, 14, 8, 1, true);
+let haloTex = null;
+function haloTexture() {
+  if (haloTex) return haloTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grd.addColorStop(0.35, 'rgba(255,255,255,0.35)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  haloTex = new THREE.CanvasTexture(c);
+  return haloTex;
+}
+
 export function dropItem(pos, itemId) {
   const it = ITEMS[itemId];
   const col = RARITY[it.rarity].hex;
   const group = new THREE.Group();
-  const orb = new THREE.Mesh(geos.item, glowMaterial({ color: col }));
-  const shell = new THREE.Mesh(geos.item, new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5 }));
-  shell.scale.setScalar(1.35);
-  const beamM = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
-  beamM.position.y = 7;
-  group.add(orb, shell, beamM);
+  // floating icon + a soft halo behind it
+  const orb = new THREE.Sprite(new THREE.SpriteMaterial({ map: itemIconTexture(itemId), transparent: true, depthWrite: false }));
+  orb.scale.setScalar(1.15);
+  orb.renderOrder = 8;
+  const shell = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), color: col, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.8 }));
+  shell.scale.setScalar(2.2);
+  shell.renderOrder = 7;
+  // ground glow ported from the GodotLootVFX pack (rings, pillars, flare, stars per rarity)
+  const fx = createLootFx(it.rarity);
+  fx.position.y = -1;
+  fx.visible = false;
+  group.add(fx, shell, orb);
+  // a tall faint beam so good loot can be spotted from far away
+  if (it.rarity !== 'common') {
+    const beamM = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }));
+    beamM.position.y = 7;
+    group.add(beamM);
+  }
   group.position.copy(pos);
   G.scene.add(group);
   const a = Math.random() * Math.PI * 2;
-  items.push({ id: itemId, group, orb, shell, pos: group.position, vel: new THREE.Vector3(Math.cos(a) * 3, 9, Math.sin(a) * 3), age: 0, grounded: false });
+  const rec = { id: itemId, group, orb, shell, fx, pos: group.position, vel: new THREE.Vector3(Math.cos(a) * 3, 9, Math.sin(a) * 3), age: 0, grounded: false };
+  items.push(rec);
+  return rec;
 }
 
 export function updatePickups(dt) {
@@ -181,9 +228,14 @@ export function updatePickups(dt) {
   if (coinSfx) sfx('coin', 0.06);
   if (xpSfx) sfx('xp', 0.05);
 
+  if (items.length) updateLootFx(dt);
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
     it.age += dt;
+    if (it.fx) {
+      it.fx.visible = it.grounded;
+      if (it.grounded) it.fx.userData.tick(dt);
+    }
     if (!it.grounded) {
       it.vel.y -= 20 * dt;
       it.pos.addScaledVector(it.vel, dt);
@@ -197,13 +249,14 @@ export function updatePickups(dt) {
         } else it.grounded = true;
       }
     }
-    it.orb.rotation.y += dt * 2;
-    it.shell.rotation.y -= dt * 1.5;
-    it.orb.position.y = it.grounded ? Math.sin(it.age * 3) * 0.2 : 0;
+    it.orb.position.y = it.grounded ? 0.1 + Math.sin(it.age * 3) * 0.18 : 0;
     it.shell.position.y = it.orb.position.y;
+    it.shell.material.rotation += dt * 0.6;
+    it.shell.material.opacity = 0.65 + Math.sin(it.age * 4) * 0.15;
     if (it.age > 0.6 && !p.dead && Math.hypot(it.pos.x - p.pos.x, it.pos.z - p.pos.z) < 2 && Math.abs(it.pos.y - p.pos.y - 1) < 3) {
       G.scene.remove(it.group);
       it.group.traverse((m) => m.material && m.material.dispose());
+      particles(it.pos, RARITY[ITEMS[it.id].rarity].hex, 12, 3, 0.6, 0.3, -6);
       items.splice(i, 1);
       particles(it.pos, RARITY[ITEMS[it.id].rarity].hex, 20, 6, 0.6);
       if (onItemCollected) onItemCollected(it.id);

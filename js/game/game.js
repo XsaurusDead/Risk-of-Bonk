@@ -25,6 +25,7 @@ import { track, trackMax, commitRunBests, persist, selectedCostume } from '../co
 import { weightedPick, shuffle, rand } from '../core/util.js';
 import { saveRun, clearRun, loadRunData } from '../core/runsave.js';
 import { Music } from '../core/music.js';
+import { updateGlyphs, clearGlyphs, glyphRing } from './glyphs.js';
 
 const _v = new THREE.Vector3();
 const SILHOUETTE = new THREE.MeshBasicMaterial({ color: 0x07040c });
@@ -184,6 +185,7 @@ export const Game = {
     this.sun.target.position.set(0, 0, 0);
     this.sky.position.copy(G.camera.position);
     updateFx(dt);
+    updateGlyphs(dt);
   },
 
   animateMenuModel(dt, selecting, h) {
@@ -327,6 +329,7 @@ export const Game = {
     clearCombat();
     clearPickups();
     clearFx();
+    clearGlyphs();
     clearMinions(true);
     if (G.world && G.world !== this.menuWorld) G.world.dispose();
     const stage = STAGES[run.stageNum % STAGES.length];
@@ -397,6 +400,7 @@ export const Game = {
     clearCombat();
     clearPickups();
     clearFx();
+    clearGlyphs();
     clearMinions(false);
     if (G.player) {
       G.player.dispose();
@@ -439,6 +443,7 @@ export const Game = {
     updatePickups(dt);
     G.world.update(dt);
     updateFx(dt);
+    updateGlyphs(dt);
     updateHpBars();
     this.updatePortal(dt);
     this.updateShrines();
@@ -668,6 +673,7 @@ export const Game = {
       if (b) {
         run.bossesAlive++;
         if (!run.boss) run.boss = b;
+        glyphRing(b.pos, 8, 3.6, 'H', 29, { height: 3.4, life: 1.8, rise: 0.4, stagger: 0.05 });
       }
     }
     if (run.loop > 0 && Math.random() < 0.5 + run.loop * 0.2) {
@@ -897,7 +903,7 @@ export const Game = {
     else if (c.kind === 'weapon') p.levelWeapon(c.slot, c.stat, c.value);
     else if (c.kind === 'newWeapon') p.addWeapon(c.id, c.value);
     p.pendingLevelUps--;
-    sfx('item');
+    sfx(c.kind === 'tome' ? 'item' : 'upgrade');
     if (p.pendingLevelUps > 0) this.levelChoices = this.rollUpgrades();
     if (p.pendingLevelUps > 0 && this.levelChoices.length) {
       G.ui.showLevelUp(this.levelChoices, p.level - p.pendingLevelUps + 1);

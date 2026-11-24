@@ -1,4 +1,6 @@
-// Tiny procedural sound effects via WebAudio. No asset files needed.
+// Sound effects via WebAudio: recorded samples from assets/sfx/ (picked from the
+// "400 Sounds Pack" and "96 Extra SFX" packs) with tiny procedural synth sounds as
+// the fallback (while samples load, and for sounds without a sample: laser, zap).
 import { G } from './state.js';
 
 let ctx = null;
@@ -16,6 +18,7 @@ function ensure() {
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 1, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    loadSamples();
     return true;
   } catch (e) {
     return false;
@@ -122,11 +125,71 @@ const SFX = {
   },
 };
 
+// ------------------------------------------------------------------ samples
+// name -> [files (a random one plays), gain, pitch variation]
+const SAMPLES = {
+  shoot: [['shoot'], 0.35, 0.1],
+  swing: [['swing_1', 'swing_2', 'swing_3'], 0.5, 0.1],
+  hit: [['hit_1', 'hit_2', 'hit_3'], 0.45, 0.12],
+  crit: [['crit'], 0.5, 0.1],
+  boom: [['boom_1', 'boom_2'], 0.6, 0.1],
+  bigboom: [['bigboom_1', 'bigboom_2'], 0.8, 0.06],
+  coin: [['coin_1', 'coin_2'], 0.32, 0.08],
+  xp: [['xp_1', 'xp_2'], 0.25, 0.15],
+  item: [['item_1', 'item_2'], 0.7, 0.04],
+  upgrade: [['upgrade'], 0.7, 0],
+  legendary: [['legendary'], 0.9, 0],
+  levelup: [['levelup'], 0.7, 0],
+  chest: [['chest'], 0.8, 0.04],
+  deny: [['deny'], 0.5, 0],
+  hurt: [['hurt_1', 'hurt_2'], 0.6, 0.1],
+  dash: [['dash'], 0.5, 0.08],
+  jump: [['jump'], 0.35, 0.08],
+  freeze: [['freeze_1', 'freeze_2'], 0.5, 0.08],
+  roar: [['roar'], 0.9, 0.05],
+  portal: [['portal'], 0.6, 0],
+  tick: [['tick'], 0.5, 0.12],
+  ui: [['ui'], 0.5, 0.05],
+  achievement: [['achievement'], 0.7, 0],
+  death: [['death'], 0.9, 0],
+};
+const buffers = {};
+let samplesRequested = false;
+
+function loadSamples() {
+  if (samplesRequested || !ctx) return;
+  samplesRequested = true;
+  const files = new Set(Object.values(SAMPLES).flatMap((s) => s[0]));
+  for (const f of files) {
+    fetch(`assets/sfx/${f}.mp3`)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
+      .then((b) => new Promise((res, rej) => ctx.decodeAudioData(b, res, rej)))
+      .then((buf) => { buffers[f] = buf; })
+      .catch(() => {}); // the synth version keeps playing for this one
+  }
+}
+
+function playSample(name) {
+  const s = SAMPLES[name];
+  if (!s) return false;
+  const ready = s[0].filter((f) => buffers[f]);
+  if (!ready.length) return false;
+  const src = ctx.createBufferSource();
+  src.buffer = buffers[ready[Math.floor(Math.random() * ready.length)]];
+  if (s[2]) src.playbackRate.value = 1 + (Math.random() - 0.5) * 2 * s[2];
+  const g = ctx.createGain();
+  g.gain.value = s[1] * 2 * vol();
+  src.connect(g).connect(master);
+  src.start();
+  return true;
+}
+
 export function sfx(name, minGap = 0.03) {
   if (!ctx || vol() <= 0) return;
   const now = ctx.currentTime;
   if (lastPlay[name] && now - lastPlay[name] < minGap) return;
   lastPlay[name] = now;
+  if (playSample(name)) return;
   const f = SFX[name];
   if (f) {
     try {

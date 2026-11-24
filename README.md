@@ -127,6 +127,30 @@ only the needed animations kept). A model is downloaded when you pick that survi
 - To change who gets which model, edit `CHAR_MODELS` in `js/game/charmodels.js`.
 - The website only publishes the files the game needs (see `.github/workflows/pages.yml`); the raw packs stay in the repo.
 
+## Sound effects
+
+35 sound effects picked from the uploaded **400 Sounds Pack** and **96 Extra SFX** (raw packs in `assets/music/Sound effects/`)
+were trimmed, levelled and converted to small MP3s in `assets/sfx/` (~400 KB in total). Shots, sword swings, hits, crits,
+explosions, coins, XP pops, item pickups, weapon upgrades, legendary fanfare, level-up, chest, hurt, dash, jump, freeze,
+boss sting, portal, roulette ticks, UI clicks, achievement chime and the death jingle all use them; a few sounds without a
+fitting sample (laser, zap) keep the built-in synth. Several hits/swings have variants and a slight random pitch so they
+don't repeat. Which file plays for which sound is the `SAMPLES` table in `js/core/audio.js`.
+
+## Weapon sprites, spell runes and loot glow
+
+- **Weapon sprites** (`fantasy_weapons_pack1_noglow.png` / `fantasy_epicweapons_pack1_nobg.png`, cut into
+  `assets/textures/weapons/`): the 12 pick-up weapons (glowing "epic" versions), several survivors' main weapons
+  (Bonker's club, Kestrel's bow, Kaze's gauntlet, Nyx's dagger, Sol's hammer & shield, Grizzle's spear, Rook's crossbow)
+  and 20 weapon-type items (Godslayer Blade, Reaper's Edge, Aegis, …). The Revolver is now a *Repeater Crossbow*.
+- **Spell runes** (*Spells effect of separation and decoration 4*, 54 animations copied to `assets/textures/glyphs/`):
+  animated rune pillars rise around you on level-up (gold) and when you use your Ultimate (your survivor's colour),
+  a red ring marks every boss spawn, each shrine has a floating rune in its colour (hidden once used), and four runes
+  stand around the portal: pink while idle, gold while charging, green when ready. (`js/game/glyphs.js`)
+- **Loot glow** (*GodotLootVFX* by BinbunVFX): its Godot shaders (glow tube, ground flare, glow core, star particles)
+  are ported to three.js in `js/game/lootfx.js`. Every item lying on the ground shows its pixel icon floating in a
+  rarity-coloured glow: common = 1 ring/pillar, rare = 2 rings + 2 pillars, epic = + floating sparkles,
+  legendary = gold with twice the sparkles. Non-common items also keep a tall beam so you can spot them from afar.
+
 ## Icons
 
 All item, ability, upgrade, achievement, minimap and menu icons are 16×16 pixel art from the **Raven Fantasy icon pack**

@@ -10,6 +10,10 @@ import {
 } from './models.js';
 import { terrainDetailTexture } from './textures.js';
 import { assetsReady, getModel, desertRockTexture } from './assets.js';
+import { attachGlyph, recolorGlyph } from './glyphs.js';
+
+// animated rune pillars (spell pack) floating above shrines: colour + design per kind
+const SHRINE_GLYPH = { heal: ['D', 17], combat: ['H', 24], boss: ['K', 29], xp: ['C', 20], moai: ['E', 10] };
 
 export const SIZE = 520;
 const SEGS = 220;
@@ -439,6 +443,11 @@ export class World {
       built.group.rotation.y = this.rng() * Math.PI * 2;
       this.group.add(built.group);
       const it = { kind, pos: pos.clone(), used: false, ...built, ...extra };
+      if (SHRINE_GLYPH[kind]) {
+        built.group.updateMatrixWorld(true);
+        const top = new THREE.Box3().setFromObject(built.group).max.y - pos.y;
+        it.glyph = attachGlyph(built.group, SHRINE_GLYPH[kind][0], SHRINE_GLYPH[kind][1], 1.8, top + 0.2, { opacity: 0.9 });
+      }
       this.interactables.push(it);
       this.addCollider(pos.x, pos.z, kind === 'chest' ? 1 : kind === 'moai' ? 1.2 : 1.5);
       return it;
@@ -633,6 +642,17 @@ export class World {
     this.group.add(zone);
     this.portal.zone = zone;
     this.disposables.push(geo, mat);
+    // four rune pillars around the portal: pink while idle, gold while charging, green when ready
+    this.portal.glyphs = [];
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const holder = new THREE.Group();
+      const x = this.portalPos.x + Math.cos(a) * 4.2, z = this.portalPos.z + Math.sin(a) * 4.2;
+      holder.position.set(x, this.groundAt(x, z, this.portalPos.y + 3), z);
+      this.group.add(holder);
+      this.portal.glyphs.push(attachGlyph(holder, 'B', 24, 3.2, 0));
+    }
+    this.portal.glyphState = 'idle';
   }
 
   get chargeRadius() {
@@ -679,6 +699,15 @@ export class World {
 
   update(dt) {
     this.t += dt;
+    const PG = this.portal;
+    if (PG?.glyphs) {
+      for (const g of PG.glyphs) g.visible = PG.state !== 'none' && PG.group.visible !== false;
+      if (PG.glyphState !== PG.state) {
+        PG.glyphState = PG.state;
+        const col = PG.state === 'charging' ? 'A' : PG.state === 'ready' ? 'D' : 'B';
+        for (const g of PG.glyphs) recolorGlyph(g, col, 24);
+      }
+    }
     for (const c of this.interactables) {
       if (c.kind === 'chest') {
         if (c.used && (c.openT || 0) < 3) {
@@ -690,6 +719,7 @@ export class World {
         } else if (!c.used) c.glow.scale.y = 1 + Math.sin(this.t * 3 + c.pos.x) * 0.5;
       } else if (c.emblem) {
         c.emblem.rotation.y += dt * (c.used ? 0.2 : 1.2);
+        if (c.glyph) c.glyph.visible = !c.used;
         if (c.kind !== 'moai') c.emblem.position.y = 2.4 + Math.sin(this.t * 2 + c.pos.x) * 0.15;
         c.emblem.visible = !c.used || c.kind === 'moai';
         if (c.kind === 'moai') c.emblem.visible = !c.used && Math.sin(this.t * 4) > -0.6;

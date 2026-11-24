@@ -12,6 +12,7 @@ import { WEAPONS } from '../data/weapons.js';
 import { buildCharacter } from './charmodels.js';
 import { targetNearAim, nearestEnemy, applyFreeze, dealDamage, findTargets, explode, after } from './combat.js';
 import { particles, shake, floatText, ring } from './fx.js';
+import { glyphRing, glyphColorFor } from './glyphs.js';
 import { sfx } from '../core/audio.js';
 import { track, trackMax, discover, selectedCostume } from '../core/save.js';
 import { charLevelFromXp, charXp } from '../core/charlevel.js';
@@ -271,7 +272,7 @@ export class Player {
   }
 
   disposeWeapons() {
-    for (const id of this.weaponOrder) WEAPONS[id]?.dispose?.(this.weaponState[id] || {});
+    for (const id of this.weaponOrder) WEAPONS[id]?.dispose?.({ id, state: this.weaponState[id] || {} });
   }
 
   /**
@@ -318,6 +319,7 @@ export class Player {
       track('levelUps');
       ring(this.pos, 5, 0x55ffcc, 0.6);
       particles(this.pos, 0x55ffcc, 24, 6, 0.8);
+      glyphRing(this.pos, 6, 1.7, 'A', 20, { height: 2.2, life: 1.1, rise: 1.4, follow: this, stagger: 0.03 });
       sfx('levelup');
     }
   }
@@ -1031,7 +1033,10 @@ export class Player {
     this.lastAttackT = 0;
     this.lastCastT = 0;
     track('abilitiesUsed');
-    if (slot === 'ultimate') track('ultsUsed');
+    if (slot === 'ultimate') {
+      track('ultsUsed');
+      glyphRing(this.pos, 8, 2.4, glyphColorFor(this.char.color), 24, { height: 2.6, life: 0.9, rise: 0.8, follow: this, spin: this.yaw });
+    }
     return true;
   }
 
