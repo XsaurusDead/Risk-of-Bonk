@@ -580,3 +580,35 @@ body.touch #hud-kills { font-size: 16px; }
 #slowmo-tint { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.4s; background: radial-gradient(ellipse at center, transparent 45%, rgba(80, 170, 255, 0.28) 100%); mix-blend-mode: screen; }
 body.slowmo #slowmo-tint { opacity: 1; }
 body.touch #hud-buffs { top: 92px; }
+
+/* ---------------- username + global leaderboard ---------------- */
+.title-name { margin: -6px auto 14px; display: block; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.18); color: #dfe8ff; padding: 5px 14px; border-radius: 999px; font: inherit; font-size: 14px; cursor: pointer; }
+.title-name b { color: #ffd36b; }
+.title-name span { opacity: 0.6; margin-left: 4px; }
+.title-name:hover { border-color: #ffd36b; }
+.name-modal { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(5, 8, 16, 0.72); backdrop-filter: blur(4px); }
+.name-modal.hidden { display: none; }
+.name-panel { width: min(420px, 100%); text-align: center; display: flex; flex-direction: column; gap: 10px; }
+.name-panel h2 { margin: 0; }
+.name-panel p { margin: 0; opacity: 0.8; font-size: 14px; }
+#name-input { font: inherit; font-size: 22px; font-weight: 700; text-align: center; padding: 10px 12px; border-radius: 10px; border: 2px solid rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.45); color: #fff; outline: none; width: 100%; box-sizing: border-box; }
+#name-input:focus { border-color: #ffd36b; box-shadow: 0 0 14px rgba(255, 211, 107, 0.35); }
+.name-err { min-height: 1.3em; font-size: 13px; color: #ffcf7a; }
+.name-err.bad { color: #ff7a7a; }
+.name-actions { display: flex; gap: 10px; justify-content: center; }
+.name-actions .hidden { display: none; }
+.name-hint { opacity: 0.55; font-size: 12px; }
+.lb-modes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.lb-modes .lb-me { margin-left: auto; }
+.lb-modes .lb-me b { color: #ffd36b; }
+.lb-row.global { grid-template-columns: 2.4em minmax(6em, 1.3fr) minmax(7em, 1.3fr) 6em 4em 4.5em 3em 5em 5em; }
+.lb-player { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-player small { opacity: 0.6; font-weight: 400; }
+.lb-row.me { background: rgba(255, 211, 107, 0.14); outline: 1px solid rgba(255, 211, 107, 0.45); }
+.lb-pending { font-size: 13px; opacity: 0.7; margin: 0 0 6px; }
+.lb-retry { text-align: center; }
+.go-global { color: #8fd0ff; }
+@media (max-width: 700px) {
+  .lb-row.global { grid-template-columns: 28px minmax(0, 1fr) 5.5em 3.5em; }
+  .lb-row.global > :nth-child(3), .lb-row.global > :nth-child(7), .lb-row.global > :nth-child(8), .lb-row.global > :nth-child(9) { display: none; }
+}

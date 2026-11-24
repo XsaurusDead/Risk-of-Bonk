@@ -3,6 +3,7 @@
 // end a run, so it isn't recorded until the resumed run finishes.
 import { G } from './state.js';
 import { persist, selectedCostume } from './save.js';
+import { submitRun } from './online.js';
 
 export const LB_SIZE = 25;
 
@@ -47,6 +48,8 @@ export function recordRun(s, reason = 'death') {
     victory: !!s.victory,
     reason,
   };
+  // the global board gets every recorded run (it keeps each player's best)
+  s.lbOnline = submitRun({ ...entry });
   list.push(entry);
   list.sort(compareRuns);
   list.length = Math.min(list.length, LB_SIZE);

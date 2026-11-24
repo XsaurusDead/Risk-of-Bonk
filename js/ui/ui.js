@@ -24,6 +24,7 @@ import { WEAPONS } from '../data/weapons.js';
 import { loadCharModel } from '../game/charmodels.js';
 import { POWERUPS } from '../game/pickups.js';
 import { leaderboard } from '../core/leaderboard.js';
+import { onlineEnabled, profile, playerName, needsName, nameError, setName, fetchGlobal, flushRuns, NAME_MAX } from '../core/online.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -135,7 +136,85 @@ export const UI = {
     this.buildCharGrid();
     this.selectChar(G.save.lastChar);
     $('#title-foot').textContent = `${Object.keys(CHARACTERS).filter(isCharacterUnlocked).length}/${CHARACTER_ORDER.length} survivors · ${Object.keys(G.save.achievements).length}/${ACHIEVEMENTS.length} achievements`;
+    this.bindName();
     this.showScreen('title');
+    flushRuns(); // runs finished while offline
+  },
+
+  // ------------------------------------------------------------ username
+  bindName() {
+    const form = $('#name-form'), input = $('#name-input'), err = $('#name-err');
+    input.addEventListener('input', () => {
+      const e = input.value.trim() ? nameError(input.value) : '';
+      err.textContent = e;
+      err.classList.remove('bad');
+    });
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const ok = $('#name-ok');
+      if (ok.disabled) return;
+      ok.disabled = true;
+      err.textContent = onlineEnabled() ? 'Checking name…' : '';
+      const r = await setName(input.value);
+      ok.disabled = false;
+      if (!r.ok) {
+        err.textContent = r.error;
+        err.classList.add('bad');
+        sfx('deny', 0.3);
+        input.focus();
+        return;
+      }
+      sfx('upgrade');
+      this.closeName();
+      this.updateNameUi();
+      if (this.screen === 'leaderboard') this.renderLeaderboard();
+    });
+    $('#name-cancel').addEventListener('click', () => {
+      sfx('ui');
+      this.closeName();
+    });
+    const change = () => {
+      sfx('ui');
+      this.askName(true);
+    };
+    $('#title-name').addEventListener('click', change);
+    $('#lb-me').addEventListener('click', change);
+    $$('[data-lbmode]').forEach((b) => b.addEventListener('click', () => {
+      sfx('ui');
+      this.lbMode = b.dataset.lbmode;
+      this.renderLeaderboard();
+    }));
+    this.updateNameUi();
+  },
+
+  /** Show the name dialog. Mandatory (no Cancel) until the player has a valid, free name. */
+  askName(change = false) {
+    const p = profile();
+    const must = needsName();
+    $('#name-title').textContent = must ? (p.nameTaken ? 'Name already taken' : 'Choose your name') : 'Change your name';
+    $('#name-desc').textContent = p.nameTaken
+      ? `Someone else registered "${p.name}" first. Pick a different name for the global leaderboard.`
+      : 'This is how other players see you on the global leaderboard.';
+    $('#name-cancel').classList.toggle('hidden', must);
+    const input = $('#name-input');
+    input.maxLength = NAME_MAX;
+    input.value = change || p.nameTaken ? p.name || '' : '';
+    $('#name-err').textContent = '';
+    $('#name-modal').classList.remove('hidden');
+    this.nameOpen = true;
+    setTimeout(() => { input.focus(); input.select(); }, 30);
+  },
+  closeName() {
+    if (needsName()) return;
+    $('#name-modal').classList.add('hidden');
+    this.nameOpen = false;
+  },
+  updateNameUi() {
+    const n = playerName();
+    const t = $('#title-name');
+    t.classList.toggle('hidden', !n);
+    t.innerHTML = `Playing as <b>${esc(n)}</b> <span>✎</span>`;
+    $('#lb-me').innerHTML = n ? `You: <b>${esc(n)}</b> ✎` : 'Set your name';
   },
 
   onDevice(d) {
@@ -171,6 +250,8 @@ export const UI = {
     if (name === 'settings') this.renderSettings();
     if (name === 'leaderboard') this.renderLeaderboard();
     if (name === 'title') {
+      this.updateNameUi();
+      if (needsName() && !this.nameOpen) this.askName();
       const d = loadRunData();
       $('#btn-continue').classList.toggle('hidden', !d);
       if (d) $('#continue-info').textContent = `${CHARACTERS[d.charId].name} · Stage ${d.stageNum + 1} · ${formatTime(d.time)} · Lv ${d.level}`;
@@ -398,6 +479,11 @@ export const UI = {
 
   // ------------------------------------------------------------ leaderboard
   renderLeaderboard() {
+    const mode = this.lbMode || (onlineEnabled() ? 'global' : 'local');
+    $$('[data-lbmode]').forEach((b) => b.classList.toggle('on', b.dataset.lbmode === mode));
+    this.updateNameUi();
+    if (mode === 'global') return this.renderGlobal();
+    $('#lb-sub').textContent = 'Best runs on this device — ranked by kills';
     const all = leaderboard();
     const sel = $('#lb-filter');
     const chars = [...new Set(all.map((e) => e.charId))].filter((id) => CHARACTERS[id]);
@@ -416,6 +502,44 @@ export const UI = {
         <span class="lb-score">${icon(1165)} ${(e.kills || 0).toLocaleString()}</span>
         <span>${e.stage}${outcome}</span><span>${formatTime(e.time)}</span><span>${e.level}</span><span class="lb-sub">${(e.score || 0).toLocaleString()}</span><span>${e.items}</span><span class="lb-date">${date(e.date)}</span></div>`;
     }).join('') : `<p class="lb-empty">No runs yet — finish a run (win, die or abandon it) to get on the board.</p>`;
+  },
+
+  /** Global board: each player's best run, ranked by kills. */
+  async renderGlobal() {
+    const body = $('#lb-body'), sel = $('#lb-filter');
+    $('#lb-sub').textContent = "Every player's best run — ranked by kills";
+    const cur = this.lbFilter && CHARACTERS[this.lbFilter] ? this.lbFilter : 'all';
+    sel.innerHTML = `<option value="all">All survivors</option>` + CHARACTER_ORDER.map((id) => `<option value="${id}" ${id === cur ? 'selected' : ''}>${esc(CHARACTERS[id].name)}</option>`).join('');
+    sel.onchange = () => { this.lbFilter = sel.value; this.renderLeaderboard(); };
+    if (!onlineEnabled()) {
+      body.innerHTML = `<p class="lb-empty">The online leaderboard isn't set up for this copy of the game yet — your runs are still saved under <b>This device</b>.</p>`;
+      return;
+    }
+    const token = (this.lbToken = (this.lbToken || 0) + 1);
+    body.innerHTML = `<p class="lb-empty lb-loading">Loading the global leaderboard…</p>`;
+    let rows;
+    try {
+      rows = await fetchGlobal(cur === 'all' ? null : cur);
+    } catch (e) {
+      if (token !== this.lbToken) return;
+      body.innerHTML = `<p class="lb-empty">${esc(e.message)}</p><div class="lb-retry"><button class="btn" id="lb-retry">Try again</button></div>`;
+      $('#lb-retry').onclick = () => this.renderLeaderboard();
+      return;
+    }
+    if (token !== this.lbToken || this.screen !== 'leaderboard') return;
+    const me = profile().id;
+    const medal = (i) => (i < 3 ? `<span class="lb-medal m${i}">${i + 1}</span>` : `<span class="lb-rank">${i + 1}</span>`);
+    const date = (t) => new Date(t).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: '2-digit' });
+    const pending = (G.save.onlineQueue || []).length;
+    body.innerHTML = (pending ? `<p class="lb-pending">${pending} run${pending > 1 ? 's' : ''} waiting to be uploaded…</p>` : '') + (rows.length ? `<div class="lb-row lb-hd global"><span>#</span><span>Player</span><span>Survivor</span><span>Kills</span><span>Stage</span><span>Time</span><span>Lv</span><span>Score</span><span>Date</span></div>` + rows.map((e, i) => {
+      const c = CHARACTERS[e.char_id] || { name: e.char_id, color: '#ccc' };
+      const outcome = e.victory ? `<span class="lb-won" title="Beat the final boss">${icon(UI_ICONS.crown)}</span>` : e.reason === 'quit' ? '<span class="lb-quit" title="Abandoned">⏏</span>' : '';
+      return `<div class="lb-row global ${e.victory ? 'won' : ''} ${e.player_id === me ? 'me' : ''}">${medal(i)}
+        <span class="lb-player">${esc(e.name)}${e.player_id === me ? ' <small>(you)</small>' : ''}</span>
+        <span class="lb-char">${characterIcon(e.char_id)}<b style="color:${c.color}">${esc(c.name)}</b></span>
+        <span class="lb-score">${icon(1165)} ${(e.kills || 0).toLocaleString()}</span>
+        <span>${e.stage}${outcome}</span><span>${formatTime(e.time_s)}</span><span>${e.level}</span><span class="lb-sub">${(e.score || 0).toLocaleString()}</span><span class="lb-date">${date(e.created_at)}</span></div>`;
+    }).join('') : `<p class="lb-empty">Nobody is on the global board yet — finish a run and be the first!</p>`);
   },
 
   // ------------------------------------------------------------ logbook
@@ -776,9 +900,18 @@ export const UI = {
     }
     if (s.lbRank) {
       const medal = s.lbRank <= 3 ? ['🥇', '🥈', '🥉'][s.lbRank - 1] : icon(UI_ICONS.trophy);
-      html = `<div class="go-lb">${medal} New <b>#${s.lbRank}</b> on the leaderboard!</div>` + html;
+      html = `<div class="go-lb">${medal} New <b>#${s.lbRank}</b> on this device's leaderboard!</div>` + html;
     }
     $('#gameover-body').innerHTML = html;
+    if (s.lbOnline) {
+      s.lbOnline.then((r) => {
+        if (!r || this.screen !== 'gameover') return;
+        const el = document.createElement('div');
+        el.className = 'go-lb go-global';
+        el.innerHTML = `🌍 Global rank <b>#${r.rank}</b>${r.personalBest ? ' — new personal best!' : ''}`;
+        $('#gameover-body').prepend(el);
+      });
+    }
     const t = $('#screen-gameover .dead');
     t.textContent = s.victory ? 'RUN COMPLETE' : 'YOU DIED';
     t.classList.toggle('won', !!s.victory);
@@ -1167,6 +1300,10 @@ export const UI = {
     const nav = Input.menu;
     if (!(nav.up || nav.down || nav.left || nav.right || nav.confirm || nav.back)) return;
     if (G.mode === 'playing' || G.mode === 'transition') return;
+    if (this.nameOpen) {
+      if (nav.confirm) $('#name-form').requestSubmit();
+      return;
+    }
     const scr = $('#screen-' + this.screen);
     if (!scr || scr.classList.contains('hidden')) return;
     if (this.screen === 'select') {

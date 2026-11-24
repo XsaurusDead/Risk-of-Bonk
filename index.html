@@ -84,6 +84,7 @@
       <div class="title-wrap">
         <h1 class="logo">RISK<span>of</span>BONK</h1>
         <p class="tagline">A 3rd-person roguelike. Loot, level, survive. It only gets worse.</p>
+        <button class="title-name hidden" id="title-name" title="Change your name"></button>
         <div class="menu-col">
           <button class="btn primary hidden" id="btn-continue"><img class="pxi" src="assets/textures/raven-fantasy/fa11.png" alt=""> Continue Run<small id="continue-info"></small></button>
           <button class="btn primary" data-go="select"><img class="pxi" src="assets/textures/raven-fantasy/fa1123.png" alt=""> New Run</button>
@@ -134,10 +135,29 @@
     <div id="screen-leaderboard" class="screen hidden">
       <div class="panel wide">
         <h2 class="glow lb-title"><img class="pxi" src="assets/textures/raven-fantasy/fa15.png" alt=""> Leaderboard</h2>
-        <div class="lb-top"><span>Best runs on this device — ranked by kills</span><select id="lb-filter" aria-label="Filter by survivor"></select></div>
+        <div class="lb-modes">
+          <button class="chip on" data-lbmode="global">🌍 Global</button>
+          <button class="chip" data-lbmode="local">This device</button>
+          <button class="chip lb-me" id="lb-me" title="Change your name"></button>
+        </div>
+        <div class="lb-top"><span id="lb-sub">Best runs on this device — ranked by kills</span><select id="lb-filter" aria-label="Filter by survivor"></select></div>
         <div id="lb-body" class="scroll"></div>
       </div>
       <div class="screen-actions"><button class="btn" data-back="title">← Back</button></div>
+    </div>
+
+    <div id="name-modal" class="name-modal hidden" role="dialog" aria-modal="true" aria-labelledby="name-title">
+      <form class="panel name-panel" id="name-form" autocomplete="off">
+        <h2 id="name-title" class="glow">Choose your name</h2>
+        <p id="name-desc">This is how other players see you on the global leaderboard.</p>
+        <input id="name-input" maxlength="16" spellcheck="false" placeholder="Username" aria-label="Username">
+        <div id="name-err" class="name-err" aria-live="polite"></div>
+        <div class="name-actions">
+          <button type="button" class="btn" id="name-cancel">Cancel</button>
+          <button type="submit" class="btn primary" id="name-ok">Let's go ▶</button>
+        </div>
+        <small class="name-hint">3–16 characters: letters, numbers, spaces, _ . -</small>
+      </form>
     </div>
 
     <div id="screen-settings" class="screen hidden">

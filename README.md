@@ -62,7 +62,7 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 
 - **Stages:** Verdant Meadows → Scorched Dunes → Frostfang Peaks → Fungal Hollow → Molten Caldera → Void Sanctum → **Celestial Throne** (final). Each stage has its own terrain, palette, hazards (water / toxic sludge / lava / void / starlight) and enemy roster.
 - **Final boss:** on the Celestial Throne the *Apex Sovereign* descends after a few seconds. Its health and damage are re-scaled to your current power (DPS estimate × ~110 s, heavy hits ≈ 12% of your effective HP), it enrages at 50% and enters a *Final Form* at 25%. Beat it and you can **end the run** (victory) or **continue the run** into a harder loop for as long as you survive.
-- **Leaderboard** (main menu): the 25 best runs on this device, filterable by survivor. A run is recorded when it ends
+- **Leaderboard** (main menu): a **🌍 Global** tab with every player's best run (see *Online leaderboard* below) and a **This device** tab with the 25 best runs on this device, both filterable by survivor. A run is recorded when it ends
   (death, victory, or abandoning it after at least 20 s). **Runs are ranked by kills** — the more enemies you kill, the
   higher you place. Ties are broken by a score (1000 per stage cleared + 5000 for beating the final boss + kills + 20 per
   level + 15 per minute). A kill counter sits under your coins during a run, and the game-over screen tells you when you made the board.
@@ -89,6 +89,31 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
   - Tome data and weapon level stats live in `js/data/tomes.js`, the weapons themselves in `js/data/weapons.js`.
 - **Portal & boss:** find the portal (marker on screen), interact to summon the stage boss. Stand in the ring to charge the portal, kill the boss, then enter the portal.
 - **Scaling:** difficulty = `1.035^minutes × 1.2^stagesCleared`. Enemy HP, damage, spawn credits, coin/XP drops and chest prices all scale off it, so everything grows exponentially. Elites (Blazing, Glacial, Overloading, Vampiric) show up as it rises.
+
+## Online leaderboard
+
+On the first start the game asks for a **username** (3–16 characters, unique, case-insensitive); you can change it any
+time from the title screen ("Playing as …") or the leaderboard. Every finished run is sent to the global board, which
+shows **each player's best run, ranked by kills**. Runs finished offline are queued in the save and uploaded on the
+next start; the game-over screen shows your global rank.
+
+GitHub Pages can't store data, so the board lives in a free **Supabase** project (PostgreSQL). One-time setup (~5 min):
+
+1. Create a free account and a new project at <https://supabase.com> (any name/region; note the database password somewhere).
+2. In the project open **SQL Editor → New query**, paste the whole of [`supabase/leaderboard.sql`](supabase/leaderboard.sql) and press **Run**.
+3. Open **Project Settings → Data API** and copy the **Project URL**, then **Project Settings → API Keys** and copy the
+   **public** key (`anon` / `publishable` — *never* the `service_role` / secret key).
+4. Put both into [`js/config/online.js`](js/config/online.js) (`url` and `key`), commit and push. Done.
+
+Without that config the game works as before (local board only; the Global tab says it isn't set up).
+
+**Security:** the public key can't read or change the tables directly (row level security, no policies). It can only
+call four database functions: register a name, rename yourself, submit a run, read the board. Each player gets a
+secret token (stored in their browser) so nobody can post under someone else's name. The database also rejects
+impossible runs (more than ~60 kills per second, absurd values) and throttles spam (one run per 15 s per player,
+30 new names per minute). Like any browser game without a server-side simulation, a determined cheater could still
+fake a *plausible* run; you can delete runs or players any time in Supabase → **Table Editor** (`runs`, `players`).
+Free Supabase projects pause after a week without any traffic — resume it in the dashboard if that happens.
 
 ## Look & feel
 
