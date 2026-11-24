@@ -2,7 +2,7 @@
 //
 // Every stage has a 10 minute clock:
 //   * a steady trickle of enemies whose population grows each minute,
-//   * HUGE waves at 3:00 and 6:00,
+//   * HUGE waves at 3:00 and 6:00: for one minute enemies pour in, in big groups, much faster,
 //   * a Champion mini-boss at 5:00 and 8:00,
 //   * after 10:00 OVERTIME: relentless waves (incl. Overtime Reapers) that get
 //     stronger every 30 seconds you stay. Leave through the portal to escape.
@@ -27,6 +27,9 @@ export class Director {
     this.events = new Set();
     this.otWaveT = 0;
     this.final = !!stage.final;
+    this.surgeUntil = 0;
+    this.surgeT = 0;
+    this.surgeMult = 1;
   }
 
   get cap() {
@@ -48,11 +51,11 @@ export class Director {
     // --- scripted events (not on the final arena, which has its own boss)
     if (!this.final) {
       this.event(175, 'warn3', () => G.ui?.banner('HUGE WAVE INCOMING', 'Get ready…', true));
-      this.event(180, 'wave3', () => this.hugeWave());
+      this.event(180, 'wave3', () => this.startSurge(1));
       this.event(295, 'warn5', () => G.ui?.banner('A CHAMPION APPROACHES', 'A mini-boss is coming for you', true));
       this.event(300, 'mini5', () => this.champion());
       this.event(355, 'warn6', () => G.ui?.banner('HUGE WAVE INCOMING', 'Even bigger this time…', true));
-      this.event(360, 'wave6', () => this.hugeWave(1.4));
+      this.event(360, 'wave6', () => this.startSurge(1.4));
       this.event(475, 'warn8', () => G.ui?.banner('A CHAMPION APPROACHES', 'This one is angrier', true));
       this.event(480, 'mini8', () => this.champion(true));
       this.event(STAGE_TIME, 'ot', () => {
@@ -70,6 +73,18 @@ export class Director {
       this.trickleT = rand(0.7, 1.3);
       const alive = aliveCount();
       if (alive < target) this.spawnGroup(Math.min(target - alive, 1 + Math.floor(min / 3) + Math.floor(Math.random() * 3)));
+    }
+
+    // --- huge wave: one minute of big groups arriving fast from all sides
+    if (this.t < this.surgeUntil) {
+      this.surgeT -= dt;
+      if (this.surgeT <= 0) {
+        this.surgeT = rand(0.35, 0.6) / this.surgeMult;
+        const room = this.cap + 45 - aliveCount();
+        const size = Math.round((4 + min * 0.6 + run.stagesCleared) * this.surgeMult + Math.random() * 3);
+        if (room > 0) this.spawnGroup(Math.min(room, size), { far: true });
+      }
+      if (this.t + dt >= this.surgeUntil) G.ui?.banner('Wave survived', 'The swarm thins out… for now');
     }
 
     // --- overtime waves
@@ -117,13 +132,22 @@ export class Director {
     if (!def) return;
     const flyer = def.ai === 'flyer' || def.ai === 'swooper';
     // close to the player so standing still gets you surrounded
-    const center = this.spawnCenter(13, 24, flyer);
+    const center = o.far ? this.spawnCenter(16, 30, flyer) : this.spawnCenter(13, 24, flyer);
     if (!center) return;
     const eliteChance = Math.min(0.4, 0.02 + (run.diff - 1) * 0.05 + (this.t > STAGE_TIME ? 0.15 : 0));
     for (let i = 0; i < count; i++) {
       const elite = (o.elite || run.diff > 1.5) && Math.random() < eliteChance ? pick(Object.keys(ELITES)) : null;
       spawnEnemy(id, this.jitter(center, 4), { elite, otMult: o.otMult || this.otMult });
     }
+  }
+
+  /** Huge wave: an opening burst, then one minute of fast group spawns. */
+  startSurge(mult = 1) {
+    this.hugeWave(0.6 * mult);
+    this.surgeUntil = this.t + 60;
+    this.surgeT = 1;
+    this.surgeMult = mult;
+    G.ui?.banner('HUGE WAVE', 'Survive the next 60 seconds!', true);
   }
 
   /** Massive swarm from several directions around the player. */
@@ -165,14 +189,14 @@ export class Director {
 // Difficulty labels shown in the HUD (RoR2-style escalating names).
 export const DIFF_LABELS = [
   { at: 1, name: 'Easy', color: '#5fd46a' },
-  { at: 1.6, name: 'Medium', color: '#c8e04a' },
-  { at: 2.4, name: 'Hard', color: '#ffd23c' },
-  { at: 3.5, name: 'Very Hard', color: '#ff9a3c' },
-  { at: 5, name: 'Insane', color: '#ff5a3a' },
-  { at: 7.5, name: 'Impossible', color: '#ff2a55' },
-  { at: 11, name: 'I SEE YOU', color: '#d0308a' },
-  { at: 16, name: "I'M COMING FOR YOU", color: '#a020c0' },
-  { at: 24, name: 'HAHAHAHAHA', color: '#6a10ff' },
+  { at: 1.35, name: 'Medium', color: '#c8e04a' },
+  { at: 1.9, name: 'Hard', color: '#ffd23c' },
+  { at: 2.7, name: 'Very Hard', color: '#ff9a3c' },
+  { at: 3.8, name: 'Insane', color: '#ff5a3a' },
+  { at: 5.5, name: 'Impossible', color: '#ff2a55' },
+  { at: 8, name: 'I SEE YOU', color: '#d0308a' },
+  { at: 12, name: "I'M COMING FOR YOU", color: '#a020c0' },
+  { at: 18, name: 'HAHAHAHAHA', color: '#6a10ff' },
 ];
 export function diffLabel(d) {
   let cur = DIFF_LABELS[0];

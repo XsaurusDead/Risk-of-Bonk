@@ -19,7 +19,8 @@ import { charLevelInfo } from '../core/charlevel.js';
 import { formatTime, formatNum, RARITY, RARITY_ORDER } from '../core/util.js';
 import * as THREE from 'three';
 import { icon, achievementIcon, characterIcon, UI_ICONS } from '../data/icons.js';
-import { TOME_BY_ID, TOME_SLOTS, TOME_MAX, WEAPON_MAX, WEAPON_SLOTS, weaponMods } from '../data/tomes.js';
+import { TOME_BY_ID, TOME_SLOTS, TOME_MAX, WEAPON_MAX, WEAPON_SLOTS } from '../data/tomes.js';
+import { WEAPONS } from '../data/weapons.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -758,7 +759,7 @@ export const UI = {
       ['Armor', `${Math.round(s.armor)} (${pct(armorRed)})`], ['Crit chance', pct(s.crit)], ['Crit damage', pct(s.critMult)], ['Move speed', s.moveSpeed.toFixed(1)],
       ['Cooldowns', pct(s.cdMult)], ['Jumps', s.jumps], ['Area', pct(s.area)], ['Luck', s.luck.toFixed(2)], ['Pickup range', s.pickup.toFixed(1) + 'm'],
       ['XP gain', pct(s.xpMult)], ['Coin gain', pct(s.coinMult)], ['Dodge', pct(s.dodge)],
-      ['Projectiles', '+' + (Math.round((s.projectiles + p.weapons.primary.proj) * 100) / 100)], ['Life steal', pct(s.lifesteal)], ['Shield', Math.round(s.maxShield)],
+      ['Projectiles', '+' + (Math.round(s.projectiles * 100) / 100)], ['Life steal', pct(s.lifesteal)], ['Shield', Math.round(s.maxShield)],
     ];
     let html = `<h3>Stats — Level ${p.level}</h3><div class="st-grid">${rows.map(([a, b]) => `<span>${a} <b>${b}</b></span>`).join('')}</div>`;
     const tids = Object.keys(p.tomes);
@@ -767,17 +768,17 @@ export const UI = {
       const t = TOME_BY_ID[id], o = p.tomes[id];
       return `<div class="item-entry" style="--c:#7fd6ff"><div class="ic">${icon(t.icon)}</div><div><div class="nm">${t.name} <span class="lvl">Lv ${o.level}${o.level >= TOME_MAX ? ' MAX' : ''}</span></div><div class="ds">${t.fmt(o.value)}${t.note ? ` · ${t.note}` : ''}</div></div></div>`;
     }).join('')}</div>` : `<p style="color:var(--muted)">No tomes yet — pick them when you level up (max ${TOME_SLOTS} different).</p>`;
-    const sk = [p.char.primary, ...p.char.abilities];
-    html += `<h3>Weapons</h3><div class="inv-list">${WEAPON_SLOTS.map((slot, i) => {
-      const w = p.weapons[slot], m = weaponMods(w, slot);
-      const parts = [`${pct(m.dmg - 1)} damage`];
+    html += `<h3>Weapons (${p.weaponOrder.length}/${WEAPON_SLOTS})</h3><div class="inv-list">${p.weaponOrder.map((id) => {
+      const w = p.weapons[id], m = p.weaponMods(id);
+      const def = WEAPONS[id];
+      const name = def ? def.name : p.char.primary.name;
+      const ic = def ? icon(def.icon) : p.char.primary.icon;
+      const parts = [`+${pct(m.dmg - 1)} damage`];
       if (w.rate) parts.push(`+${pct(w.rate)} fire rate`);
-      if (w.cd) parts.push(`-${pct(1 - m.cd)} cooldown`);
       if (w.area) parts.push(`+${pct(w.area)} size`);
       if (w.proj) parts.push(`+${Math.round(w.proj * 100) / 100} projectiles`);
-      if (w.crit) parts.push(`+${pct(w.crit)} crit`);
-      if (m.charges) parts.push(`+${m.charges} charge${m.charges > 1 ? 's' : ''}`);
-      return `<div class="item-entry" style="--c:#ffb22e"><div class="ic">${sk[i].icon}</div><div><div class="nm">${sk[i].name} <span class="lvl">Lv ${w.level}${w.level >= WEAPON_MAX ? ' MAX' : ''}</span></div><div class="ds">${'+' + parts.join(' · ')}</div></div></div>`;
+      if (m.crit) parts.push(`+${pct(m.crit)} crit`);
+      return `<div class="item-entry" style="--c:#ffb22e"><div class="ic">${ic}</div><div><div class="nm">${name} <span class="lvl">Lv ${w.level}${w.level >= WEAPON_MAX ? ' MAX' : ''}${id === 'primary' ? ' · MAIN' : ''}</span></div><div class="ds">${def ? def.desc + '<br>' : ''}${parts.join(' · ')}</div></div></div>`;
     }).join('')}</div>`;
     if (p.itemOrder.length) {
       html += `<h3>Items (${p.itemCount})</h3><div class="inv-list">${p.itemOrder.map((id) => {
@@ -969,23 +970,32 @@ export const UI = {
     }
 
     // tomes bar + weapon levels on the ability buttons
-    const tkey = Object.entries(p.tomes).map(([k, o]) => k + o.level).join() + '|' + WEAPON_SLOTS.map((s) => p.weapons[s].level).join();
+    const tkey = Object.entries(p.tomes).map(([k, o]) => k + o.level).join() + '|' + p.weaponOrder.map((id) => id + p.weapons[id].level).join();
     if (tkey !== this.lastTomeKey) {
       this.lastTomeKey = tkey;
+      // weapons (gold) | tomes (blue)
+      let wh = p.weaponOrder.map((id) => {
+        const def = WEAPONS[id];
+        const lv = p.weapons[id].level;
+        return `<div class="hud-tome weapon" title="${esc(def ? def.name : p.char.primary.name)}">${def ? icon(def.icon) : p.char.primary.icon}<b>${lv >= WEAPON_MAX ? 'MAX' : lv}</b></div>`;
+      }).join('');
+      for (let k = p.weaponOrder.length; k < WEAPON_SLOTS; k++) wh += '<div class="hud-tome weapon empty"></div>';
       const ids = Object.keys(p.tomes);
       let th = ids.map((id) => `<div class="hud-tome" title="${esc(TOME_BY_ID[id].name)}">${icon(TOME_BY_ID[id].icon)}<b>${p.tomes[id].level}</b></div>`).join('');
       for (let k = ids.length; k < TOME_SLOTS; k++) th += '<div class="hud-tome empty"></div>';
-      $('#hud-tomes').innerHTML = th;
-      $$('#hud-abilities .ab').forEach((el) => {
-        let b = el.querySelector('.wl');
+      $('#hud-tomes').innerHTML = `<div class="ht-group">${wh}</div><div class="ht-sep"></div><div class="ht-group">${th}</div>`;
+      // the main weapon's level on the primary button
+      const pb = $('#hud-abilities .ab[data-slot="primary"]');
+      if (pb) {
+        let b = pb.querySelector('.wl');
         if (!b) {
           b = document.createElement('span');
           b.className = 'wl';
-          el.appendChild(b);
+          pb.appendChild(b);
         }
-        const lv = p.weapons[el.dataset.slot]?.level || 1;
+        const lv = p.weapons.primary.level;
         b.textContent = lv >= WEAPON_MAX ? 'MAX' : 'Lv' + lv;
-      });
+      }
     }
 
     // items bar

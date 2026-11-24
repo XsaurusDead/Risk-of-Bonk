@@ -16,7 +16,7 @@ export function saveRun() {
     v: 1, savedAt: Date.now(), charId: r.charId, stageNum: r.stageNum, stagesCleared: r.stagesCleared, time: r.time, coins: r.coins,
     stats: r.stats, killsThisRun: (G.save.stats.kills || 0) - r.kills0,
     level: p.level, xp: p.xp, pendingLevelUps: p.pendingLevelUps, items: p.items, itemOrder: p.itemOrder, upgrades: p.upgrades,
-    tomes: p.tomes, weapons: p.weapons,
+    tomes: p.tomes, weapons: p.weapons, weaponOrder: p.weaponOrder,
     infusionHp: p.infusionHp, eaterDmg: p.eaterDmg || 0, chestsOpened: r.chestsOpened || 0, devilMarks: r.devilMarks || 0,
   };
   try {

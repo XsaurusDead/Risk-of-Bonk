@@ -146,6 +146,8 @@ export function preloadIcons() {
   const all = new Set([
     ...Object.values(ITEM_ICONS), ...Object.values(SKILL_ICONS).flat(), ...Object.values(UPGRADE_ICONS),
     ...Object.values(UI_ICONS), ...Object.values(MAP_ICONS), ...Object.values(STAT_ICONS), ...Object.values(STAGE_ICONS), 1061, 1226, 1263,
+    // weapons + tomes
+    1504, 1179, 1656, 1712, 1011, 1701, 1016, 121, 1149, 1004, 1052, 1171, 1098, 1173, 1078, 1099, 160, 1134, 1100, 1144, 114, 101, 1064, 1043, 1047, 117, 1042, 1170,
   ]);
   return Promise.all([...all].map((n) => new Promise((res) => {
     const img = new Image();

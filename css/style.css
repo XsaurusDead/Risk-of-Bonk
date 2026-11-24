@@ -517,3 +517,14 @@ body.touch #hud-prompt { top: 40%; }
 .item-entry .lvl { font-size: 12px; color: var(--accent); margin-left: 4px; }
 body.touch #hud-tomes { bottom: auto; top: 118px; left: 12px; transform: none; }
 @media (max-width: 700px) { #hud-tomes { bottom: calc(70px + var(--safe-b)); } .hud-tome { width: 24px; height: 24px; } .hud-tome .pxi { width: 18px; height: 18px; } }
+
+/* weapons | tomes bar */
+#hud-tomes { gap: 10px; align-items: center; }
+#hud-tomes .ht-group { display: flex; gap: 6px; }
+#hud-tomes .ht-sep { width: 2px; height: 24px; background: rgba(255, 255, 255, 0.18); border-radius: 2px; }
+.hud-tome.weapon { border-color: #ffb22e; background: rgba(40, 24, 6, 0.6); box-shadow: 0 0 8px #ffb22e44; }
+.hud-tome.weapon b { border-color: #ffb22e; background: #2a1a06; color: #ffe2a8; }
+.hud-tome.weapon.empty { border: 2px dashed rgba(255, 210, 120, 0.3); background: rgba(0, 0, 0, 0.25); box-shadow: none; }
+@media (max-width: 700px) { #hud-tomes { gap: 6px; } #hud-tomes .ht-group { gap: 4px; } }
+body.touch #hud-tomes { flex-direction: column; align-items: flex-start; gap: 6px; }
+body.touch #hud-tomes .ht-sep { display: none; }

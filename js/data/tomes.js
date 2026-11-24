@@ -70,32 +70,25 @@ export function applyTomes(m, tomes) {
 }
 
 // ---------------------------------------------------------------- weapons
-export const WEAPON_SLOTS = ['primary', 'ability1', 'ability2', 'ultimate'];
+// Up to 4 weapons: 'primary' (your survivor's main attack) + 3 picked from js/data/weapons.js.
+// Abilities (Ability 1/2, Ultimate) don't level.
+export const WEAPON_SLOTS = 4;
+export const PRIMARY_UPS = ['dmg', 'rate', 'area', 'proj', 'crit'];
 
-/** Stats a weapon level-up can improve. `slots` limits where a stat can roll. */
+/** Stats a weapon level-up can improve (each weapon lists which ones apply). */
 export const WEAPON_STATS = [
-  { id: 'dmg', name: 'Damage', base: 0.08, weight: 4, fmt: (v) => `+${pct(v)} damage` },
-  { id: 'rate', name: 'Fire rate', base: 0.06, weight: 3, slots: ['primary'], fmt: (v) => `+${pct(v)} attack speed` },
-  { id: 'cd', name: 'Cooldown', base: 0.06, weight: 3, slots: ['ability1', 'ability2', 'ultimate'], fmt: (v) => `-${pct(1 - 1 / (1 + v))} cooldown` },
-  { id: 'area', name: 'Size', base: 0.06, weight: 2, fmt: (v) => `+${pct(v)} size` },
-  { id: 'proj', name: 'Projectiles', base: 0.2, weight: 1.2, slots: ['primary'], fmt: (v) => `+${Math.round(v * 100) / 100} projectiles` },
-  { id: 'crit', name: 'Crit chance', base: 0.025, weight: 1.5, fmt: (v) => `+${pct(v)} crit chance` },
+  { id: 'dmg', name: 'Damage', base: 0.1, weight: 4, fmt: (v) => `+${pct(v)} damage` },
+  { id: 'rate', name: 'Fire rate', base: 0.07, weight: 3, fmt: (v) => `+${pct(v)} fire rate` },
+  { id: 'area', name: 'Size', base: 0.07, weight: 2, fmt: (v) => `+${pct(v)} size` },
+  { id: 'proj', name: 'Projectiles', base: 0.25, weight: 1.3, fmt: (v) => `+${Math.round(v * 100) / 100} projectiles` },
+  { id: 'crit', name: 'Crit chance', base: 0.03, weight: 1.5, fmt: (v) => `+${pct(v)} crit chance` },
 ];
 
-export const newWeapon = () => ({ level: 1, dmg: 0, rate: 0, cd: 0, area: 0, proj: 0, crit: 0 });
+export const newWeapon = () => ({ level: 1, dmg: 0, rate: 0, area: 0, proj: 0, crit: 0 });
 
-/** Derived multipliers for one weapon. */
-export function weaponMods(w, slot) {
-  if (!w) return { dmg: 1, area: 1, rate: 1, cd: 1, proj: 0, crit: 0, charges: 0 };
+/** Derived multipliers for one weapon. Every 10th level adds +10% damage. */
+export function weaponMods(w, baseCrit = 0) {
+  if (!w) return { dmg: 1, area: 1, rate: 1, proj: 0, crit: baseCrit };
   const milestone = Math.floor(w.level / 10) * 0.1;
-  return {
-    dmg: (1 + w.dmg) * (1 + milestone),
-    area: 1 + w.area,
-    rate: 1 + w.rate,
-    cd: 1 / (1 + w.cd),
-    proj: w.proj,
-    crit: w.crit,
-    // Ability 1 and 2 get an extra charge at weapon level 25 and 50
-    charges: slot === 'ability1' || slot === 'ability2' ? (w.level >= 50 ? 2 : w.level >= 25 ? 1 : 0) : 0,
-  };
+  return { dmg: (1 + w.dmg) * (1 + milestone), area: 1 + w.area, rate: 1 + w.rate, proj: w.proj, crit: w.crit + baseCrit };
 }

@@ -39,7 +39,8 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 
 ## How a run works
 
-- **Stage clock (10 minutes):** a steady stream of enemies that grows every minute, **HUGE waves at 3:00 and 6:00**, a **Champion mini-boss at 5:00 and 8:00** (giant, tanky version of the stage's toughest enemy; drops an item). After **10:00 comes OVERTIME**: Overtime Reapers and elite waves that get ×1.35 stronger every 30 seconds. They will kill you quickly, so find the portal and leave.
+- **Difficulty:** grows ×1.045 per minute and ×1.22 per cleared stage, and enemies also scale with your power (level, items, tome and weapon levels), so the phases (Easy → Medium → Hard → …) arrive sooner.
+- **Stage clock (10 minutes):** a steady stream of enemies that grows every minute, **HUGE waves at 3:00 and 6:00** (for one full minute big groups pour in from all sides, much faster than normal), a **Champion mini-boss at 5:00 and 8:00** (giant, tanky version of the stage's toughest enemy; drops an item). After **10:00 comes OVERTIME**: Overtime Reapers and elite waves that get ×1.35 stronger every 30 seconds. They will kill you quickly, so find the portal and leave.
 - **Maps:** 520 × 520 m (4× the old area) with terraced plateaus and cliffs (you can't walk up cliffs, so use ramps or jump), caves you walk through (the roof fades when you're inside), ruins, and floating islands reachable by jump pads. The Scorched Dunes stay mostly flat.
 - **Chests (15-20 per stage):** normal, large (better odds, ~13%), epic (only epic items, ~4%) and legendary (only legendary items, ~1%, with a light beacon). The price starts at 10 coins and rises with every chest you open in the run (10, 13, 16 … 28 after 5, 55 after 10, 140 after 20). Large/epic/legendary cost 2×/4×/8×.
 - **Shrines:** Healing (1-2, heals 50% HP), Combat (1-3, summons challengers and pays out an item), Mountain/Boss (1-3, doubles → quadruples → octuples the portal boss, each boss drops loot), Wisdom (2-5, random XP based on your level).
@@ -62,11 +63,14 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
     Greed (gold), Multishot (extra primary projectiles; fractions are a chance for one more), Fury (attack speed), the Skies (jumps, max +10),
     Fortune (luck: chests, Moai, items and tome/weapon roll rarity), Wisdom (XP), Blood (life steal, max 30%), the Aegis (shield),
     the Giant (size), Attraction (pickup range), Vitality (max HP) and Agility (move speed).
-  - **Weapons** — your Primary, Ability 1, Ability 2 and Ultimate each level up to **Lv 50**. A pick improves one stat of that weapon:
-    damage, fire rate / cooldown, size, crit chance, or projectiles (primary only). Every 10th level adds +10% damage, and
-    Ability 1 & 2 gain an extra charge at Lv 25 and Lv 50.
-  - Your tomes sit above the ability bar; weapon levels are shown on the ability buttons; *Tab* (or the bag button) lists everything.
-  - Tome and weapon data lives in `js/data/tomes.js`.
+  - **Weapons** — you carry up to **4 weapons**. Slot 1 is always your survivor's **main weapon** (their primary attack,
+    e.g. Kestrel's bow); the other **3 slots** are filled by picking new weapons from level-ups. Every weapon fires on its own
+    and levels up to **Lv 50** (a pick improves one stat: damage, fire rate, size, crit chance or projectiles; every 10th
+    level adds +10% damage). Abilities (Ability 1 / 2 / Ultimate) don't level. The 12 pick-up weapons:
+    Orbiting Blades, Burning Aura, Thunder Staff, Fire Staff, Frost Shards, Throwing Axe, Earth Spikes, Poison Flask,
+    Prism Laser, Dragon Breath, Void Orb and Revolver (`js/data/weapons.js`).
+  - The weapon bar (gold) and tome bar (blue) sit above the ability buttons; *Tab* (or the bag button) lists everything.
+  - Tome data and weapon level stats live in `js/data/tomes.js`, the weapons themselves in `js/data/weapons.js`.
 - **Portal & boss:** find the portal (marker on screen), interact to summon the stage boss. Stand in the ring to charge the portal, kill the boss, then enter the portal.
 - **Scaling:** difficulty = `1.035^minutes × 1.2^stagesCleared`. Enemy HP, damage, spawn credits, coin/XP drops and chest prices all scale off it, so everything grows exponentially. Elites (Blazing, Glacial, Overloading, Vampiric) show up as it rises.
 

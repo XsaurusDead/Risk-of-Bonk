@@ -8,6 +8,7 @@ import { ITEMS } from '../data/items.js';
 import { applyModsObj } from '../data/modutil.js';
 import { UPGRADES } from '../data/upgrades.js';
 import { applyTomes, newWeapon, weaponMods, WEAPON_SLOTS, TOME_MAX, WEAPON_MAX } from '../data/tomes.js';
+import { WEAPONS } from '../data/weapons.js';
 import { buildCharacter } from './charmodels.js';
 import { targetNearAim, nearestEnemy, applyFreeze, dealDamage, findTargets, explode, after } from './combat.js';
 import { particles, shake, floatText, ring } from './fx.js';
@@ -53,8 +54,11 @@ export class Player {
     this.itemOrder = [];
     this.upgrades = []; // legacy level-up picks (old saves)
     this.tomes = {}; // id -> { level, value }
-    this.weapons = {}; // slot -> weapon levels/stats
-    for (const s of WEAPON_SLOTS) this.weapons[s] = newWeapon();
+    // up to 4 weapons: 'primary' (the survivor's main attack) + 3 picked at level-ups
+    this.weapons = { primary: newWeapon() };
+    this.weaponOrder = ['primary'];
+    this.weaponT = {};
+    this.weaponState = {};
     this.buffs = {};
     this.cs = {}; // per-character scratch state
     this.itemTimers = {};
@@ -221,19 +225,53 @@ export class Player {
   }
 
   /** +1 weapon level, improving one stat by `value`. */
-  levelWeapon(slot, stat, value) {
-    const w = this.weapons[slot];
+  levelWeapon(id, stat, value) {
+    const w = this.weapons[id];
     if (!w || w.level >= WEAPON_MAX) return;
-    const before = weaponMods(w, slot).charges;
     w.level++;
     w[stat] = (w[stat] || 0) + value;
-    const gained = weaponMods(w, slot).charges - before;
-    if (gained > 0) this.charges[slot] = (this.charges[slot] || 0) + gained;
     this.dirty = true;
   }
 
-  weaponMods(slot) {
-    return weaponMods(this.weapons[slot], slot);
+  /** Equip a new weapon in a free slot (max 4 including the main weapon). */
+  addWeapon(id, bonusDmg = 0) {
+    if (this.weapons[id] || !WEAPONS[id] || this.weaponOrder.length >= WEAPON_SLOTS) return false;
+    this.weapons[id] = newWeapon();
+    this.weapons[id].dmg = bonusDmg;
+    this.weaponOrder.push(id);
+    this.weaponT[id] = 0.3;
+    return true;
+  }
+
+  weaponMods(id) {
+    return weaponMods(this.weapons[id], WEAPONS[id]?.crit || 0);
+  }
+
+  /** Projectile count for a weapon with `base` projectiles (weapon levels + Multishot tome, whole numbers). */
+  weaponCount(id, base) {
+    if (!base) return 0;
+    return base + Math.floor(this.weaponMods(id).proj + (this.stats.projectiles || 0) + 1e-6);
+  }
+
+  /** Fire the picked weapons (the main weapon fires as the primary attack). */
+  updateWeapons(dt) {
+    for (const id of this.weaponOrder) {
+      if (id === 'primary') continue;
+      const def = WEAPONS[id];
+      if (!def) continue;
+      const m = this.weaponMods(id);
+      const s = { id, area: m.area, rate: m.rate, count: this.weaponCount(id, def.proj), state: (this.weaponState[id] ||= {}) };
+      if (def.update) this.withWeapon(id, () => def.update(this, s, dt));
+      this.weaponT[id] = (this.weaponT[id] ?? 0) - dt;
+      if (this.weaponT[id] > 0) continue;
+      const res = this.withWeapon(id, () => def.fire(this, s));
+      // nothing to shoot at: try again shortly instead of wasting the cooldown
+      this.weaponT[id] = res === false ? 0.25 : def.cd / (m.rate * this.stats.attackSpeed);
+    }
+  }
+
+  disposeWeapons() {
+    for (const id of this.weaponOrder) WEAPONS[id]?.dispose?.(this.weaponState[id] || {});
   }
 
   /**
@@ -320,13 +358,13 @@ export class Player {
   cooldownFor(slot) {
     const i = SLOTS.indexOf(slot);
     const base = this.char.abilities[i].cd;
-    return base * (slot === 'ultimate' ? this.stats.ultCdMult : this.stats.cdMult) * this.weaponMods(slot).cd;
+    return base * (slot === 'ultimate' ? this.stats.ultCdMult : this.stats.cdMult);
   }
   reduceCooldowns(amount, slots = SLOTS) {
     for (const s of slots) if (this.cd[s] > 0) this.cd[s] = Math.max(0.001, this.cd[s] - amount);
   }
   maxCharges(i) {
-    return (this.char.abilities[i].charges || 1) + (this.stats.extraCharges || 0) + this.weaponMods(SLOTS[i]).charges;
+    return (this.char.abilities[i].charges || 1) + (this.stats.extraCharges || 0);
   }
   resetCooldown(slot) {
     const i = SLOTS.indexOf(slot);
@@ -934,6 +972,7 @@ export class Player {
       this.fireExtraProjectiles(prim, auto, this.stats.projectiles + wm.proj);
       this.lastAttackT = 0;
     }
+    this.updateWeapons(dt);
   }
 
   /**
@@ -977,13 +1016,7 @@ export class Player {
     if (this.charges[slot] <= 0) return false;
     const ab = this.char.abilities[i];
     this.aimYaw = this.aim.target ? this.aimYaw : this.camYaw;
-    const chanBefore = this.channelS;
-    const res = this.withWeapon(slot, () => ab.cast(this, this.aim));
-    if (this.channelS && this.channelS !== chanBefore) {
-      // channelled abilities keep the weapon's bonuses for every tick
-      const c = this.channelS, fn = c.fn;
-      c.fn = () => this.withWeapon(slot, fn);
-    }
+    const res = ab.cast(this, this.aim);
     if (res === false) return false;
     let refund = !!(this.char.passive.onCast && this.char.passive.onCast(slot, this) === 'refund');
     for (const id in this.items) {
@@ -1104,6 +1137,7 @@ export class Player {
   }
 
   dispose() {
+    this.disposeWeapons();
     G.scene.remove(this.model);
   }
 }

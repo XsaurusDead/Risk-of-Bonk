@@ -6,7 +6,8 @@ import { Input } from '../core/input.js';
 import { STAGES } from '../data/stages.js';
 import { BOSSES } from '../data/enemies.js';
 import { ITEMS } from '../data/items.js';
-import { TOMES, TOME_BY_ID, TOME_SLOTS, TOME_MAX, WEAPON_MAX, WEAPON_SLOTS, WEAPON_STATS, ROLL_RARITY } from '../data/tomes.js';
+import { TOMES, TOME_SLOTS, TOME_MAX, WEAPON_MAX, WEAPON_SLOTS, WEAPON_STATS, PRIMARY_UPS, ROLL_RARITY } from '../data/tomes.js';
+import { WEAPONS, WEAPON_IDS } from '../data/weapons.js';
 import { icon } from '../data/icons.js';
 import { CHARACTERS } from '../data/characters.js';
 import { World } from './world.js';
@@ -278,7 +279,11 @@ export const Game = {
     p.itemCount = Object.values(d.items).reduce((a, b) => a + b, 0);
     p.upgrades = d.upgrades;
     if (d.tomes) p.tomes = d.tomes;
-    if (d.weapons) for (const s of WEAPON_SLOTS) if (d.weapons[s]) Object.assign(p.weapons[s], d.weapons[s]);
+    if (d.weapons?.primary) Object.assign(p.weapons.primary, d.weapons.primary);
+    for (const id of d.weaponOrder || []) {
+      if (id === 'primary' || !WEAPONS[id] || !d.weapons?.[id]) continue;
+      if (p.addWeapon(id)) Object.assign(p.weapons[id], d.weapons[id]);
+    }
     p.infusionHp = d.infusionHp || 0;
     p.eaterDmg = d.eaterDmg || 0;
     p.markDirty();
@@ -368,7 +373,14 @@ export const Game = {
     const minutes = run.time / 60;
     // Exponential in both time and stages cleared.
     // gentler per-minute growth now that stages last up to 10 minutes
-    run.diff = Math.pow(1.035, minutes) * Math.pow(1.2, run.stagesCleared);
+    run.diff = Math.pow(1.045, minutes) * Math.pow(1.22, run.stagesCleared);
+    // enemies also keep up with how strong you've become (levels, items, tomes, weapons)
+    const p = G.player;
+    if (p) {
+      const tomeLv = Object.values(p.tomes || {}).reduce((a, t) => a + t.level, 0);
+      const weaponLv = Object.values(p.weapons || {}).reduce((a, w) => a + w.level - 1, 0);
+      run.powerScale = 1 + 0.03 * (p.level - 1) + 0.012 * (p.itemCount || 0) + 0.004 * (tomeLv + weaponLv);
+    } else run.powerScale = 1;
     run.coinScale = Math.pow(run.diff, 0.6);
     run.xpScale = Math.pow(run.diff, 0.65);
   },
@@ -802,7 +814,10 @@ export const Game = {
     }
     const owned = Object.keys(p.tomes);
     const tomePool = TOMES.filter((t) => (p.tomes[t.id] ? p.tomes[t.id].level < TOME_MAX : owned.length < TOME_SLOTS));
-    const weaponPool = WEAPON_SLOTS.filter((s) => p.weapons[s].level < WEAPON_MAX);
+    // weapons: level up one you carry, or (with a free slot) pick up a new one
+    const ownedW = p.weaponOrder.filter((id) => p.weapons[id].level < WEAPON_MAX);
+    const newW = p.weaponOrder.length < WEAPON_SLOTS ? WEAPON_IDS.filter((id) => !p.weapons[id]) : [];
+    const weaponPool = [...ownedW, ...newW];
     let mode = ['tomes', 'weapons', 'mixed'][Math.floor(Math.random() * 3)];
     if (!tomePool.length) mode = 'weapons';
     if (!weaponPool.length) mode = tomePool.length ? 'tomes' : 'none';
@@ -821,20 +836,35 @@ export const Game = {
         tag: lv ? `TOME · Lv ${lv} → ${lv + 1}` : `NEW TOME · ${owned.length + 1}/${TOME_SLOTS}`, text: t.fmt(value),
       });
     }
-    const names = [p.char.primary, ...p.char.abilities];
-    for (const slot of shuffle([...weaponPool]).slice(0, nWeapons)) {
-      const stats = WEAPON_STATS.filter((st) => !st.slots || st.slots.includes(slot));
-      const st = weightedPick(Object.fromEntries(stats.map((x) => [x.id, x.weight])));
-      const def = WEAPON_STATS.find((x) => x.id === st);
+    // mix level-ups of carried weapons and new weapons (when a slot is free)
+    const pickW = [];
+    const o = shuffle([...ownedW]), n = shuffle([...newW]);
+    while (pickW.length < nWeapons && (o.length || n.length)) {
+      const takeNew = n.length && (!o.length || Math.random() < 0.45);
+      pickW.push(takeNew ? n.shift() : o.shift());
+    }
+    for (const id of pickW) {
       const rarity = weightedPick(weights);
-      const value = def.base * ROLL_RARITY[rarity].mult;
-      const lv = p.weapons[slot].level;
-      const sk = names[WEAPON_SLOTS.indexOf(slot)];
-      let bonus = (lv + 1) % 10 === 0 ? ' · +10% damage milestone' : '';
-      if ((slot === 'ability1' || slot === 'ability2') && (lv + 1 === 25 || lv + 1 === 50)) bonus += ' · +1 charge';
+      if (!p.weapons[id]) {
+        const def = WEAPONS[id];
+        const bonus = 0.1 * (ROLL_RARITY[rarity].mult - 1);
+        choices.push({
+          kind: 'newWeapon', id, rarity, value: bonus, name: def.name, icon: icon(def.icon),
+          tag: `NEW WEAPON · ${p.weaponOrder.length + 1}/${WEAPON_SLOTS}`, text: def.desc + (bonus > 0 ? ` Starts with +${Math.round(bonus * 100)}% damage.` : ''),
+        });
+        continue;
+      }
+      const ups = id === 'primary' ? PRIMARY_UPS : WEAPONS[id].ups;
+      const stats = WEAPON_STATS.filter((st) => ups.includes(st.id));
+      const st = weightedPick(Object.fromEntries(stats.map((x) => [x.id, x.weight])));
+      const sdef = WEAPON_STATS.find((x) => x.id === st);
+      const value = sdef.base * ROLL_RARITY[rarity].mult;
+      const lv = p.weapons[id].level;
+      const name = id === 'primary' ? p.char.primary.name : WEAPONS[id].name;
+      const ic = id === 'primary' ? p.char.primary.icon : icon(WEAPONS[id].icon);
       choices.push({
-        kind: 'weapon', slot, stat: st, rarity, value, name: sk.name, icon: sk.icon,
-        tag: `WEAPON · Lv ${lv} → ${lv + 1}`, text: def.fmt(value) + bonus,
+        kind: 'weapon', slot: id, stat: st, rarity, value, name, icon: ic,
+        tag: `WEAPON · Lv ${lv} → ${lv + 1}`, text: sdef.fmt(value) + ((lv + 1) % 10 === 0 ? ' · +10% damage milestone' : ''),
       });
     }
     return shuffle(choices);
@@ -858,6 +888,7 @@ export const Game = {
     const p = G.player;
     if (c.kind === 'tome') p.addTome(c.id, c.value);
     else if (c.kind === 'weapon') p.levelWeapon(c.slot, c.stat, c.value);
+    else if (c.kind === 'newWeapon') p.addWeapon(c.id, c.value);
     p.pendingLevelUps--;
     sfx('item');
     if (p.pendingLevelUps > 0) this.levelChoices = this.rollUpgrades();
