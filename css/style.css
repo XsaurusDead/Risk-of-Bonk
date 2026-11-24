@@ -559,3 +559,13 @@ body.touch #hud-tomes .ht-sep { display: none; }
   .lb-row > :nth-child(6), .lb-row > :nth-child(7), .lb-row > :nth-child(8), .lb-row > :nth-child(9) { display: none; }
   .lb-char small { display: none; }
 }
+
+/* kill counter */
+#hud-kills { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 20px; font-weight: 800; color: #ffd9d9; text-shadow: 0 2px 0 #000; margin-top: 2px; }
+#hud-kills .pxi { width: 20px; height: 20px; }
+#hud-kills.bump #hud-kill-val { animation: killBump 0.25s ease-out; }
+@keyframes killBump { 0% { transform: scale(1.35); color: #fff; } 100% { transform: scale(1); } }
+#hud-kill-val { display: inline-block; min-width: 2ch; text-align: right; }
+.lb-score .pxi { width: 16px; height: 16px; vertical-align: -2px; }
+.lb-sub { color: var(--muted); }
+body.touch #hud-kills { font-size: 16px; }

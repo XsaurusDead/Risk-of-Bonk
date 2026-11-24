@@ -7,8 +7,8 @@ import { persist, selectedCostume } from './save.js';
 export const LB_SIZE = 25;
 
 /**
- * Score: progress first (stages cleared, beating the final boss), then kills, level and
- * time survived as tie-breakers that still reward long, strong runs.
+ * The board is ranked by KILLS (more kills = higher place). This score only breaks ties
+ * between runs with the same number of kills: progress, level and time survived.
  */
 export function runScore(s) {
   return Math.round(
@@ -16,8 +16,14 @@ export function runScore(s) {
   );
 }
 
+/** Ranking: kills first, then the tie-break score, then the newer run. */
+export function compareRuns(a, b) {
+  return (b.kills || 0) - (a.kills || 0) || (b.score || 0) - (a.score || 0) || b.date - a.date;
+}
+
 export function leaderboard() {
   if (!Array.isArray(G.save?.leaderboard)) G.save.leaderboard = [];
+  G.save.leaderboard.sort(compareRuns); // older saves were ranked by score
   return G.save.leaderboard;
 }
 
@@ -42,7 +48,7 @@ export function recordRun(s, reason = 'death') {
     reason,
   };
   list.push(entry);
-  list.sort((a, b) => b.score - a.score || b.date - a.date);
+  list.sort(compareRuns);
   list.length = Math.min(list.length, LB_SIZE);
   persist();
   const rank = list.indexOf(entry) + 1;
