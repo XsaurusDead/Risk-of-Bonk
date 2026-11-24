@@ -63,6 +63,8 @@ export const Input = {
     }
 
     window.addEventListener('keydown', (e) => {
+      const tag = e.target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return; // typing in a text field
       if (e.code === 'Tab') e.preventDefault();
       if (e.code === 'Space' && G.mode === 'playing') e.preventDefault();
       if (!this.keys.has(e.code)) {

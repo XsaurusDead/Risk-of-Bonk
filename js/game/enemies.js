@@ -58,7 +58,7 @@ export function spawnEnemy(id, pos, opts = {}) {
     mass: opts.boss ? 99 : Math.max(1, def.radius * def.radius * (elite ? 1.6 : 1)),
     flying: def.ai === 'flyer' || def.ai === 'swooper' || !!def.flying, hover: def.hover || 0,
     ai: def.ai, state: 'chase', t: 0, atkCd: rand(0.5, 2), aux: 0, auxDir: new THREE.Vector3(),
-    status: { burnDps: 0, burnT: 0, burnAcc: 0, slow: 0, slowT: 0, chill: 0, freeze: 0, stun: 0 },
+    status: { burnDps: 0, burnT: 0, burnAcc: 0, slow: 0, slowT: 0, chill: 0, freeze: 0, stun: 0, poison: 0, poisonT: 0, poisonAcc: 0 },
     flash: 0, shieldHp: 0, spawnT: opts.instant ? 0 : 0.6, dead: false, vulnT: 0, lastHitT: 99,
     mesh: group, mat, bob: Math.random() * 6.28, trailT: 0, patternQueue: [], enraged: false, hitPlayer: false,
     // spring-driven squash/stretch and flinch tilt (see updateSprings)
@@ -100,7 +100,13 @@ export function killEnemy(e, o = {}) {
     dropXp(e.pos, e.def.xp * run.xpScale * mult);
     if (Math.random() < (e.elite ? 0.25 : 0.03)) dropHeal(e.pos);
     track('kills');
+    track(e.isBoss ? 'boss_' + e.id : 'kill_' + e.id);
+    if (p) {
+      p.stageKills++;
+      p.lastKillT = 0;
+    }
     if (e.status.burnT > 0) track('burnKills');
+    if (e.status.poisonT > 0) track('poisonKills');
     if (o.source === 'deploy') track('deployKills');
     if (e.elite) track('eliteKills');
     if (p && !p.dead) {
@@ -225,6 +231,17 @@ function updateEnemy(e, dt, p) {
       if (Math.random() < 0.7) particles(e.pos, 0xff6622, 2, 2, 0.4, 0.25, -3);
     }
   }
+  if (s.poisonT > 0) {
+    s.poisonT -= dt;
+    s.poisonAcc += dt;
+    if (s.poisonAcc >= 0.5) {
+      s.poisonAcc -= 0.5;
+      dealDamage(e, s.poison * G.player.stats.damage * 0.15 * 0.5, { procCoef: 0, canCrit: false, color: '#9dff5a', noHooks: true });
+      if (e.dead) return;
+      if (Math.random() < 0.6) particles(e.pos, 0x88ff44, 1, 1.5, 0.5, 0.22, -2);
+    }
+    if (s.poisonT <= 0) s.poison = 0;
+  }
   if (s.slowT > 0) s.slowT -= dt;
   if (s.slowT <= 0) s.slow = 0;
   if (e.vulnT > 0) e.vulnT -= dt;
@@ -336,6 +353,7 @@ function updateEnemy(e, dt, p) {
   else if (frozen) em.copy(FROZEN).multiplyScalar(0.6);
   else if (e.state === 'fuse') em.copy(FLASH).multiplyScalar(Math.sin(e.t * 30) > 0 ? 0.8 : 0);
   else if (s.burnT > 0) em.copy(BURN).multiplyScalar(0.25 + Math.random() * 0.15);
+  else if (s.poisonT > 0) em.setRGB(0.12, 0.35, 0.05);
   else if (e.elite) em.set(e.elite.color).multiplyScalar(0.35);
   else em.setRGB(0, 0, 0);
   if (stunned && Math.random() < 0.1) particles(_v.copy(e.pos).setY(e.pos.y + e.height * e.scale), 0xffff66, 1, 1, 0.4, 0.15, 0);
@@ -620,7 +638,18 @@ function bossAI(e, dt, p, dist, dx, dz) {
     floatText(e.pos.clone().setY(e.pos.y + e.height), 'ENRAGED!', '#ff3355', true);
     sfx('roar');
   }
-  const cdMult = e.enraged ? 0.65 : 1;
+  if (e.def.final && !e.phase3 && e.hp < e.maxHp * 0.25) {
+    // final form: faster, angrier, calls reinforcements
+    e.phase3 = true;
+    e.speed *= 1.3;
+    floatText(e.pos.clone().setY(e.pos.y + e.height), 'FINAL FORM', '#ffd27a', true);
+    ring(e.pos, 20, 0xffd27a, 1);
+    shake(0.8);
+    sfx('roar');
+    e.atkCd = 0;
+    e.patternQueue = ['summon'];
+  }
+  const cdMult = e.phase3 ? 0.45 : e.enraged ? 0.65 : 1;
   if (e.state === 'chase') {
     const want = e.flying ? 14 : 7;
     if (dist > want) moveToward(e, p.pos.x, p.pos.z, dt);
@@ -736,7 +765,7 @@ function runPattern(e, dt, p, dist) {
         for (let i = 0; i < n; i++) {
           const a = (i / n) * Math.PI * 2;
           const pos = e.pos.clone().add(_v.set(Math.cos(a) * 6, 0, Math.sin(a) * 6));
-          spawnEnemy(def.summon, pos, {});
+          spawnEnemy(def.summonPool ? pick(def.summonPool) : def.summon, pos, {});
         }
       }
       return e.t > 1.2;

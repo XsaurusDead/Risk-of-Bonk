@@ -6,10 +6,10 @@
 import * as THREE from 'three';
 import {
   hitscan, meleeArc, explode, spawnProjectile, spawnZone, after, findTargets, nearestEnemy,
-  applyBurn, applyChill, applyFreeze, applySlow, applyStun, dealDamage, targetNearAim,
+  applyBurn, applyChill, applyFreeze, applySlow, applyStun, dealDamage, targetNearAim, applyPoison, chainLightning,
 } from '../game/combat.js';
 import { spawnMinion } from '../game/minions.js';
-import { particles, ring, telegraph, beam, shake } from '../game/fx.js';
+import { particles, ring, telegraph, beam, shake, floatText } from '../game/fx.js';
 import { sfx } from '../core/audio.js';
 import { G } from '../core/state.js';
 import { track } from '../core/save.js';
@@ -690,5 +690,473 @@ export const CHARACTERS = {
   },
 };
 
-export const CHARACTER_ORDER = ['vanguard', 'bonker', 'pyra', 'kestrel', 'tinker', 'glacia', 'kaze', 'morrow', 'bulwark', 'nyx'];
+// =====================================================================
+// Expansion survivors
+// =====================================================================
+Object.assign(CHARACTERS, {
+  sol: {
+    name: 'Sol', title: 'The Sun Paladin', color: '#ffd45a', difficulty: 2,
+    lore: 'A holy knight who carries the dawn on her shield. Stands in the thick of it and outlasts everyone.',
+    base: { hp: 150, damage: 13, speed: 8.2, armor: 20, regen: 2, jumps: 2 },
+    ratings: { hp: 4, dmg: 3, speed: 2, range: 2 },
+    passive: {
+      name: 'Radiance', icon: '☀️',
+      desc: 'Holy light burns enemies within 6m for 30% damage per second. Kills inside it heal 1% max HP.',
+      onTick: (dt, p) => {
+        p.cs.rad = (p.cs.rad || 0) - dt;
+        if (p.cs.rad > 0) return;
+        p.cs.rad = 0.5;
+        for (const e of findTargets(p.pos, 6 * p.stats.area, 30)) dealDamage(e, p.stats.damage * 0.15, { procCoef: 0, canCrit: false, color: '#ffe9a0' });
+      },
+      onKill: (e, p) => { if (e.pos.distanceTo(p.pos) < 6 * p.stats.area) p.heal(p.stats.maxHp * 0.01); },
+    },
+    primary: {
+      name: 'Judgment Hammer', icon: '🔨', rate: 1.6, desc: 'Smash in a wide arc for 210% damage.',
+      fire(p) {
+        meleeArc(p.pos, p.aimYaw, 5, 120, p.stats.damage * 2.1, { knockback: 6, color: 0xffe08a });
+        sfx('swing');
+        p.anim('swing');
+      },
+    },
+    abilities: [
+      {
+        name: 'Shield Bash', icon: '🛡️', cd: 5, desc: 'Charge forward with your shield, dealing 300% damage and stunning everything in your path.',
+        cast(p) {
+          p.dash(moveOrAim(p), 9, 0.25, { invuln: 0.2, damageAlong: { radius: 2.6, damage: p.stats.damage * 3, stun: 1.2 } });
+          sfx('dash');
+        },
+      },
+      {
+        name: 'Consecrate', icon: '✨', cd: 10, desc: 'Bless the ground for 6s: enemies inside take 120% damage per second, you heal 3% max HP per second while standing in it.',
+        cast(p) {
+          const pos = p.pos.clone();
+          spawnZone({
+            pos, radius: 8, duration: 6, tick: 0.5, color: 0xffe08a, kind: 'holy',
+            onTick: (z) => {
+              for (const e of findTargets(z.pos, z.radius, 40)) dealDamage(e, p.stats.damage * 0.6, { procCoef: 0.3, color: '#ffe9a0' });
+              if (p.pos.distanceTo(z.pos) < z.radius) p.heal(p.stats.maxHp * 0.015);
+            },
+          });
+          sfx('item');
+        },
+      },
+      {
+        name: 'Solar Flare', icon: '🌞', cd: 50, ult: true, desc: 'Erupt with the power of the sun, dealing 1500% damage around you and stunning for 2s.',
+        cast(p) {
+          explode(p.pos, 14, p.stats.damage * 15, { stun: 2, knockback: 14, color: 0xffd45a, big: true });
+          ring(p.pos, 20, 0xffffff, 0.8);
+          particles(p.pos, 0xffe08a, 50, 16, 1.2, 0.6);
+          shake(1);
+          sfx('bigboom');
+          p.anim('slam');
+        },
+      },
+    ],
+  },
+
+  rook: {
+    name: 'Rook', title: 'The Marksman', color: '#9bbf6a', difficulty: 3,
+    lore: 'One shot, one kill. Two shots if you are a boss. Three if you are lucky.',
+    base: { hp: 100, damage: 14, speed: 8.6, armor: 0, regen: 1, jumps: 2 },
+    ratings: { hp: 2, dmg: 5, speed: 3, range: 5 },
+    passive: {
+      name: 'Steady Aim', icon: '🎯',
+      desc: 'Standing still for a moment grants +40% damage and +20% critical chance.',
+      mods: (m, p) => { if (p.cond?.still) { m.damage += 0.4; m.crit += 0.2; } },
+    },
+    primary: {
+      name: 'Longshot Rifle', icon: '🔫', rate: 1.3, desc: 'A piercing rifle shot for 260% damage.',
+      fire(p, aim) {
+        hitscan(p.muzzle(0.3), aim.point, 180, p.stats.damage * 2.6, { pierce: true, color: 0xeaffc0, width: 0.1, knockback: 3 });
+        sfx('laser', 0.05);
+        shake(0.05);
+        p.anim('shoot');
+      },
+    },
+    abilities: [
+      {
+        name: 'Concussion Grenade', icon: '💣', cd: 6, desc: 'Lob a grenade that explodes for 250% damage and stuns for 2s.',
+        cast(p, aim) {
+          const from = p.muzzle(0.3);
+          const d = aim.dirFrom(from);
+          d.y += 0.2;
+          spawnProjectile({ pos: from, dir: d, speed: 32, gravity: 22, damage: p.stats.damage * 2.5, explodeRadius: 5, color: 0x88aa66, size: 0.35, procCoef: 1, status: { stun: 2 } });
+          sfx('shoot');
+        },
+      },
+      {
+        name: 'Grapple Hook', icon: '🪝', cd: 7, desc: 'Fire a hook and zip toward where you are aiming (up to 28m).',
+        cast(p, aim) {
+          const to = aim.groundPoint.clone();
+          const d = to.clone().sub(p.pos).setY(0);
+          const dist = Math.min(28, d.length());
+          if (dist < 2) return false;
+          beam(p.pos.clone().setY(p.pos.y + 1.4), to.clone().setY(to.y + 0.5), 0xcccccc, 0.05, 0.35);
+          p.dash(d.normalize(), dist, 0.35, { invuln: 0.2 });
+          p.vel.y = 7;
+          sfx('dash');
+        },
+      },
+      {
+        name: 'Execution Round', icon: '🎖️', cd: 45, ult: true, desc: 'A guaranteed-critical shot that pierces everything for 4000% damage.',
+        cast(p, aim) {
+          hitscan(p.muzzle(0.3), aim.point, 220, p.stats.damage * 40, { pierce: true, crit: true, color: 0xff4444, width: 0.6, knockback: 12, life: 0.4 });
+          shake(0.6);
+          sfx('bigboom');
+          p.anim('shoot');
+        },
+      },
+    ],
+  },
+
+  vex: {
+    name: 'Vex', title: 'The Plague Doctor', color: '#8bd450', difficulty: 3,
+    lore: 'A doctor who discovered that the most effective cure is making the problem dissolve.',
+    base: { hp: 105, damage: 12, speed: 8.6, armor: 5, regen: 1, jumps: 2 },
+    ratings: { hp: 3, dmg: 4, speed: 3, range: 3 },
+    passive: {
+      name: 'Toxicology', icon: '☣️',
+      desc: 'Your direct hits apply a poison stack (15% damage per second per stack, up to 10 stacks).',
+      onHit: (h) => { if (h.procCoef >= 0.5) applyPoison(h.enemy, 1); },
+    },
+    primary: {
+      name: 'Toxic Flask', icon: '🧪', rate: 1.4, desc: 'Lob a flask that shatters for 140% damage and leaves a poison puddle for 2s.',
+      fire(p, aim) {
+        const from = p.muzzle(0.3);
+        const d = aim.dirFrom(from);
+        d.y += 0.12;
+        spawnProjectile({
+          pos: from, dir: d, speed: 36, gravity: 20, damage: p.stats.damage * 1.4, explodeRadius: 3, color: 0x8bd450, size: 0.3, procCoef: 1,
+          onGround: (pos) => spawnZone({
+            pos, radius: 3, duration: 2, tick: 0.5, color: 0x6aff3a, kind: 'fire',
+            onTick: (z) => { for (const e of findTargets(z.pos, z.radius, 20)) { dealDamage(e, p.stats.damage * 0.3, { procCoef: 0, canCrit: false, color: '#9dff5a' }); applyPoison(e, 1); } },
+          }),
+        });
+        sfx('shoot');
+        p.anim('cast');
+      },
+    },
+    abilities: [
+      {
+        name: 'Miasma', icon: '🌫️', cd: 7, desc: 'Release a toxic cloud for 5s that poisons and slows enemies by 30%.',
+        cast(p, aim) {
+          spawnZone({
+            pos: aim.groundPoint.clone(), radius: 8, duration: 5, tick: 0.5, color: 0x6aff3a, kind: 'blizzard',
+            onTick: (z) => { for (const e of findTargets(z.pos, z.radius, 60)) { applyPoison(e, 1); applySlow(e, 0.3, 1); } },
+          });
+          sfx('dash');
+        },
+      },
+      {
+        name: 'Purge', icon: '💉', cd: 9, desc: 'Detonate all poison within 20m: each stack deals 60% damage instantly. Heal 1% max HP per enemy purged.',
+        cast(p) {
+          let n = 0;
+          for (const e of findTargets(p.pos, 20, 80)) {
+            if (e.status.poison <= 0) continue;
+            const st = e.status.poison;
+            e.status.poison = 0;
+            e.status.poisonT = 0;
+            particles(e.pos, 0x8bd450, 8, 6, 0.5);
+            dealDamage(e, p.stats.damage * 0.6 * st, { procCoef: 0.5, color: '#b6ff7a' });
+            n++;
+          }
+          if (!n) return false;
+          p.heal(p.stats.maxHp * 0.01 * n);
+          ring(p.pos, 20, 0x8bd450, 0.5);
+          sfx('boom');
+        },
+      },
+      {
+        name: 'Pandemic', icon: '🦠', cd: 50, ult: true, desc: 'Every enemy within 30m gets its poison doubled (at least 8 stacks) for 8s, ignoring the stack limit.',
+        cast(p) {
+          for (const e of findTargets(p.pos, 30, 120)) {
+            e.status.poison = Math.max(8, e.status.poison * 2);
+            e.status.poisonT = 8;
+            particles(e.pos, 0x6aff3a, 4, 3, 0.6);
+          }
+          ring(p.pos, 30, 0x6aff3a, 0.8);
+          sfx('roar');
+        },
+      },
+    ],
+  },
+
+  echo: {
+    name: 'Echo', title: 'The Chronomancer', color: '#5fe0d0', difficulty: 3,
+    lore: 'Has already seen how this fight ends. Is mildly disappointed.',
+    base: { hp: 95, damage: 13, speed: 8.8, armor: 0, regen: 1, jumps: 2 },
+    ratings: { hp: 2, dmg: 3, speed: 3, range: 4 },
+    passive: {
+      name: 'Temporal Echo', icon: '⏳',
+      desc: 'Abilities have a 20% chance not to use a charge.',
+      onCast: () => (Math.random() < 0.2 ? 'refund' : null),
+    },
+    primary: {
+      name: 'Time Bolt', icon: '🕓', rate: 2.2, desc: 'Fire a bolt for 140% damage that slows enemies by 20%.',
+      fire(p, aim) {
+        const from = p.muzzle(0.3);
+        spawnProjectile({ pos: from, dir: aim.dirFrom(from), speed: 50, damage: p.stats.damage * 1.4, color: 0x7ff5e6, size: 0.28, trail: 0x3aa89a, procCoef: 1, status: { slow: 0.2 } });
+        sfx('shoot');
+        p.anim('cast');
+      },
+    },
+    abilities: [
+      {
+        name: 'Stasis Field', icon: '🔵', cd: 8, desc: 'Freeze enemies in an area for 2.5s and deal 160% damage per second to them.',
+        cast(p, aim) {
+          const pos = aim.groundPoint.clone();
+          for (const e of findTargets(pos, 7 * p.stats.area, 60)) applyFreeze(e, 2.5);
+          spawnZone({
+            pos, radius: 7, duration: 3, tick: 0.5, color: 0x5fe0d0, kind: 'blizzard',
+            onTick: (z) => { for (const e of findTargets(z.pos, z.radius, 60)) dealDamage(e, p.stats.damage * 0.8, { procCoef: 0.4, color: '#9ffff0' }); },
+          });
+          sfx('freeze');
+        },
+      },
+      {
+        name: 'Rewind', icon: '⏪', cd: 10, desc: 'Return to where you were 3 seconds ago and restore the health you had then (plus 10%).',
+        cast(p) {
+          const h = p.posHistory[Math.max(0, p.posHistory.length - 30)];
+          if (!h) return false;
+          particles(p.pos, 0x5fe0d0, 16, 5, 0.6);
+          p.pos.copy(h.p);
+          p.vel.set(0, 0, 0);
+          p.hp = Math.min(p.stats.maxHp, Math.max(p.hp, h.hp) + p.stats.maxHp * 0.1);
+          p.invulnT = Math.max(p.invulnT, 0.4);
+          ring(p.pos, 4, 0x5fe0d0, 0.5);
+          particles(p.pos, 0x5fe0d0, 16, 5, 0.6);
+          sfx('portal');
+        },
+      },
+      {
+        name: 'Time Stop', icon: '⏸️', cd: 60, ult: true, desc: 'Stop time for everything within 40m: enemies freeze for 4s and take +25% damage.',
+        cast(p) {
+          for (const e of findTargets(p.pos, 40, 200)) {
+            applyFreeze(e, 4);
+            e.vulnT = Math.max(e.vulnT, 4);
+          }
+          ring(p.pos, 40, 0x9ffff0, 1);
+          shake(0.4);
+          sfx('freeze');
+        },
+      },
+    ],
+  },
+
+  grizzle: {
+    name: 'Grizzle', title: 'The Beast Tamer', color: '#c08a4a', difficulty: 2,
+    lore: 'Raised by wolves. Then raised some wolves. Now the wolves raise hell.',
+    base: { hp: 130, damage: 12, speed: 8.8, armor: 10, regen: 1.5, jumps: 2 },
+    ratings: { hp: 4, dmg: 3, speed: 3, range: 3 },
+    passive: {
+      name: 'Pack Leader', icon: '🐺',
+      desc: 'A loyal wolf always fights beside you, biting for 200% damage. It inherits your attack speed.',
+      onTick: (dt, p) => {
+        p.cs.wolfT = (p.cs.wolfT || 0) - dt;
+        if (p.cs.wolfT > 0) return;
+        p.cs.wolfT = 1;
+        if (!G.minions.some((m) => m.type === 'wolf' && !m.dead)) spawnMinion('wolf', p.pos, {});
+      },
+    },
+    primary: {
+      name: 'Hunting Spear', icon: '🔱', rate: 1.6, desc: 'Throw a spear that pierces one enemy for 170% damage.',
+      fire(p, aim) {
+        const from = p.muzzle(0.3);
+        spawnProjectile({ pos: from, dir: aim.dirFrom(from), speed: 52, damage: p.stats.damage * 1.7, pierce: 1, color: 0xd8c8a8, size: 0.25, shape: 'arrow', procCoef: 1 });
+        sfx('swing', 0.05);
+        p.anim('shoot');
+      },
+    },
+    abilities: [
+      {
+        name: "Sic 'Em", icon: '🐾', cd: 5, desc: 'Send your wolves leaping at the target. Their next bite deals 600% damage.',
+        cast(p, aim) {
+          const e = aim.target || targetNearAim(40, 30) || nearestEnemy(p.pos, 25);
+          if (!e) return false;
+          for (const w of G.minions) {
+            if (w.type !== 'wolf' || w.dead) continue;
+            particles(w.pos, 0xc08a4a, 8, 4, 0.4);
+            w.pos.copy(e.pos).add(_a.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize().multiplyScalar(e.radius + 1));
+            w.opts.sicTarget = e;
+            w.atk = 0;
+          }
+          sfx('roar');
+        },
+      },
+      {
+        name: 'Feral Roar', icon: '🦁', cd: 10, desc: 'You gain +40% attack speed and +20% move speed for 5s. Your wolves go into a frenzy (+50% damage).',
+        cast(p) {
+          p.addBuff('feral', 5, { attackSpeed: 0.4, moveSpeed: 0.2 });
+          for (const w of G.minions) if (w.type === 'wolf') w.opts.frenzy = G.time + 5;
+          ring(p.pos, 6, 0xc08a4a, 0.4);
+          sfx('roar');
+        },
+      },
+      {
+        name: 'Stampede', icon: '🐗', cd: 50, ult: true, desc: 'Summon 6 spirit boars that charge forward, trampling everything for 500% damage.',
+        cast(p) {
+          const d = aimFlat(p);
+          const right = V().set(-d.z, 0, d.x);
+          for (let i = 0; i < 6; i++) {
+            after(i * 0.08, () => {
+              const pos = p.pos.clone().addScaledVector(right, (i - 2.5) * 2.2).setY(p.pos.y + 1);
+              spawnProjectile({ pos, dir: d, speed: 26, damage: p.stats.damage * 5, pierce: 99, color: 0xffcc88, size: 1.1, life: 2.2, procCoef: 0.6, trail: 0xffaa66, status: { knockback: 10 } });
+            });
+          }
+          shake(0.5);
+          sfx('roar');
+        },
+      },
+    ],
+  },
+
+  spark: {
+    name: 'Spark', title: 'The Storm Caller', color: '#ffe04a', difficulty: 2,
+    lore: 'Hair permanently standing on end. Fingers permanently tingling. Enemies permanently fried.',
+    base: { hp: 100, damage: 12, speed: 9, armor: 0, regen: 1, jumps: 2 },
+    ratings: { hp: 2, dmg: 4, speed: 4, range: 4 },
+    passive: {
+      name: 'Overcharge', icon: '⚡',
+      desc: 'Every 5th direct hit discharges lightning through 4 enemies for 100% damage.',
+      onHit: (h, p) => {
+        if (h.procCoef < 0.5) return;
+        p.cs.oc = (p.cs.oc || 0) + 1;
+        if (p.cs.oc >= 5) {
+          p.cs.oc = 0;
+          chainLightning(h.enemy, 4, 18, p.stats.damage, { procCoef: 0.2 });
+        }
+      },
+    },
+    primary: {
+      name: 'Arc Bolt', icon: '🌩️', rate: 2.5, desc: 'Hitscan lightning for 90% damage that arcs to one more enemy.',
+      fire(p, aim) {
+        const n = hitscan(p.muzzle(0.3), aim.point, 90, p.stats.damage * 0.9, { color: 0xfff08a, width: 0.08 });
+        if (n && aim.target && !aim.target.dead) chainLightning(aim.target, 1, 12, p.stats.damage * 0.45, { procCoef: 0.3 });
+        sfx('zap', 0.05);
+        p.anim('cast');
+      },
+    },
+    abilities: [
+      {
+        name: 'Ball Lightning', icon: '🔮', cd: 6, desc: 'Conjure a crackling orb at the target spot for 3s that zaps enemies inside for 280% damage per second.',
+        cast(p, aim) {
+          spawnZone({
+            pos: aim.groundPoint.clone(), radius: 6, duration: 3, tick: 0.25, color: 0xfff08a, kind: 'storm',
+            onTick: (z) => {
+              const ts = findTargets(z.pos, z.radius, 4);
+              for (const e of ts) {
+                beam(z.pos.clone().setY(z.pos.y + 2), e.pos.clone().setY(e.pos.y + e.height * 0.5), 0xfff08a, 0.08, 0.1);
+                dealDamage(e, p.stats.damage * 0.7, { procCoef: 0.25, color: '#fff08a' });
+              }
+            },
+          });
+          sfx('zap');
+        },
+      },
+      {
+        name: 'Static Dash', icon: '💨', cd: 6, desc: 'Dash as a bolt of lightning, dealing 250% damage to everything you pass through and stunning briefly.',
+        cast(p) {
+          p.dash(moveOrAim(p), 14, 0.2, { invuln: 0.25, damageAlong: { radius: 2.4, damage: p.stats.damage * 2.5, stun: 0.5 } });
+          sfx('zap');
+        },
+      },
+      {
+        name: 'Thunderstorm', icon: '⛈️', cd: 45, ult: true, desc: 'Call a storm for 6s: lightning strikes enemies in a huge area 10 times per second for 250% damage.',
+        cast(p, aim) {
+          spawnZone({
+            pos: aim.groundPoint.clone(), radius: 14, duration: 6, tick: 0.1, color: 0x8899ff, kind: 'storm',
+            onTick: (z) => {
+              const ts = findTargets(z.pos, z.radius, 30);
+              if (!ts.length) return;
+              const e = ts[Math.floor(Math.random() * ts.length)];
+              beam(e.pos.clone().setY(e.pos.y + 25), e.pos.clone().setY(e.pos.y + e.height * 0.5), 0xdde6ff, 0.35, 0.12);
+              dealDamage(e, p.stats.damage * 2.5, { procCoef: 0.3, color: '#dde6ff' });
+              sfx('zap', 0.05);
+            },
+          });
+          shake(0.3);
+        },
+      },
+    ],
+  },
+
+  mimic: {
+    name: 'Mimic', title: 'The Gambler', color: '#c46bff', difficulty: 2,
+    lore: 'Used to be a treasure chest. Got tired of being opened. Now opens enemies instead.',
+    base: { hp: 100, damage: 12, speed: 9, armor: 5, regen: 1, jumps: 2 },
+    ratings: { hp: 2, dmg: 3, speed: 4, range: 3 },
+    passive: {
+      name: 'Jackpot', icon: '🎰',
+      desc: '+0.5 luck, +25% coins and chests cost 15% less. Critical coins bounce to another enemy.',
+      mods: (m) => { m.luck += 0.5; m.coins += 0.25; m.chestDiscount = 1 - (1 - m.chestDiscount) * 0.85; },
+      onHit: (h, p) => {
+        if (!h.crit || h.procCoef < 0.9) return;
+        const o = nearestEnemy(h.enemy.pos, 15, new Set([h.enemy]));
+        if (o) spawnProjectile({ pos: h.pos, dir: o.pos.clone().sub(h.pos), speed: 40, damage: p.stats.damage * 1.2, homing: 10, target: o, color: 0xffd23c, size: 0.22, procCoef: 0.5 });
+      },
+    },
+    primary: {
+      name: 'Coin Toss', icon: '🪙', rate: 2.6, desc: 'Flick coins for 120% damage.',
+      fire(p, aim) {
+        const from = p.muzzle(0.3);
+        spawnProjectile({ pos: from, dir: aim.dirFrom(from), speed: 55, damage: p.stats.damage * 1.2, color: 0xffd23c, size: 0.22, procCoef: 1 });
+        sfx('coin', 0.05);
+        p.anim('shoot');
+      },
+    },
+    abilities: [
+      {
+        name: 'Double or Nothing', icon: '🃏', cd: 6, desc: 'A piercing gamble shot: deals 0%, 250%, 600% or 1500% damage at random.',
+        cast(p, aim) {
+          const r = Math.random();
+          const mult = r < 0.25 ? 0 : r < 0.65 ? 2.5 : r < 0.92 ? 6 : 15;
+          const label = mult === 0 ? 'BUST!' : mult === 15 ? 'JACKPOT!' : `x${mult}`;
+          floatText(p.pos.clone().setY(p.pos.y + 2.4), label, mult === 0 ? '#888888' : mult === 15 ? '#ffd23c' : '#ffffff', mult >= 6);
+          if (mult > 0) hitscan(p.muzzle(0.3), aim.point, 160, p.stats.damage * mult, { pierce: true, color: 0xffd23c, width: 0.15 + mult * 0.02, crit: mult === 15 ? true : undefined });
+          sfx(mult === 15 ? 'legendary' : mult ? 'laser' : 'deny');
+        },
+      },
+      {
+        name: 'Lucky Dodge', icon: '🍀', cd: 8, desc: 'Dash away and become untouchable for 1.5s.',
+        cast(p) {
+          p.dash(moveOrAim(p), 10, 0.22, { invuln: 1.5 });
+          floatText(p.pos.clone().setY(p.pos.y + 2.2), 'LUCKY!', '#88ff88');
+          sfx('dash');
+        },
+      },
+      {
+        name: 'Jackpot', icon: '💎', cd: 60, ult: true, desc: 'Pull the lever! Gold Rain (12 meteors of 400% + coins), Healing Fountain (full heal + 50% barrier) or Triple Seven (2500% around you).',
+        cast(p) {
+          const roll = Math.floor(Math.random() * 3);
+          if (roll === 0) {
+            floatText(p.pos.clone().setY(p.pos.y + 3), 'GOLD RAIN', '#ffd23c', true);
+            const ts = findTargets(p.pos, 30, 12);
+            for (let i = 0; i < 12; i++) {
+              after(i * 0.12, () => {
+                const t = ts[i % Math.max(1, ts.length)];
+                const pos = t ? t.pos.clone() : p.pos.clone().add(_a.set((Math.random() - 0.5) * 20, 0, (Math.random() - 0.5) * 20));
+                pos.y = G.world.heightAt(pos.x, pos.z);
+                telegraph(pos, 4, 0xffd23c, 0.45);
+                after(0.45, () => explode(pos, 4, p.stats.damage * 4, { color: 0xffd23c, big: true }));
+              });
+            }
+            G.run.coins += 20 * G.run.coinScale;
+          } else if (roll === 1) {
+            floatText(p.pos.clone().setY(p.pos.y + 3), 'HEALING FOUNTAIN', '#88ff88', true);
+            p.heal(p.stats.maxHp);
+            p.addBarrier(p.stats.maxHp * 0.5);
+            ring(p.pos, 6, 0x88ff88, 0.6);
+          } else {
+            floatText(p.pos.clone().setY(p.pos.y + 3), '7 7 7', '#ff4466', true);
+            explode(p.pos, 15, p.stats.damage * 25, { color: 0xff4466, big: true, knockback: 15 });
+            shake(1);
+          }
+          sfx('legendary');
+        },
+      },
+    ],
+  },
+});
+
+export const CHARACTER_ORDER = ['vanguard', 'bonker', 'pyra', 'kestrel', 'tinker', 'glacia', 'kaze', 'morrow', 'bulwark', 'nyx', 'sol', 'rook', 'vex', 'echo', 'grizzle', 'spark', 'mimic'];
 for (const id in CHARACTERS) CHARACTERS[id].id = id;

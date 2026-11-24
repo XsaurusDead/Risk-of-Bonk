@@ -17,6 +17,8 @@ import { chance } from '../core/util.js';
 import { beam, ring, particles } from '../game/fx.js';
 import { sfx } from '../core/audio.js';
 import * as THREE from 'three';
+import { EXT_ITEMS } from './items_ext.js';
+import { applyModsObj } from './modutil.js';
 
 const hyper = (x, n) => 1 - 1 / (1 + x * n); // hyperbolic stacking (never reaches 100%)
 const _v = new THREE.Vector3();
@@ -214,6 +216,13 @@ const list = [
   { id: 'reapers_edge', name: "Reaper's Edge", rarity: 'legendary', icon: '💀', desc: '+20% crit chance. Hits execute non-boss enemies below 20% HP.', mods: (m, n) => { m.crit += 0.2 * n; m.execute = Math.max(m.execute, Math.min(0.4, 0.2 + 0.05 * (n - 1))); } },
 ];
 
+list.push(...EXT_ITEMS);
 export const ITEMS = {};
-for (const it of list) ITEMS[it.id] = it;
+for (const it of list) {
+  if (it.statMods && !it.mods) {
+    const sm = it.statMods;
+    it.mods = (m, n) => applyModsObj(m, sm, n);
+  }
+  ITEMS[it.id] = it;
+}
 export const ITEM_LIST = list;

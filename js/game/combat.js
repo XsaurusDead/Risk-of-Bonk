@@ -62,6 +62,17 @@ export function targetNearAim(maxDist = 60, coneDeg = 20) {
 
 // ------------------------------------------------------------------ damage
 let hookDepth = 0;
+// damage dealt is batched into the lifetime stat once per second (cheap)
+let dmgAcc = 0, dmgFlushT = 0;
+export function flushDamageStat(dt) {
+  dmgFlushT += dt;
+  if (dmgFlushT >= 1 && dmgAcc > 0) {
+    dmgFlushT = 0;
+    track('damageDealt', Math.round(dmgAcc));
+    if (G.run) G.run.dps = dmgAcc;
+    dmgAcc = 0;
+  }
+}
 export function dealDamage(e, amount, o = {}) {
   if (!e || e.dead || !(amount > 0)) return 0;
   const p = G.player;
@@ -72,6 +83,7 @@ export function dealDamage(e, amount, o = {}) {
   if (crit) dmg *= p.stats.critMult;
   const mod = p.char.passive.modifyDamage;
   if (mod) dmg = mod(e, dmg, o, p);
+  for (const [it, n] of p.dmgModItems) dmg = it.dmgMod(n, e, dmg, p);
   if (e.status.burnT > 0 && p.stats.burnVuln) dmg *= 1 + p.stats.burnVuln;
   if (e.vulnT > 0) dmg *= 1.25;
 
@@ -88,6 +100,7 @@ export function dealDamage(e, amount, o = {}) {
   damageNumber(_v.set(e.pos.x, e.pos.y + e.height * e.scale * 0.7, e.pos.z), shown, crit, typeof o.color === 'string' && !crit ? o.color : null);
   if (G.save && shown > (G.save.stats.maxHit || 0)) trackMax('maxHit', Math.floor(shown));
   if (crit && procCoef > 0) track('crits');
+  dmgAcc += shown;
 
   if (o.knockback && !e.isBoss) {
     const dir = o.dir ? _v2.copy(o.dir) : _v2.copy(e.pos).sub(p.pos);
@@ -137,6 +150,13 @@ export function applyBurn(e, dps, dur) {
   const cap = G.player.stats.damage * 4 + dps;
   s.burnDps = Math.min(cap, (s.burnT > 0 ? s.burnDps : 0) + dps);
   s.burnT = Math.max(s.burnT, dur);
+}
+export function applyPoison(e, stacks = 1) {
+  if (!e || e.dead) return;
+  const s = e.status;
+  const capN = G.player?.stats.poisonCap || 10;
+  s.poison = Math.min(capN, (s.poisonT > 0 ? s.poison : 0) + stacks);
+  s.poisonT = 4;
 }
 export function applySlow(e, amt, dur) {
   if (!e || e.dead) return;
@@ -493,6 +513,12 @@ function updateZones(dt) {
       z.mesh.children[1].rotation.y += dt * 4;
     } else if (z.kind === 'fire' && Math.random() < 0.3) {
       particles(_v.set(z.pos.x + (Math.random() - 0.5) * r, z.pos.y, z.pos.z + (Math.random() - 0.5) * r), 0xff6622, 1, 2, 0.5, 0.3, -2);
+    } else if (z.kind === 'holy' && Math.random() < 0.5) {
+      const a = Math.random() * 6.28, d = Math.random() * r;
+      particles(_v.set(z.pos.x + Math.cos(a) * d, z.pos.y, z.pos.z + Math.sin(a) * d), 0xffe9a0, 1, 1.5, 0.8, 0.2, -3);
+    } else if (z.kind === 'storm' && Math.random() < 0.4) {
+      const a = Math.random() * 6.28, d = Math.random() * r;
+      particles(_v.set(z.pos.x + Math.cos(a) * d, z.pos.y + 1 + Math.random() * 3, z.pos.z + Math.sin(a) * d), 0xfff08a, 1, 4, 0.2, 0.18, 0);
     } else if (z.kind === 'orbital') {
       z.mesh.children[1].material.opacity = 0.35 + Math.random() * 0.3;
       if (Math.random() < 0.6) particles(_v.set(z.pos.x + (Math.random() - 0.5) * r, z.pos.y, z.pos.z + (Math.random() - 0.5) * r), 0x88ddff, 2, 8, 0.4, 0.3);
@@ -525,6 +551,7 @@ function updateTimers(dt) {
 }
 
 export function updateCombat(dt) {
+  flushDamageStat(dt);
   updateTimers(dt);
   updateProjectiles(dt);
   updateZones(dt);

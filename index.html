@@ -78,7 +78,8 @@
         <h1 class="logo">RISK<span>of</span>BONK</h1>
         <p class="tagline">A 3rd-person roguelike. Loot, level, survive. It only gets worse.</p>
         <div class="menu-col">
-          <button class="btn primary" data-go="select">▶ Play</button>
+          <button class="btn primary hidden" id="btn-continue">⏯ Continue Run<small id="continue-info"></small></button>
+          <button class="btn primary" data-go="select">▶ New Run</button>
           <button class="btn" data-go="logbook">📖 Logbook</button>
           <button class="btn" data-go="settings">⚙ Settings</button>
           <button class="btn" data-go="help">❓ How to Play</button>
@@ -182,6 +183,7 @@
         <div class="menu-col">
           <button class="btn primary" id="btn-resume">Resume</button>
           <button class="btn" data-go="settings">⚙ Settings</button>
+          <button class="btn" id="btn-savequit">💾 Save &amp; Quit</button>
           <button class="btn danger" id="btn-quit">Abandon Run</button>
         </div>
         <div id="pause-stats"></div>
@@ -193,6 +195,19 @@
         <h2 class="glow">LEVEL UP! <span id="lvl-num"></span></h2>
         <p class="sub">Choose an upgrade</p>
         <div id="levelup-cards"></div>
+      </div>
+    </div>
+
+    <div id="screen-victory" class="screen dim hidden">
+      <div class="panel wide victory">
+        <div class="vic-crown">👑</div>
+        <h2 class="vic-title">VICTORY</h2>
+        <p class="vic-sub">The Apex Sovereign has fallen. The run could end here… or you could keep going.</p>
+        <div id="victory-body"></div>
+        <div class="menu-row">
+          <button class="btn primary" id="btn-vic-continue">🔁 Continue the Run (harder loop)</button>
+          <button class="btn" id="btn-vic-end">🏁 End Run</button>
+        </div>
       </div>
     </div>
 

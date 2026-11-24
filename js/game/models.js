@@ -181,6 +181,13 @@ const CHAR_DESIGN = {
   morrow: { skin: 0xf0ead6, body: 0x1e2a22, trim: 0x7dff9a, legs: 0x141a16, shape: 'robe' },
   bulwark: { skin: 0xd09060, body: 0x7a8290, trim: 0xb03030, legs: 0x4a505a, shape: 'box', bulk: 1.45 },
   nyx: { skin: 0xc8b0e0, body: 0x2a1a3a, trim: 0xb06bff, legs: 0x1a1024, shape: 'box', slim: true },
+  sol: { skin: 0xf1c27d, body: 0xe8dcc0, trim: 0xffcc33, legs: 0xb8a878, shape: 'box', bulk: 1.2 },
+  rook: { skin: 0xe0b088, body: 0x5a6a3a, trim: 0x6a4a2a, legs: 0x3a3a2a, shape: 'box', slim: true },
+  vex: { skin: 0xf0ead6, body: 0x1a1a1a, trim: 0x8bd450, legs: 0x111111, shape: 'robe' },
+  echo: { skin: 0xe8d0b8, body: 0x2a6a72, trim: 0x9ffff0, legs: 0x1a3a40, shape: 'robe' },
+  grizzle: { skin: 0xd09060, body: 0x7a4e2a, trim: 0x4a2e18, legs: 0x3a2a1a, shape: 'box', bulk: 1.15 },
+  spark: { skin: 0xf1c27d, body: 0x2a3a8a, trim: 0xffe04a, legs: 0x1a2250, shape: 'box', slim: true },
+  mimic: { skin: 0x7ac46a, body: 0x6a2a8a, trim: 0xffd23c, legs: 0x3a1a4a, shape: 'box' },
 };
 
 /** Build an animatable character. Returns { root, rig } where rig holds limb groups. */
@@ -307,6 +314,54 @@ export function buildCharacter(id) {
       body.add(mesh('box', d.trim, [0.15, 1.3, -0.4], [0.18, 0.9, 0.05], [0.25, 0, 0.1]));
       handR.add(mesh('cone', 0xd0d0e0, [0, 0, 0.35], [0.1, 0.6, 0.06], [Math.PI / 2, 0, 0]));
       handL.add(mesh('cone', 0xd0d0e0, [0, 0, 0.35], [0.1, 0.6, 0.06], [Math.PI / 2, 0, 0]));
+      break;
+    case 'sol':
+      head.add(mesh('sphere', 0xe8dcc0, [0, 0.06, 0], [0.62, 0.58, 0.62]));
+      head.add(mesh('box', 0x222222, [0, 0.02, 0.29], [0.4, 0.07, 0.05]));
+      head.add(mesh('torus', 0xffe08a, [0, 0.55, 0], [0.55, 0.55, 0.55], [Math.PI / 2, 0, 0], true));
+      body.add(mesh('box', d.trim, [-0.62, 1.78, 0], [0.38, 0.2, 0.45]), mesh('box', d.trim, [0.62, 1.78, 0], [0.38, 0.2, 0.45]));
+      handL.add(group(0, 0, 0.2, mesh('cyl', 0xd8c890, [0, 0, 0.1], [0.9, 0.12, 0.9], [Math.PI / 2, 0, 0]), mesh('sphere', 0xffcc33, [0, 0, 0.2], [0.3, 0.3, 0.12], null, true)));
+      handR.add(group(0, 0, 0.1, mesh('cyl', 0x8a6a3a, [0, 0, 0.5], [0.12, 1.0, 0.12], [Math.PI / 2, 0, 0]), mesh('box', 0xd8d0b8, [0, 0, 1.05], [0.55, 0.42, 0.42])));
+      break;
+    case 'rook':
+      head.add(mesh('cyl', 0x4a3a22, [0, 0.24, 0], [1.0, 0.06, 1.0]));
+      head.add(mesh('cyl', 0x4a3a22, [0, 0.38, 0], [0.55, 0.28, 0.55]));
+      head.add(mesh('box', 0x3a3a3a, [0, -0.12, 0.24], [0.42, 0.18, 0.08]));
+      body.add(mesh('box', d.trim, [0, 1.0, -0.15], [0.82, 1.0, 0.45], [0.05, 0, 0]));
+      handR.add(group(0, 0, 0.1, mesh('box', 0x3a2a1a, [0, 0, 0.3], [0.14, 0.2, 0.7]), mesh('cyl', 0x222222, [0, 0.05, 1.1], [0.08, 1.2, 0.08], [Math.PI / 2, 0, 0]), mesh('cyl', 0x111111, [0, 0.2, 0.6], [0.09, 0.45, 0.09], [Math.PI / 2, 0, 0])));
+      break;
+    case 'vex':
+      head.add(mesh('sphere', 0x111111, [0, 0.05, 0], [0.62, 0.6, 0.62]));
+      head.add(mesh('cone', 0xe8e0c8, [0, -0.05, 0.45], [0.22, 0.6, 0.22], [Math.PI / 2, 0, 0]));
+      head.add(mesh('sphere', 0x8bd450, [-0.13, 0.1, 0.27], [0.12, 0.12, 0.05], null, true));
+      head.add(mesh('sphere', 0x8bd450, [0.13, 0.1, 0.27], [0.12, 0.12, 0.05], null, true));
+      head.add(mesh('cyl', 0x111111, [0, 0.35, 0], [0.75, 0.06, 0.75]), mesh('cyl', 0x111111, [0, 0.5, 0], [0.45, 0.3, 0.45]));
+      handR.add(mesh('sphere', 0x8bd450, [0, 0, 0.18], [0.3, 0.34, 0.3], null, true));
+      break;
+    case 'echo':
+      head.add(mesh('cone', d.body, [0, 0.22, -0.05], [0.75, 0.8, 0.75]));
+      head.add(mesh('torus', 0x9ffff0, [0, 0.15, -0.45], [0.7, 0.7, 0.7], null, true));
+      body.add(mesh('torus', 0x9ffff0, [0, 1.2, 0], [1.3, 1.3, 1.3], [Math.PI / 2, 0, 0], true));
+      handR.add(group(0, 0, 0, mesh('cone', 0xd8c890, [0, 0.15, 0.15], [0.25, 0.3, 0.25]), mesh('cone', 0xd8c890, [0, -0.15, 0.15], [0.25, 0.3, 0.25], [Math.PI, 0, 0]), mesh('sphere', 0x9ffff0, [0, 0, 0.15], [0.1, 0.1, 0.1], null, true)));
+      break;
+    case 'grizzle':
+      head.add(mesh('sphere', 0x6a4426, [0, 0.12, -0.05], [0.7, 0.55, 0.7]));
+      head.add(mesh('sphere', 0x6a4426, [-0.28, 0.42, -0.05], [0.2, 0.2, 0.14]), mesh('sphere', 0x6a4426, [0.28, 0.42, -0.05], [0.2, 0.2, 0.14]));
+      head.add(mesh('box', 0x553318, [0, -0.15, 0.25], [0.35, 0.18, 0.1]));
+      body.add(mesh('box', 0x6a4426, [0, 1.25, -0.35], [0.9, 1.1, 0.12]));
+      handR.add(group(0, 0, 0.1, mesh('cyl', 0x8a6a3a, [0, 0, 0.6], [0.08, 1.6, 0.08], [Math.PI / 2, 0, 0]), mesh('cone', 0xcccccc, [0, 0, 1.5], [0.14, 0.35, 0.14], [Math.PI / 2, 0, 0])));
+      break;
+    case 'spark':
+      for (let i = -2; i <= 2; i++) head.add(mesh('cone', 0xffe04a, [i * 0.13, 0.34, -0.05 - Math.abs(i) * 0.04], [0.12, 0.42, 0.12], [-0.3, 0, -i * 0.3], true));
+      head.add(mesh('box', 0x111111, [0, 0.03, 0.27], [0.42, 0.12, 0.05]));
+      handR.add(group(0, 0, 0, mesh('cyl', 0x555a66, [0, 0.4, 0.1], [0.07, 1.6, 0.07]), mesh('oct', 0xffe04a, [0, 1.25, 0.1], [0.25, 0.4, 0.25], null, true)));
+      break;
+    case 'mimic':
+      head.add(mesh('cyl', 0x1a1a1a, [0, 0.3, 0], [0.75, 0.06, 0.75]), mesh('cyl', 0x1a1a1a, [0, 0.55, 0], [0.48, 0.5, 0.48]), mesh('cyl', 0xffd23c, [0, 0.38, 0], [0.5, 0.08, 0.5]));
+      head.add(mesh('cone', d.skin, [-0.35, 0.05, 0], [0.12, 0.35, 0.12], [0, 0, 1.4]), mesh('cone', d.skin, [0.35, 0.05, 0], [0.12, 0.35, 0.12], [0, 0, -1.4]));
+      head.add(mesh('box', 0xffffff, [0, -0.15, 0.25], [0.3, 0.06, 0.05]));
+      body.add(mesh('sphere', 0xc9a050, [0.3, 0.9, -0.35], [0.55, 0.6, 0.45]), mesh('box', 0xffd23c, [0.3, 1.15, -0.35], [0.2, 0.08, 0.2], null, true));
+      handR.add(mesh('cyl', 0xffd23c, [0, 0, 0.12], [0.22, 0.05, 0.22], [Math.PI / 2, 0, 0], true));
       break;
   }
   root.traverse((o) => { if (o.isMesh) o.castShadow = true; });

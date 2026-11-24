@@ -9,7 +9,7 @@ import { ITEMS } from '../data/items.js';
 import { UPGRADES, UPGRADE_RARITY } from '../data/upgrades.js';
 import { CHARACTERS } from '../data/characters.js';
 import { World } from './world.js';
-import { Player } from './player.js';
+import { Player, xpFor } from './player.js';
 import { Director } from './director.js';
 import { initEnemies, updateEnemies, clearEnemies, spawnEnemy } from './enemies.js';
 import { updateCombat, clearCombat } from './combat.js';
@@ -20,6 +20,7 @@ import { buildCharacter, windUniform } from './models.js';
 import { sfx } from '../core/audio.js';
 import { track, trackMax, commitRunBests, persist } from '../core/save.js';
 import { weightedPick, shuffle, rand } from '../core/util.js';
+import { saveRun, clearRun, loadRunData } from '../core/runsave.js';
 
 const _v = new THREE.Vector3();
 
@@ -152,24 +153,59 @@ export const Game = {
 
   // ------------------------------------------------------------ run lifecycle
   startRun(charId) {
+    G.save.lastChar = charId;
+    persist();
+    clearRun();
+    this.startRunBase(charId);
+    G.time = 0;
+    track('runs');
+    this.loadStage();
+  },
+
+  /** Continue a saved run (title screen "Continue Run"). */
+  resumeRun() {
+    const d = loadRunData();
+    if (!d) return false;
+    this.startRunBase(d.charId);
+    const run = G.run, p = G.player;
+    run.stageNum = d.stageNum;
+    run.stagesCleared = d.stagesCleared;
+    run.time = d.time;
+    run.coins = d.coins;
+    run.stats = d.stats || {};
+    run.kills0 = (G.save.stats.kills || 0) - (d.killsThisRun || 0);
+    p.level = d.level;
+    p.xp = d.xp;
+    p.xpNext = xpFor(p.level);
+    p.pendingLevelUps = d.pendingLevelUps || 0;
+    p.items = d.items;
+    p.itemOrder = d.itemOrder;
+    p.itemCount = Object.values(d.items).reduce((a, b) => a + b, 0);
+    p.upgrades = d.upgrades;
+    p.infusionHp = d.infusionHp || 0;
+    p.eaterDmg = d.eaterDmg || 0;
+    p.markDirty();
+    p.recalcStats();
+    G.time = run.time;
+    this.loadStage();
+    if (G.ui) G.ui.toastText('Run resumed — welcome back!');
+    return true;
+  },
+
+  startRunBase(charId) {
     if (this.menuModel) {
       G.scene.remove(this.menuModel.root);
       this.menuModel = null;
     }
     if (this.menuWorld) G.scene.remove(this.menuWorld.group);
-    G.save.lastChar = charId;
-    persist();
     G.run = {
       charId, stats: {}, newAchievements: [], coins: 0, stageNum: 0, stagesCleared: 0, loop: 0,
       diff: 1, coinScale: 1, xpScale: 1, chestScale: 1, time: 0, boss: null, secT: 0, kills0: G.save.stats.kills || 0,
       onBossKilled: (e) => this.onBossKilled(e),
       onPlayerDeath: () => this.onPlayerDeath(),
     };
-    G.time = 0;
     G.player = new Player(charId);
     G.minions = [];
-    track('runs');
-    this.loadStage();
   },
 
   loadStage() {
@@ -191,6 +227,14 @@ export const Game = {
     this.director = new Director(stage);
     run.boss = null;
     run.bossDead = false;
+    run.finalSpawnT = 0;
+    run.saveT = 0;
+    if (stage.final) {
+      // no portal on the final stage: the Apex Sovereign comes to you
+      G.world.portal.state = 'none';
+      G.world.portal.group.visible = false;
+      run.finalSpawnT = 8;
+    }
 
     const p = G.player;
     p.pos.set(0, G.world.heightAt(0, 0) + 25, 0);
@@ -199,6 +243,7 @@ export const Game = {
     p.dead = false;
     p.model.rotation.x = 0;
     p.hp = p.stats.maxHp;
+    p.stageKills = 0;
     p.camYaw = Math.atan2(-(G.world.portalPos.x), -(G.world.portalPos.z)) + Math.PI + (Math.random() - 0.5) * 2;
     for (const m of G.minions) m.pos.copy(p.pos);
 
@@ -210,6 +255,7 @@ export const Game = {
     }
     sfx('portal');
     Input.requestLock();
+    saveRun();
   },
 
   updateDifficulty() {
@@ -236,8 +282,11 @@ export const Game = {
     G.run = null;
   },
 
-  quitToMenu() {
+  /** Save & Quit keeps the checkpoint; abandon deletes it. */
+  quitToMenu(keepSave = false) {
     if (G.run) {
+      if (keepSave && !G.run.ended && !G.player?.dead) saveRun();
+      else clearRun();
       commitRunBests();
     }
     this.enterMenu();
@@ -267,6 +316,15 @@ export const Game = {
     updateFx(dt);
     updateHpBars();
     this.updatePortal(dt);
+    if (run.finalSpawnT > 0) {
+      run.finalSpawnT -= dt;
+      if (run.finalSpawnT <= 0) this.spawnFinalBoss();
+    }
+    run.saveT += dt;
+    if (run.saveT > 15 && !p.dead) {
+      run.saveT = 0;
+      saveRun();
+    }
     this.updateAmbient(dt);
 
     // shadow camera follows the player
@@ -326,6 +384,7 @@ export const Game = {
     run.coins -= cost;
     c.opened = true;
     track('chests');
+    if (c.large) track('largeChests');
     track('coinsSpent', cost);
     const kind = c.large ? 'large' : 'small';
     const id = rollItem(rollRarity(kind));
@@ -391,6 +450,61 @@ export const Game = {
     }
   },
 
+  /** The final boss is re-scaled to the player's current power so it is never a pushover. */
+  spawnFinalBoss() {
+    const run = G.run, p = G.player, s = p.stats;
+    const fx = -Math.sin(p.camYaw), fz = -Math.cos(p.camYaw);
+    const pos = p.pos.clone().add(new THREE.Vector3(fx * 26, 0, fz * 26));
+    G.world.clampBounds(pos);
+    const e = spawnEnemy(run.stage.boss, pos, { boss: true });
+    if (!e) return;
+    // single-target DPS estimate from stats + items, and the measured damage of the last second
+    const critF = 1 + s.crit * (s.critMult - 1);
+    const formulaDps = s.damage * s.attackSpeed * critF * 4 * (1 + 0.05 * p.itemCount);
+    const dps = Math.max(formulaDps, Math.min(run.dps || 0, formulaDps * 2));
+    const hp = Math.max(e.maxHp * 2, dps * 110);
+    e.maxHp = e.hp = hp;
+    // a heavy hit should take ~12% of your effective health
+    const ehp = s.maxHp * (1 + Math.max(0, s.armor) / 100) * (1 / s.dmgTakenMult);
+    e.dmg = Math.max(e.dmg, ehp * 0.12);
+    run.boss = e;
+    if (G.ui) {
+      G.ui.banner(e.def.name, e.def.title, true);
+      G.ui.setBoss(e);
+    }
+    shake(1);
+    sfx('roar');
+  },
+
+  onFinalBossKilled() {
+    const run = G.run;
+    track('finalBossKills');
+    track('runsWon');
+    run.won = true;
+    setTimeout(() => {
+      if (G.run !== run || G.player.dead) return;
+      G.mode = 'victory';
+      Input.releaseLock();
+      if (G.ui) G.ui.showVictory(this.summary());
+    }, 3000);
+  },
+
+  /** After beating the final boss: keep going (next loop, harder). */
+  continueAfterVictory() {
+    track('loopsCompleted');
+    if (G.ui) G.ui.showScreen('none');
+    this.leaveStage();
+  },
+
+  endRunVictory() {
+    const run = G.run;
+    run.ended = true;
+    commitRunBests();
+    clearRun();
+    G.mode = 'gameover';
+    if (G.ui) G.ui.showGameOver({ ...this.summary(), victory: true });
+  },
+
   onBossKilled(e) {
     const run = G.run;
     run.bossDead = true;
@@ -402,6 +516,14 @@ export const Game = {
     dropCoins(e.pos, e.def.coins * run.coinScale);
     shake(1);
     sfx('bigboom');
+    if (e.def.final) {
+      if (G.ui) {
+        G.ui.setBoss(null);
+        G.ui.banner('VICTORY', 'The Apex Sovereign has fallen', false);
+      }
+      this.onFinalBossKilled();
+      return;
+    }
     if (G.ui) {
       G.ui.setBoss(null);
       G.ui.banner(e.def.name + ' defeated', G.world.portal.charge >= 1 ? 'The portal is ready' : 'Finish charging the portal');
@@ -413,6 +535,7 @@ export const Game = {
     collectAll();
     run.stagesCleared++;
     track('stagesCleared');
+    track('clear_' + run.stage.id);
     run.stageNum++;
     G.mode = 'transition';
     if (G.ui) G.ui.fade(() => this.loadStage());
@@ -484,6 +607,9 @@ export const Game = {
   onPlayerDeath() {
     const run = G.run;
     run.deathT = 0;
+    run.ended = true;
+    clearRun();
+    track('deaths');
     setTimeout(() => {
       if (G.run !== run) return;
       G.mode = 'gameover';
@@ -498,7 +624,7 @@ export const Game = {
     return {
       charId: run.charId, time: run.time, stage: run.stageNum + 1, stagesCleared: run.stagesCleared, level: p.level,
       kills: (G.save.stats.kills || 0) - run.kills0, items: p.itemOrder.map((id) => [id, p.items[id]]), achievements: run.newAchievements.slice(),
-      diff: run.diff,
+      diff: run.diff, victory: !!run.won,
     };
   },
 };

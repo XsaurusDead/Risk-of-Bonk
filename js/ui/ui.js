@@ -10,13 +10,14 @@ import {
   isCharacterUnlocked, isItemUnlocked, unlockSourceFor, achievementProgress, persist, resetSave, setAchievementHandler, DEFAULT_SETTINGS,
 } from '../core/save.js';
 import { Game } from '../game/game.js';
+import { loadRunData } from '../core/runsave.js';
 import { diffLabel, DIFF_LABELS } from '../game/director.js';
 import { formatTime, formatNum, RARITY, RARITY_ORDER } from '../core/util.js';
 import * as THREE from 'three';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
-const CHAR_EMOJI = { vanguard: '🔫', bonker: '🏏', pyra: '🔥', glacia: '❄️', kestrel: '🏹', tinker: '🔧', kaze: '👊', morrow: '💀', bulwark: '🛡️', nyx: '🗡️' };
+export const CHAR_EMOJI = { vanguard: '🔫', bonker: '🏏', pyra: '🔥', glacia: '❄️', kestrel: '🏹', tinker: '🔧', kaze: '👊', morrow: '💀', bulwark: '🛡️', nyx: '🗡️', sol: '☀️', rook: '🎯', vex: '☣️', echo: '⏳', grizzle: '🐺', spark: '⚡', mimic: '🎰' };
 const KEYS = {
   kbm: ['LMB', 'RMB', 'SHIFT', 'R'],
   pad: ['RT', 'LT', 'RB', 'Y'],
@@ -70,7 +71,26 @@ export const UI = {
     $('#btn-resume').addEventListener('click', () => Game.resume());
     $('#btn-quit').addEventListener('click', () => {
       sfx('ui');
-      Game.quitToMenu();
+      Game.quitToMenu(false);
+    });
+    $('#btn-savequit').addEventListener('click', () => {
+      sfx('ui');
+      Game.quitToMenu(true);
+    });
+    $('#btn-continue').addEventListener('click', () => {
+      unlockAudio();
+      sfx('portal');
+      this.showScreen('none');
+      $('#hud').classList.remove('hidden');
+      if (!Game.resumeRun()) this.showScreen('title');
+    });
+    $('#btn-vic-continue').addEventListener('click', () => {
+      sfx('portal');
+      Game.continueAfterVictory();
+    });
+    $('#btn-vic-end').addEventListener('click', () => {
+      sfx('ui');
+      Game.endRunVictory();
     });
     $('#btn-retry').addEventListener('click', () => {
       const id = G.run?.charId || G.save.lastChar;
@@ -95,7 +115,7 @@ export const UI = {
     this.onDevice(Input.device);
     this.buildCharGrid();
     this.selectChar(G.save.lastChar);
-    $('#title-foot').textContent = `${Object.keys(CHARACTERS).filter(isCharacterUnlocked).length}/10 survivors · ${Object.keys(G.save.achievements).length}/${ACHIEVEMENTS.length} achievements`;
+    $('#title-foot').textContent = `${Object.keys(CHARACTERS).filter(isCharacterUnlocked).length}/${CHARACTER_ORDER.length} survivors · ${Object.keys(G.save.achievements).length}/${ACHIEVEMENTS.length} achievements`;
     this.showScreen('title');
   },
 
@@ -131,7 +151,10 @@ export const UI = {
     }
     if (name === 'settings') this.renderSettings();
     if (name === 'title') {
-      $('#title-foot').textContent = `${Object.keys(CHARACTERS).filter(isCharacterUnlocked).length}/10 survivors · ${Object.keys(G.save.achievements).length}/${ACHIEVEMENTS.length} achievements`;
+      const d = loadRunData();
+      $('#btn-continue').classList.toggle('hidden', !d);
+      if (d) $('#continue-info').textContent = `${CHARACTERS[d.charId].name} · Stage ${d.stageNum + 1} · ${formatTime(d.time)} · Lv ${d.level}`;
+      $('#title-foot').textContent = `${Object.keys(CHARACTERS).filter(isCharacterUnlocked).length}/${CHARACTER_ORDER.length} survivors · ${Object.keys(G.save.achievements).length}/${ACHIEVEMENTS.length} achievements`;
     }
     const inMenu = G.mode === 'menu';
     $('#hud').classList.toggle('hidden', inMenu || name === 'gameover');
@@ -205,14 +228,33 @@ export const UI = {
   renderLogbook(tab) {
     const body = $('#logbook-body');
     if (tab === 'ach') {
-      body.innerHTML = ACHIEVEMENTS.map((a) => {
-        const done = !!G.save.achievements[a.id];
-        const prog = done ? a.cond.value : achievementProgress(a);
-        const pct = Math.min(100, (prog / a.cond.value) * 100);
-        return `<div class="ach ${done ? 'done' : ''}"><div><div class="nm">${a.name}</div><div class="ds">${a.desc}</div></div>
-          <div class="rw">${rewardText(a)}<br><small>${formatNum(prog)} / ${formatNum(a.cond.value)}</small></div>
-          <div class="prog"><i style="width:${pct}%"></i></div></div>`;
-      }).join('');
+      const f = (this.achFilter ||= { mode: 'all', q: '' });
+      const done = ACHIEVEMENTS.filter((a) => G.save.achievements[a.id]).length;
+      body.innerHTML = `<div class="lb-bar"><input id="lb-q" placeholder="Search achievements…" value="${esc(f.q)}">
+        ${[['all', 'All'], ['todo', 'In progress'], ['done', 'Completed'], ['reward', 'Unlocks something']].map(([k, t]) => `<button class="chip ${f.mode === k ? 'on' : ''}" data-mode="${k}">${t}</button>`).join('')}
+        <div class="lb-count">${done} / ${ACHIEVEMENTS.length} completed</div></div><div id="lb-list"></div>`;
+      const draw = () => {
+        const q = f.q.trim().toLowerCase();
+        const rows = ACHIEVEMENTS.filter((a) => {
+          const isDone = !!G.save.achievements[a.id];
+          if (f.mode === 'todo' && isDone) return false;
+          if (f.mode === 'done' && !isDone) return false;
+          if (f.mode === 'reward' && !a.reward.item && !a.reward.character) return false;
+          if (q && !(a.name + ' ' + a.desc + ' ' + rewardText(a)).toLowerCase().includes(q)) return false;
+          return true;
+        });
+        $('#lb-list').innerHTML = rows.map((a) => {
+          const isDone = !!G.save.achievements[a.id];
+          const prog = isDone ? a.cond.value : achievementProgress(a);
+          const pct = Math.min(100, (prog / a.cond.value) * 100);
+          return `<div class="ach ${isDone ? 'done' : ''}"><div><div class="nm">${esc(a.name)}</div><div class="ds">${esc(a.desc)}</div></div>
+            <div class="rw">${rewardText(a)}<br><small>${formatNum(prog)} / ${formatNum(a.cond.value)}</small></div>
+            <div class="prog"><i style="width:${pct}%"></i></div></div>`;
+        }).join('') || '<p style="color:var(--muted)">Nothing here.</p>';
+      };
+      draw();
+      $('#lb-q').addEventListener('input', (e) => { f.q = e.target.value; draw(); });
+      body.querySelectorAll('.chip').forEach((c) => c.addEventListener('click', () => { f.mode = c.dataset.mode; this.renderLogbook('ach'); }));
     } else if (tab === 'items') {
       let html = '';
       for (const r of RARITY_ORDER) {
@@ -401,12 +443,40 @@ export const UI = {
     t.innerHTML = `<div class="ic">ℹ️</div><div><div class="ds">${esc(text)}</div></div>`;
     this.pushToast(t, '#toasts');
   },
+  // Animated achievement popup (queued so several unlocks play one after another)
   toastAchievement(a) {
+    (this.achQueue ||= []).push(a);
+    if (!this.achShowing) this.nextAchievement();
+  },
+  nextAchievement() {
+    const a = this.achQueue.shift();
+    if (!a) {
+      this.achShowing = false;
+      return;
+    }
+    this.achShowing = true;
     sfx('achievement');
-    const t = document.createElement('div');
-    t.className = 'ach-toast';
-    t.innerHTML = `<div class="a">ACHIEVEMENT UNLOCKED</div><div class="n">${a.name}</div><div class="r">${rewardText(a)}</div>`;
-    this.pushToast(t, '#ach-toasts', 5000);
+    const dur = this.achQueue.length > 2 ? 2600 : 4200;
+    let reward = '';
+    if (a.reward.character) {
+      const c = CHARACTERS[a.reward.character];
+      reward = `<div class="ap-reward" style="--c:${c.color}"><div class="ap-ri portrait" style="background:${c.color}">${CHAR_EMOJI[a.reward.character] || '?'}</div><div class="ap-rt"><small>NEW SURVIVOR</small><b style="color:${c.color}">${esc(c.name)}</b><span>${esc(c.title)}</span></div></div>`;
+    } else if (a.reward.item) {
+      const it = ITEMS[a.reward.item];
+      const col = RARITY[it.rarity].color;
+      reward = `<div class="ap-reward" style="--c:${col}"><div class="ap-ri">${it.icon}</div><div class="ap-rt"><small>NEW ${RARITY[it.rarity].name.toUpperCase()} ITEM</small><b style="color:${col}">${esc(it.name)}</b><span>${esc(it.desc)}</span></div></div>`;
+    }
+    const el = document.createElement('div');
+    el.className = 'ach-pop';
+    el.style.setProperty('--dur', dur + 'ms');
+    el.innerHTML = `<div class="ap-shine"></div><div class="ap-main"><div class="ap-icon">🏆</div><div class="ap-text"><div class="ap-k">ACHIEVEMENT UNLOCKED</div><div class="ap-n">${esc(a.name)}</div><div class="ap-d">${esc(a.desc)}</div></div></div>${reward}`;
+    const root = $('#ach-toasts');
+    root.innerHTML = '';
+    root.appendChild(el);
+    setTimeout(() => {
+      el.remove();
+      this.nextAchievement();
+    }, dur);
   },
   pushToast(el, root, life = 4000) {
     const r = $(root);
@@ -453,6 +523,18 @@ export const UI = {
     this.showScreen('none');
   },
 
+  showVictory(s) {
+    const c = CHARACTERS[s.charId];
+    $('#victory-body').innerHTML = `<div class="go-stats">
+      <div class="go-stat"><b style="color:${c.color}">${c.name}</b>Survivor</div>
+      <div class="go-stat"><b>${formatTime(s.time)}</b>Time</div>
+      <div class="go-stat"><b>${s.level}</b>Level</div>
+      <div class="go-stat"><b>${s.items.reduce((a, [, n]) => a + n, 0)}</b>Items</div>
+      <div class="go-stat"><b>${s.kills.toLocaleString()}</b>Kills</div></div>`;
+    sfx('legendary');
+    this.showScreen('victory');
+  },
+
   showGameOver(s) {
     const c = CHARACTERS[s.charId];
     const lbl = diffLabel(s.diff);
@@ -476,6 +558,9 @@ export const UI = {
       }).join('<br>')}</div>`;
     }
     $('#gameover-body').innerHTML = html;
+    const t = $('#screen-gameover .dead');
+    t.textContent = s.victory ? 'RUN COMPLETE' : 'YOU DIED';
+    t.classList.toggle('won', !!s.victory);
     this.showScreen('gameover');
   },
 
@@ -639,7 +724,7 @@ export const UI = {
       const slot = SLOTS[i];
       let frac = 0, txt = '', ready = true, chg = '';
       if (i > 0) {
-        const max = p.char.abilities[i - 1].charges || 1;
+        const max = p.maxCharges(i - 1);
         const cdm = p.cdMax[slot] || 1;
         if (p.charges[slot] <= 0) {
           frac = Math.max(0, p.cd[slot] / cdm);
@@ -679,7 +764,8 @@ export const UI = {
     // objective + portal marker
     const P = G.world.portal;
     let obj = '';
-    if (P.state === 'idle') obj = '🌀 Find the portal and activate it to summon the boss';
+    if (run.stage.final) obj = run.finalSpawnT > 0 ? `👑 The Apex Sovereign descends in ${Math.ceil(run.finalSpawnT)}s…` : run.won ? '👑 Victory!' : '👑 Defeat the Apex Sovereign';
+    else if (P.state === 'idle') obj = '🌀 Find the portal and activate it to summon the boss';
     else if (P.state === 'charging') obj = `⚡ Charging portal: ${Math.floor(P.charge * 100)}%${!run.bossDead ? ' · Defeat the boss' : ''}${Math.hypot(p.pos.x - P.pos.x, p.pos.z - P.pos.z) > G.world.chargeRadius ? ' · Return to the ring!' : ''}`;
     else if (P.state === 'ready') obj = '✨ Portal ready — enter it to continue';
     const objEl = $('#hud-objective');
@@ -726,6 +812,10 @@ export const UI = {
 
   updatePortalMarker(P, p) {
     const m = $('#portal-marker');
+    if (P.state === 'none') {
+      m.classList.add('hidden');
+      return;
+    }
     if (P.state === 'charging' && Math.hypot(p.pos.x - P.pos.x, p.pos.z - P.pos.z) < G.world.chargeRadius) {
       m.classList.add('hidden');
       return;

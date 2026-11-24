@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { G } from '../core/state.js';
 import { ITEMS, ITEM_LIST } from '../data/items.js';
-import { isItemUnlocked } from '../core/save.js';
+import { isItemUnlocked, track } from '../core/save.js';
 import { buildPickupGeo, litMaterial, glowMaterial } from './models.js';
 import { particles } from './fx.js';
 import { sfx } from '../core/audio.js';
@@ -211,7 +211,15 @@ export function updatePickups(dt) {
 
 function collect(kind, value) {
   const p = G.player;
-  if (kind === 'coin') G.run.coins += value * p.stats.coinMult;
+  if (kind === 'coin') {
+    const v = value * p.stats.coinMult;
+    G.run.coins += v;
+    G.run.coinsRunAcc = (G.run.coinsRunAcc || 0) + v;
+    if (G.run.coinsRunAcc >= 10) {
+      track('coinsRun', Math.floor(G.run.coinsRunAcc));
+      G.run.coinsRunAcc -= Math.floor(G.run.coinsRunAcc);
+    }
+  }
   else if (kind === 'xp') p.addXp(value * p.stats.xpMult);
   else if (kind === 'heal') {
     p.heal(p.stats.maxHp * 0.15 + 10);

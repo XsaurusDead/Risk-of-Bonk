@@ -102,4 +102,20 @@ export const STAGES = [
     enemies: { void_reaver: 3, eye_stalker: 3, null_shade: 3, void_bomber: 3 },
     boss: 'void_herald',
   },
+  {
+    id: 'throne', name: 'Celestial Throne', subtitle: 'Final Stage — the Apex Sovereign awaits', final: true,
+    sky: 0x1a1440, fog: 0x2e2468, fogFar: 150,
+    sun: 0xfff0d0, sunInt: 1.9, hemiSky: 0xc8b8ff, hemiGround: 0x30285a, hemiInt: 1.25,
+    ground: { low: 0xa8a0c8, mid: 0xdcd6ee, high: 0xfff4dc, slope: 0x7a70a0, peak: 0xffe08a },
+    terrain: { amp: 6, freq: 0.01, octaves: 3, ridge: 0.2, edge: 30 },
+    liquid: { level: -3.2, color: 0x6a5aff, opacity: 0.8, emissive: 0x2a1a8a, dps: 0.06, slow: 0.3, name: 'starlight' },
+    decor: [
+      { type: 'ruin_pillar', count: 45, collide: 1.0, scale: [1.1, 2.0], tint: 0xf2e6c0 },
+      { type: 'crystal', count: 40, collide: 0.8, scale: [0.8, 1.8], tint: 0xffd27a },
+      { type: 'floating_rock', count: 35, collide: 0, scale: [1, 2.6] },
+      { type: 'grass', count: 400, collide: 0, scale: [0.5, 1.1], tint: 0xcfc6f0 },
+    ],
+    enemies: { void_reaver: 2, obsidian_brute: 1, yeti: 1, eye_stalker: 2, null_shade: 2, magma_hound: 2 },
+    boss: 'apex_sovereign',
+  },
 ];

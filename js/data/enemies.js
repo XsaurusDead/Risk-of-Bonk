@@ -261,6 +261,24 @@ export const BOSSES = {
   },
 };
 
+// The final boss: its HP and damage are re-scaled to the player's power when it spawns.
+BOSSES.apex_sovereign = {
+  name: 'Apex Sovereign', title: 'The Last Risk', hp: 6000, dmg: 40, speed: 5.5, radius: 3, height: 8, ai: 'boss', flying: true, hover: 2, xp: 400, coins: 400, final: true,
+  patterns: ['slam', 'burst', 'spin', 'rain', 'volley', 'summon', 'charge'], projColor: 0xffd27a,
+  summon: 'void_reaver', summonPool: ['void_reaver', 'null_shade', 'eye_stalker', 'magma_hound', 'ice_imp', 'glow_beetle'],
+  model: [
+    ['cone', 0xf2e6c0, [0, 3.2, 0], [3.6, 6.4, 3.6], [Math.PI, 0, 0]], ['cone', 0xffd27a, [0, 1.0, 0], [3.8, 0.6, 3.8], [Math.PI, 0, 0]],
+    ['box', 0xe8dcc0, [0, 5.6, 0], [2.6, 1.6, 1.6]], ['sphere', 0xf6efe0, [0, 7.0, 0], [1.6, 1.7, 1.6]],
+    ['box', 0x111122, [0, 7.05, 0.72], [1.0, 0.25, 0.2]], ['sphere', 0xffe08a, [-0.28, 7.08, 0.8], [0.18, 0.12, 0.08], null, true], ['sphere', 0xffe08a, [0.28, 7.08, 0.8], [0.18, 0.12, 0.08], null, true],
+    ['cone', 0xffcc33, [0, 8.3, 0], [0.35, 1.0, 0.35]], ['cone', 0xffcc33, [-0.55, 8.1, 0], [0.3, 0.8, 0.3], [0, 0, 0.25]], ['cone', 0xffcc33, [0.55, 8.1, 0], [0.3, 0.8, 0.3], [0, 0, -0.25]],
+    ['cyl', 0xffcc33, [0, 7.75, 0], [1.4, 0.3, 1.4]],
+    ['torus', 0xfff2b0, [0, 7.2, -0.8], [2.6, 2.6, 2.6], null, true],
+    ['tetra', 0xfff6e0, [-3.4, 5.2, -0.6], [4.4, 0.25, 2.6], null, true], ['tetra', 0xfff6e0, [3.4, 5.2, -0.6], [4.4, 0.25, 2.6], null, true],
+    ['box', 0xe8dcc0, [-1.9, 5.0, 0.3], [0.7, 2.4, 0.7]], ['box', 0xe8dcc0, [1.9, 5.0, 0.3], [0.7, 2.4, 0.7]],
+    ['oct', 0xffd27a, [-2.0, 3.6, 0.8], [0.7, 1.2, 0.7], null, true], ['oct', 0xffd27a, [2.0, 3.6, 0.8], [0.7, 1.2, 0.7], null, true],
+  ],
+};
+
 export const ELITES = {
   blazing: { name: 'Blazing', color: 0xff5522, hpMult: 3.5, dmgMult: 1.8, trail: 'fire' },
   glacial: { name: 'Glacial', color: 0x66ddff, hpMult: 3.5, dmgMult: 1.6, slowOnHit: true },

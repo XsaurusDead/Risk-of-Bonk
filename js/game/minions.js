@@ -28,6 +28,15 @@ const MODELS = {
     ['box', 0x556677, [-0.55, 1.2, 0.1], [0.12, 1.0, 0.8]], ['box', 0xbbbbcc, [0.45, 1.4, 0.6], [0.1, 0.15, 1.5]],
   ],
   drone: [['box', 0x99a0aa, [0, 0, 0], [0.8, 0.25, 0.8]], ['cyl', 0x33ddff, [0, -0.1, 0.2], [0.25, 0.1, 0.25], null, true], ['box', 0x555a60, [0, 0.15, 0], [1.4, 0.06, 0.12]], ['box', 0x555a60, [0, 0.15, 0], [0.12, 0.06, 1.4]]],
+  wisp: [['ico', 0xaaffee, [0, 0, 0], [0.6, 0.6, 0.6], null, true], ['torus', 0x55ddcc, [0, 0, 0], [0.9, 0.9, 0.9], [1.57, 0, 0], true]],
+  shade: [['sphere', 0x2a1a3a, [0, 1.0, 0], [0.9, 1.2, 0.8]], ['cone', 0x1a1024, [0, 0.4, 0], [0.9, 1.0, 0.9], [Math.PI, 0, 0]], ['sphere', 0xd080ff, [-0.15, 1.2, 0.35], [0.12, 0.08, 0.06], null, true], ['sphere', 0xd080ff, [0.15, 1.2, 0.35], [0.12, 0.08, 0.06], null, true]],
+  wolf: [
+    ['box', 0x8a8f98, [0, 0.85, 0], [0.7, 0.65, 1.5]], ['box', 0x9aa0aa, [0, 1.05, 0.9], [0.55, 0.5, 0.6]], ['box', 0x6a6f78, [0, 0.95, 1.25], [0.3, 0.25, 0.35]],
+    ['cone', 0x8a8f98, [-0.18, 1.4, 0.85], [0.14, 0.3, 0.14]], ['cone', 0x8a8f98, [0.18, 1.4, 0.85], [0.14, 0.3, 0.14]],
+    ['box', 0x5a5f68, [-0.25, 0.3, 0.5], [0.18, 0.6, 0.18]], ['box', 0x5a5f68, [0.25, 0.3, 0.5], [0.18, 0.6, 0.18]],
+    ['box', 0x5a5f68, [-0.25, 0.3, -0.5], [0.18, 0.6, 0.18]], ['box', 0x5a5f68, [0.25, 0.3, -0.5], [0.18, 0.6, 0.18]],
+    ['cone', 0x9aa0aa, [0, 1.0, -0.95], [0.18, 0.7, 0.18], [-1.1, 0, 0]], ['sphere', 0xffdd55, [-0.13, 1.12, 1.15], [0.08, 0.08, 0.05], null, true], ['sphere', 0xffdd55, [0.13, 1.12, 1.15], [0.08, 0.08, 0.05], null, true],
+  ],
   ghost: [['sphere', 0xbfffe0, [0, 1.0, 0], [0.9, 1.1, 0.9], null, true], ['cone', 0xbfffe0, [0, 0.4, 0], [0.8, 0.9, 0.8], [Math.PI, 0, 0], true], ['sphere', 0x113322, [-0.15, 1.15, 0.38], [0.14, 0.2, 0.1]], ['sphere', 0x113322, [0.15, 1.15, 0.38], [0.14, 0.2, 0.1]]],
 };
 const geoCache = {};
@@ -54,7 +63,7 @@ class Minion {
     this.mesh = makeMesh(modelKind);
     this.mesh.position.copy(this.pos);
     G.scene.add(this.mesh);
-    this.life = { turret: 35, mine: 30, skeleton: opts.life || 20, drone: Infinity, ghost: 15 }[type];
+    this.life = { turret: 35, mine: 30, skeleton: opts.life || 20, drone: Infinity, wisp: Infinity, ghost: 15, shade: Infinity, wolf: Infinity }[type] ?? 20;
     particles(this.pos, type === 'skeleton' || type === 'ghost' ? 0x7dff9a : 0x33ddff, 12, 4, 0.5);
   }
   kill() {
@@ -95,16 +104,27 @@ class Minion {
         break;
       }
       case 'skeleton':
-      case 'ghost': {
-        const speed = this.type === 'ghost' ? 11 : 9;
-        const e = nearestEnemy(this.pos, 30);
+      case 'ghost':
+      case 'shade':
+      case 'wolf': {
+        const floaty = this.type === 'ghost' || this.type === 'shade';
+        const speed = this.type === 'wolf' ? 14 : floaty ? 11 : 9;
+        // allies that wandered too far teleport back to the player
+        if (this.pos.distanceTo(p.pos) > 60) this.pos.copy(p.pos);
+        if (this.type === 'wolf' && this.opts.sicTarget && !this.opts.sicTarget.dead) {
+          this.forceTarget = this.opts.sicTarget;
+        } else this.forceTarget = null;
+        const e = this.forceTarget || nearestEnemy(this.pos, 30);
         let tx, tz;
         if (e) {
           tx = e.pos.x;
           tz = e.pos.z;
         } else {
-          tx = p.pos.x + Math.sin(this.t + (this.opts.seed || 0)) * 3;
-          tz = p.pos.z + Math.cos(this.t) * 3;
+          // idle: wait beside/in front of the player, never between player and camera
+          const fx = -Math.sin(p.camYaw), fz = -Math.cos(p.camYaw);
+          const slot = (G.minions.indexOf(this) % 6) - 2.5;
+          tx = p.pos.x + fx * 3 + fz * slot * 1.6;
+          tz = p.pos.z + fz * 3 - fx * slot * 1.6;
         }
         const dx = tx - this.pos.x, dz = tz - this.pos.z;
         const d = Math.hypot(dx, dz);
@@ -116,21 +136,27 @@ class Minion {
         this.yaw = Math.atan2(dx, dz);
         this.atk -= dt;
         if (e && d <= reach + 0.3 && this.atk <= 0) {
-          this.atk = this.type === 'ghost' ? 0.5 : 0.8;
-          const mult = this.type === 'ghost' ? 1.0 : this.opts.warrior ? 2.2 : 1.5;
+          this.atk = this.type === 'ghost' ? 0.5 : this.type === 'wolf' ? 0.6 / p.stats.attackSpeed : 0.8;
+          const mult = this.type === 'ghost' ? 1.0 : this.type === 'shade' ? 1.6 : this.type === 'wolf' ? 2.0 * (this.opts.frenzy > G.time ? 1.5 : 1) : this.opts.warrior ? 2.2 : 1.5;
+          if (this.type === 'wolf' && this.opts.sicTarget === e) {
+            dealDamage(e, dmg * 6, { procCoef: 1, color: '#ffdd88', knockback: 6 });
+            this.opts.sicTarget = null;
+          }
           dealDamage(e, dmg * mult, { procCoef: 0.5, color: '#b8ffcc', knockback: 2 });
           particles(e.pos, 0x7dff9a, 3, 3, 0.3);
         }
         const gy = G.world.heightAt(this.pos.x, this.pos.z);
-        this.pos.y = this.type === 'ghost' ? gy + 1 + Math.sin(this.t * 3) * 0.3 : gy;
+        this.pos.y = floaty ? gy + 1 + Math.sin(this.t * 3) * 0.3 : gy;
         this.mesh.position.copy(this.pos);
+        if (this.type === 'wolf') this.mesh.position.y += Math.abs(Math.sin(this.t * 14)) * 0.15;
         this.mesh.rotation.y = this.yaw;
         if (this.type === 'skeleton') this.mesh.rotation.z = Math.sin(this.t * 12) * 0.08;
         if (this.life < 2) this.mesh.visible = Math.sin(this.t * 20) > 0;
         break;
       }
+      case 'wisp':
       case 'drone': {
-        const idx = this.opts.index || 0;
+        const idx = (this.opts.index || 0) + (this.type === 'wisp' ? 3 : 0);
         const a = this.t * 1.5 + idx * 2.1;
         const target = _v.set(p.pos.x + Math.cos(a) * 2.6, p.pos.y + 3.2 + Math.sin(this.t * 2 + idx) * 0.3, p.pos.z + Math.sin(a) * 2.6);
         this.pos.lerp(target, Math.min(1, dt * 6));

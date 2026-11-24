@@ -5,6 +5,7 @@ import { G } from '../core/state.js';
 import { Input } from '../core/input.js';
 import { CHARACTERS } from '../data/characters.js';
 import { ITEMS } from '../data/items.js';
+import { applyModsObj } from '../data/modutil.js';
 import { UPGRADES } from '../data/upgrades.js';
 import { buildCharacter } from './models.js';
 import { targetNearAim, nearestEnemy, applyFreeze, dealDamage, findTargets, explode } from './combat.js';
@@ -59,6 +60,7 @@ export class Player {
     this.cdMax = { ability1: 1, ability2: 1, ultimate: 1 };
     this.charges = {};
     SLOTS.forEach((s, i) => (this.charges[s] = this.char.abilities[i].charges || 1));
+    this.posHistory = [];
     this.primaryT = 0;
     this.lastAttackT = 9;
 
@@ -94,6 +96,16 @@ export class Player {
     };
 
     this.stats = {};
+    this.cond = {};
+    this.condKey = '';
+    this.lastKillT = 99;
+    this.lastHurtT = 99;
+    this.lastCastT = 99;
+    this.stillT = 0;
+    this.stageKills = 0;
+    this.nearCount = 0;
+    this.nearT = 0;
+    this.dmgModItems = [];
     this.dirty = true;
     this.recalcStats();
     this.hp = this.stats.maxHp;
@@ -113,11 +125,17 @@ export class Player {
       damage: 0, attackSpeed: 0, moveSpeed: 0, maxHpFlat: 0, maxHpPct: 0, regen: 0, armor: 0, crit: 0, critMult: 0,
       cdr: 1, ultCdr: 1, jumps: 0, jumpPower: 0, pickup: 0, luck: 0, xp: 0, coins: 0, area: 0, lifeOnHit: 0, dodge: 0,
       shield: 0, chestDiscount: 0, execute: 0, kbImmune: false, glide: false, burnVuln: 0,
+      dmgTakenMult: 1, procMult: 0, extraCharges: 0, burnImmune: false, poisonCap: 0,
     };
+    m.damage += this.eaterDmg || 0;
     if (this.char.passive.mods) this.char.passive.mods(m, this);
+    this.dmgModItems = [];
     for (const id in this.items) {
       const it = ITEMS[id];
-      if (it.mods) it.mods(m, this.items[id]);
+      const n = this.items[id];
+      if (it.mods) it.mods(m, n);
+      if (it.cond && this.cond[it.cond.when]) applyModsObj(m, it.cond.mods, n);
+      if (it.dmgMod) this.dmgModItems.push([it, n]);
     }
     for (const u of this.upgrades) {
       const def = UPGRADES.find((x) => x.id === u.id);
@@ -154,6 +172,11 @@ export class Player {
     s.kbImmune = m.kbImmune;
     s.glide = m.glide;
     s.burnVuln = m.burnVuln;
+    s.dmgTakenMult = m.dmgTakenMult;
+    s.procMult = 1 + m.procMult;
+    s.extraCharges = m.extraCharges;
+    s.burnImmune = m.burnImmune;
+    s.poisonCap = 10 + m.poisonCap;
     if (oldMax > 0 && s.maxHp > oldMax) this.hp += s.maxHp - oldMax;
     if (this.hp > s.maxHp) this.hp = s.maxHp;
     if (this.shield > s.maxShield) this.shield = s.maxShield;
@@ -166,6 +189,9 @@ export class Player {
     if (!this.itemOrder.includes(id)) this.itemOrder.push(id);
     discover(id);
     trackMax('itemsHeld', this.itemCount);
+    const rar = ITEMS[id].rarity;
+    track('items_' + rar);
+    if (rar === 'legendary') trackMax('legendaryHeld', this.itemOrder.filter((x) => ITEMS[x].rarity === 'legendary').reduce((a, x) => a + this.items[x], 0));
     this.dirty = true;
   }
 
@@ -185,6 +211,7 @@ export class Player {
       this.recalcStats();
       this.hp = Math.min(this.stats.maxHp, this.hp + this.stats.maxHp * 0.1);
       trackMax('level', this.level);
+      track('levelUps');
       ring(this.pos, 5, 0x55ffcc, 0.6);
       particles(this.pos, 0x55ffcc, 24, 6, 0.8);
       sfx('levelup');
@@ -232,9 +259,12 @@ export class Player {
   reduceCooldowns(amount, slots = SLOTS) {
     for (const s of slots) if (this.cd[s] > 0) this.cd[s] = Math.max(0.001, this.cd[s] - amount);
   }
+  maxCharges(i) {
+    return (this.char.abilities[i].charges || 1) + (this.stats.extraCharges || 0);
+  }
   resetCooldown(slot) {
     const i = SLOTS.indexOf(slot);
-    this.charges[slot] = this.char.abilities[i].charges || 1;
+    this.charges[slot] = this.maxCharges(i);
     this.cd[slot] = 0;
   }
   dash(dir, dist, dur, o = {}) {
@@ -269,13 +299,18 @@ export class Player {
   // ------------------------------------------------------------ damage intake
   takeDamage(amount, attacker, o = {}) {
     if (this.dead || this.invulnT > 0 || G.mode !== 'playing') return;
+    for (const id in this.items) {
+      const it = ITEMS[id];
+      if (it.onBlock && it.onBlock(this.items[id], this)) return;
+    }
     if (this.stats.dodge > 0 && Math.random() < this.stats.dodge) {
       floatText(this.pos.clone().setY(this.pos.y + 1), 'DODGE', '#ccccff');
       return;
     }
     const a = this.stats.armor;
     const red = a >= 0 ? 100 / (100 + a) : 2 - 100 / (100 - a);
-    let dmg = amount * red;
+    let dmg = amount * red * this.stats.dmgTakenMult;
+    this.lastHurtT = 0;
     const total = dmg;
     if (this.barrier > 0) {
       const t = Math.min(this.barrier, dmg);
@@ -298,7 +333,7 @@ export class Player {
     const st = o.status;
     if (st) {
       if (st.slow) this.slowT = Math.max(this.slowT, 1.5);
-      if (st.burn) {
+      if (st.burn && !this.stats.burnImmune) {
         this.burnDps = Math.max(this.burnDps, st.burn);
         this.burnT = 3;
       }
@@ -316,6 +351,10 @@ export class Player {
   }
 
   die() {
+    for (const id in this.items) {
+      const it = ITEMS[id];
+      if (it.onLethal && it.onLethal(this.items[id], this)) return;
+    }
     if (this.items.phoenix_feather > 0) {
       this.items.phoenix_feather--;
       this.itemCount--;
@@ -367,6 +406,7 @@ export class Player {
       if (was !== now) this.dirty = true;
       this.cs.spinPrev = this.cs.spin;
     }
+    this.updateConditions(dt);
     if (this.dirty) this.recalcStats();
 
     // regen / shield / barrier / burn
@@ -401,6 +441,45 @@ export class Player {
       if (it.onTick) it.onTick(this.items[id], dt, this);
     }
     this.updateModel(dt);
+  }
+
+  /** Flags used by conditional items (e.g. "+20 armor while standing still"). */
+  updateConditions(dt) {
+    this.lastKillT += dt;
+    this.lastHurtT += dt;
+    this.lastCastT += dt;
+    const spd = Math.hypot(this.vel.x, this.vel.z);
+    this.stillT = spd < 0.6 ? this.stillT + dt : 0;
+    this.nearT -= dt;
+    if (this.nearT <= 0) {
+      this.nearT = 0.25;
+      this.nearCount = findTargets(this.pos, 8, 5).length;
+    }
+    // position history (Echo's rewind)
+    this.histT = (this.histT || 0) - dt;
+    if (this.histT <= 0) {
+      this.histT = 0.1;
+      this.posHistory.push({ p: this.pos.clone(), hp: this.hp });
+      if (this.posHistory.length > 40) this.posHistory.shift();
+    }
+    const hpF = this.hp / (this.stats.maxHp || 1);
+    const c = this.cond;
+    c.lowHp = hpF < 0.35;
+    c.fullHp = hpF >= 0.9;
+    c.moving = spd > 1;
+    c.still = this.stillT > 0.4;
+    c.airborne = !this.grounded;
+    c.notHurt = this.lastHurtT > 3;
+    c.crowded = this.nearCount >= 3;
+    c.recentKill = this.lastKillT < 3;
+    c.shielded = this.shield > 0 || this.barrier > 0;
+    c.ability = this.lastCastT < 3;
+    let key = '';
+    for (const k in c) key += c[k] ? '1' : '0';
+    if (key !== this.condKey) {
+      this.condKey = key;
+      this.dirty = true;
+    }
   }
 
   updateCamera(dt) {
@@ -546,6 +625,7 @@ export class Player {
       if (this.grounded || this.coyote > 0) {
         this.vel.y = s.jumpPower;
         this.sqv += 4;
+        track('jumps');
         this.jumpsLeft = s.jumps - 1;
         this.grounded = false;
         this.coyote = 0;
@@ -570,7 +650,7 @@ export class Player {
         for (const e of findTargets(this.pos, ds.along.radius, 30)) {
           if (ds.hit.has(e)) continue;
           ds.hit.add(e);
-          dealDamage(e, ds.along.damage, { procCoef: 1, knockback: 5 });
+          dealDamage(e, ds.along.damage, { procCoef: 1, knockback: 5, stun: ds.along.stun });
         }
       }
       if (ds.t <= 0) {
@@ -611,6 +691,10 @@ export class Player {
       if (landing) {
         const impact = -this.vel.y;
         this.sqv -= Math.min(7, impact * 0.28);
+        for (const id in this.items) {
+          const it = ITEMS[id];
+          if (it.onLand) it.onLand(this.items[id], impact, this);
+        }
         if (impact > 14) {
           this.camDipV -= Math.min(6, impact * 0.18);
           particles(this.pos, 0xddddcc, 8, 4, 0.4, 0.3, 14);
@@ -652,7 +736,7 @@ export class Player {
     for (let i = 0; i < 3; i++) {
       const slot = SLOTS[i];
       const ab = this.char.abilities[i];
-      const maxC = ab.charges || 1;
+      const maxC = this.maxCharges(i);
       const full = this.cooldownFor(slot);
       this.cdMax[slot] = full;
       if (this.charges[slot] < maxC) {
@@ -698,9 +782,19 @@ export class Player {
     this.aimYaw = this.aim.target ? this.aimYaw : this.camYaw;
     const res = ab.cast(this, this.aim);
     if (res === false) return false;
-    this.charges[slot]--;
-    if (this.cd[slot] <= 0) this.cd[slot] = this.cooldownFor(slot);
+    let refund = !!(this.char.passive.onCast && this.char.passive.onCast(slot, this) === 'refund');
+    for (const id in this.items) {
+      const it = ITEMS[id];
+      if (it.onCast && it.onCast(this.items[id], slot, this) === 'refund') refund = true;
+    }
+    if (refund) floatText(this.pos.clone().setY(this.pos.y + 2.2), 'FREE CAST', '#9fe8ff');
+    else {
+      this.charges[slot]--;
+      if (this.cd[slot] <= 0) this.cd[slot] = this.cooldownFor(slot);
+    }
     this.lastAttackT = 0;
+    this.lastCastT = 0;
+    track('abilitiesUsed');
     if (slot === 'ultimate') track('ultsUsed');
     return true;
   }

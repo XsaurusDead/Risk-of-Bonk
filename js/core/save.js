@@ -10,9 +10,11 @@
 //    shipped data, but protects against future data edits).
 //  * Every counter is cumulative, so progress is never lost by dying.
 import { G } from './state.js';
-import { ACHIEVEMENTS, DEFAULT_CHARACTERS } from '../data/achievements.js';
-import { CHARACTERS } from '../data/characters.js';
-import { ITEMS } from '../data/items.js';
+import { ACHIEVEMENTS, DEFAULT_CHARACTERS, buildAchievements } from '../data/achievements.js';
+import { CHARACTERS, CHARACTER_ORDER } from '../data/characters.js';
+import { ITEMS, ITEM_LIST } from '../data/items.js';
+import { ENEMIES, BOSSES } from '../data/enemies.js';
+import { STAGES } from '../data/stages.js';
 import { RARITY_ORDER } from './util.js';
 
 const KEY = 'riskofbonk_save_v1';
@@ -43,7 +45,23 @@ function freshSave() {
   };
 }
 
+/** Generate the full achievement list and the lookup tables (once). */
+export function initAchievements() {
+  if (achIndex) return;
+  const charNames = {};
+  for (const id of CHARACTER_ORDER) charNames[id] = CHARACTERS[id].name;
+  buildAchievements({ items: ITEM_LIST, characters: CHARACTER_ORDER, charNames, enemies: ENEMIES, bosses: BOSSES, stages: STAGES });
+  achIndex = new Map();
+  for (const a of ACHIEVEMENTS) {
+    if (a.reward.item) rewardedItems.add(a.reward.item);
+    if (a.reward.character) rewardedChars.add(a.reward.character);
+    if (!achIndex.has(a.cond.stat)) achIndex.set(a.cond.stat, []);
+    achIndex.get(a.cond.stat).push(a);
+  }
+}
+
 export function loadSave() {
+  initAchievements();
   let s = null;
   try {
     const raw = localStorage.getItem(KEY);
@@ -101,18 +119,24 @@ export function resetSave() {
 // ---------- derived unlocks ----------
 const rewardedItems = new Set();
 const rewardedChars = new Set();
-for (const a of ACHIEVEMENTS) {
-  if (a.reward.item) rewardedItems.add(a.reward.item);
-  if (a.reward.character) rewardedChars.add(a.reward.character);
-}
+let achIndex = null;
+const itemUnlockedBy = new Map();
+const charUnlockedBy = new Map();
 
+function sourceMap(kind) {
+  const m = kind === 'item' ? itemUnlockedBy : charUnlockedBy;
+  if (!m.size) for (const a of ACHIEVEMENTS) if (a.reward[kind]) m.set(a.reward[kind], a);
+  return m;
+}
 export function isCharacterUnlocked(id) {
   if (DEFAULT_CHARACTERS.includes(id)) return true;
-  return ACHIEVEMENTS.some((a) => a.reward.character === id && G.save?.achievements[a.id]);
+  const a = sourceMap('character').get(id);
+  return !!(a && G.save?.achievements[a.id]);
 }
 export function isItemUnlocked(id) {
   if (!rewardedItems.has(id)) return true;
-  return ACHIEVEMENTS.some((a) => a.reward.item === id && G.save?.achievements[a.id]);
+  const a = sourceMap('item').get(id);
+  return !!(a && G.save?.achievements[a.id]);
 }
 export function unlockSourceFor(kind, id) {
   return ACHIEVEMENTS.find((a) => a.reward[kind] === id) || null;
@@ -211,9 +235,9 @@ export function achievementProgress(a) {
 }
 
 export function checkAchievements(stat) {
-  for (const a of ACHIEVEMENTS) {
+  const list = stat && achIndex ? achIndex.get(stat) || [] : ACHIEVEMENTS;
+  for (const a of list) {
     if (G.save.achievements[a.id]) continue;
-    if (stat && a.cond.stat !== stat && a.cond.stat !== 'charactersUnlocked') continue;
     if (a.cond.char && a.cond.scope === 'run' && G.run?.charId !== a.cond.char) continue;
     if (achievementProgress(a) >= a.cond.value) grant(a);
   }
@@ -225,7 +249,7 @@ function grant(a) {
   persist();
   if (onAchievement) onAchievement(a);
   // chained achievements (like "unlock N characters")
-  checkAchievements('charactersUnlocked');
+  if (a.reward.character) checkAchievements('charactersUnlocked');
 }
 
 /** At end of a run, roll run-scoped stats into "best_" lifetime maxima. */
