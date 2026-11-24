@@ -9,7 +9,11 @@ import { skinTexture } from './textures.js';
 import { spawnProjectile, damagePlayer, dealDamage, spawnZone, findTargets } from './combat.js';
 import { particles, ring, telegraph, shake, floatText, gibs } from './fx.js';
 import { addRimLight } from './models.js';
-import { dropCoins, dropXp, dropHeal } from './pickups.js';
+import { dropCoins, dropXp, dropHeal, dropItem, rollItem, rollRarity } from './pickups.js';
+import { attachGlyph } from './glyphs.js';
+
+export const ELITE_ITEM_CHANCE = 0.05; // random item, rarity rolled like a small chest (legendary rarest, luck helps)
+export const ELITE_CHEST_CHANCE = 0.01; // a free chest of a random tier
 import { sfx } from '../core/audio.js';
 import { track } from '../core/save.js';
 import { SpatialHash, rand, pick, shuffle, angleDiff, clamp } from '../core/util.js';
@@ -77,7 +81,7 @@ export function spawnEnemy(id, pos, opts = {}) {
     group.add(node);
     rig[r.role] = node;
   }
-  const scale = (elite ? 1.25 : 1) * (champ ? 2.1 : 1) * (opts.boss ? 1 : 0.92 + Math.random() * 0.16);
+  const scale = (elite && !champ ? 1.5 : elite ? 1.15 : 1) * (champ ? 2.1 : 1) * (opts.boss ? 1 : 0.92 + Math.random() * 0.16);
   group.scale.setScalar(scale);
   group.rotation.order = 'YXZ';
   if (elite) mat.emissive = new THREE.Color(elite.color).multiplyScalar(0.35);
@@ -106,6 +110,10 @@ export function spawnEnemy(id, pos, opts = {}) {
     e.speed *= 0.9;
   }
   if (elite?.shield) e.shieldHp = e.maxHp * elite.shield;
+  if (elite && !champ && !opts.boss) {
+    // small animated rune floating above the head marks an elite
+    e.marker = attachGlyph(group, elite.glyph || 'A', 17, 1.3, def.height + 0.3, { owner: e });
+  }
   const h = G.world.heightAt(e.pos.x, e.pos.z);
   e.pos.y = e.flying ? h + e.hover : h;
   if (opts.boss) {
@@ -129,13 +137,30 @@ export function clearEnemies() {
 }
 
 // ------------------------------------------------------------------ death
+/** Elite drops: 5% a random item, 1% a free chest. */
+function eliteLoot(e) {
+  if (Math.random() < ELITE_ITEM_CHANCE) {
+    const it = rollItem(rollRarity('small'));
+    if (it) dropItem(e.pos.clone().setY(e.pos.y + 1.5), it);
+  }
+  if (Math.random() < ELITE_CHEST_CHANCE && G.world?.spawnChest) {
+    const c = G.world.spawnChest(e.pos.clone(), G.world.rollChestTier(1), true);
+    if (c) {
+      ring(c.pos, 3, 0xffd27a, 0.6);
+      particles(c.pos.clone().setY(c.pos.y + 1), 0xffd27a, 30, 7, 0.9, 0.4);
+      floatText(c.pos.clone().setY(c.pos.y + 2.5), 'FREE CHEST!', '#ffd27a', true);
+      sfx('chest');
+    }
+  }
+}
+
 export function killEnemy(e, o = {}) {
   if (e.dead) return;
   e.dead = true;
   e.hp = 0;
   const p = G.player;
   const run = G.run;
-  const mult = e.elite ? 3 : 1;
+  const mult = e.elite ? 4 : 1;
   particles(_v.copy(e.pos).setY(e.pos.y + e.height * 0.4), e.elite ? e.elite.color : 0xffffff, e.isBoss ? 60 : 10, e.isBoss ? 14 : 6, 0.7, e.isBoss ? 0.8 : 0.4);
   if (!o.noReward) {
     dropCoins(e.pos, e.def.coins * 0.6 * run.coinScale * mult * (e.champion ? 6 : 1) * (1 + Math.random() * 0.3));
@@ -150,7 +175,10 @@ export function killEnemy(e, o = {}) {
     if (e.status.burnT > 0) track('burnKills');
     if (e.status.poisonT > 0) track('poisonKills');
     if (o.source === 'deploy') track('deployKills');
-    if (e.elite) track('eliteKills');
+    if (e.elite) {
+      track('eliteKills');
+      if (!e.isBoss && !e.champion) eliteLoot(e);
+    }
     if (p && !p.dead) {
       try {
         if (p.char.passive.onKill) p.char.passive.onKill(e, p);

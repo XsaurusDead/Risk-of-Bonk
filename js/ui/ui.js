@@ -1044,7 +1044,7 @@ export const UI = {
         const cost = Game.chestCost(it.obj);
         const can = run.coins >= cost;
         const tn = { normal: '', large: 'Large ', epic: '<span class="r-epic">Epic</span> ', legendary: '<span class="r-legendary">Legendary</span> ' }[it.obj.tier] || '';
-        text = `<span class="k">${key}</span>Open ${tn}Chest — <span class="${can ? '' : 'cant'}">${icon(UI_ICONS.coin)} ${cost}</span>`;
+        text = it.obj.free ? `<span class="k">${key}</span>Open ${tn}Chest — <span style="color:#ffd27a">FREE</span>` : `<span class="k">${key}</span>Open ${tn}Chest — <span class="${can ? '' : 'cant'}">${icon(UI_ICONS.coin)} ${cost}</span>`;
       } else if (it.kind === 'portal') {
         const n = run.bossCount || 1;
         text = it.obj.state === 'idle' ? `<span class="k">${key}</span>Activate portal <span class="cant">(summons ${n > 1 ? n + ' bosses' : 'the boss'}!)</span>` : `<span class="k">${key}</span>Enter portal`;

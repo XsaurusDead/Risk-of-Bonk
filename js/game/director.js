@@ -134,9 +134,10 @@ export class Director {
     // close to the player so standing still gets you surrounded
     const center = o.far ? this.spawnCenter(16, 30, flyer) : this.spawnCenter(13, 24, flyer);
     if (!center) return;
-    const eliteChance = Math.min(0.4, 0.02 + (run.diff - 1) * 0.05 + (this.t > STAGE_TIME ? 0.15 : 0));
+    // elites are rare: ~2.5% of spawns at the start, slowly rising to 12% (+6% in overtime)
+    const eliteChance = Math.min(0.12, 0.025 + (run.diff - 1) * 0.02) + (this.t > STAGE_TIME ? 0.06 : 0);
     for (let i = 0; i < count; i++) {
-      const elite = (o.elite || run.diff > 1.5) && Math.random() < eliteChance ? pick(Object.keys(ELITES)) : null;
+      const elite = Math.random() < (o.elite ? eliteChance * 2 : eliteChance) ? pick(Object.keys(ELITES)) : null;
       spawnEnemy(id, this.jitter(center, 4), { elite, otMult: o.otMult || this.otMult });
     }
   }
@@ -164,7 +165,7 @@ export class Director {
       const c = new THREE.Vector3(p.x + Math.cos(a) * 19, 0, p.z + Math.sin(a) * 19);
       G.world.clampBounds(c);
       const id = ids[d % ids.length];
-      for (let i = 0; i < Math.ceil(n / dirs); i++) spawnEnemy(id, this.jitter(c, 6), { elite: Math.random() < 0.06 ? pick(Object.keys(ELITES)) : null });
+      for (let i = 0; i < Math.ceil(n / dirs); i++) spawnEnemy(id, this.jitter(c, 6), { elite: Math.random() < 0.03 ? pick(Object.keys(ELITES)) : null });
     }
     shake(0.4);
     sfx('roar');

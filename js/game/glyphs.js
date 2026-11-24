@@ -86,6 +86,7 @@ export function attachGlyph(parent, color, design = 17, height = 2.4, y = 0, opt
   const s = makeGlyph(color, design, height, opts);
   s.position.y = y;
   parent.add(s);
+  if (opts.owner) s.userData.owner = opts.owner;
   attached.push(s);
   return s;
 }
@@ -122,6 +123,14 @@ export function updateGlyphs(dt) {
   for (let i = attached.length - 1; i >= 0; i--) {
     const s = attached[i];
     if (!s.parent) { attached.splice(i, 1); continue; } // its world was unloaded
+    if (s.userData.owner?.dead) {
+      // e.g. an elite died: drop the marker
+      s.parent.remove(s);
+      s.material.map.dispose();
+      s.material.dispose();
+      attached.splice(i, 1);
+      continue;
+    }
     if (s.visible) animate(s, dt);
   }
 }

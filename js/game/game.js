@@ -496,6 +496,7 @@ export const Game = {
    * 10, 13, 16, 20, 24 … the steps grow gently as you progress.
    */
   chestCost(c) {
+    if (c.free) return 0;
     const p = G.player;
     const n = G.run.chestsOpened || 0;
     const base = 10 * (1 + 0.25 * n + 0.02 * n * n);
@@ -623,7 +624,7 @@ export const Game = {
       return;
     }
     run.coins -= cost;
-    run.chestsOpened = (run.chestsOpened || 0) + 1;
+    if (!c.free) run.chestsOpened = (run.chestsOpened || 0) + 1; // dropped free chests don't raise prices
     c.used = true;
     track('chests');
     if (c.tier === 'large') track('largeChests');

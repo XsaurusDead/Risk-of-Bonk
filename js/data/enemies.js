@@ -289,10 +289,12 @@ BOSSES.apex_sovereign = {
 };
 
 export const ELITES = {
-  blazing: { name: 'Blazing', color: 0xff5522, hpMult: 3.5, dmgMult: 1.8, trail: 'fire' },
-  glacial: { name: 'Glacial', color: 0x66ddff, hpMult: 3.5, dmgMult: 1.6, slowOnHit: true },
-  overloading: { name: 'Overloading', color: 0x4488ff, hpMult: 3.0, dmgMult: 1.6, shield: 0.5 },
-  vampiric: { name: 'Vampiric', color: 0xff1a55, hpMult: 3.0, dmgMult: 2.0, leech: true },
+  // Elites: bigger, tougher versions of normal enemies with an affix. Rare; they can drop
+  // an item (5%) or even a free chest (1%). glyph = rune colour floating above their head.
+  blazing: { name: 'Blazing', color: 0xff5522, hpMult: 4.5, dmgMult: 1.8, trail: 'fire', glyph: 'H' },
+  glacial: { name: 'Glacial', color: 0x66ddff, hpMult: 4.5, dmgMult: 1.6, slowOnHit: true, glyph: 'C' },
+  overloading: { name: 'Overloading', color: 0x4488ff, hpMult: 4.0, dmgMult: 1.6, shield: 0.5, glyph: 'K' },
+  vampiric: { name: 'Vampiric', color: 0xff1a55, hpMult: 4.0, dmgMult: 2.0, leech: true, glyph: 'B' },
 };
 
 // ---------------------------------------------------------------------------

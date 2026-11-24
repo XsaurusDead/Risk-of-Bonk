@@ -479,6 +479,20 @@ export class World {
     }
   }
 
+  /** A chest that appears during play (elite drop). `free` chests cost nothing to open. */
+  spawnChest(pos, tier = 'normal', free = false) {
+    const p = pos.clone();
+    p.y = this.groundAt(p.x, p.z, p.y + 2);
+    const built = buildChest(tier);
+    built.group.position.copy(p);
+    built.group.rotation.y = Math.random() * Math.PI * 2;
+    this.group.add(built.group);
+    const it = { kind: 'chest', pos: p, used: false, ...built, tier, free };
+    this.interactables.push(it);
+    this.addCollider(p.x, p.z, 1);
+    return it;
+  }
+
   rollChestTier(bonus = 1) {
     const w = { normal: CHEST_TIERS.normal, large: CHEST_TIERS.large * bonus, epic: CHEST_TIERS.epic * bonus, legendary: CHEST_TIERS.legendary * bonus };
     let tot = 0;

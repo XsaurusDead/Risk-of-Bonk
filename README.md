@@ -40,6 +40,10 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 ## How a run works
 
 - **Difficulty:** grows ×1.045 per minute and ×1.22 per cleared stage, and enemies also scale with your power (level, items, tome and weapon levels), so the phases (Easy → Medium → Hard → …) arrive sooner.
+- **Elites:** rare, bigger (1.5×) and much tougher versions of normal enemies with an affix (Blazing, Glacial, Overloading,
+  Vampiric) and a rune floating above their head. About 2.5% of spawns at the start, slowly rising to 12% (more in overtime).
+  They give 4× coins/XP, have a **5% chance to drop a random item** (rarity rolled like a small chest, legendary rarest,
+  luck helps) and a **1% chance to drop a free chest** of a random tier (doesn't raise chest prices).
 - **Stage clock (10 minutes):** a steady stream of enemies that grows every minute, **HUGE waves at 3:00 and 6:00** (for one full minute big groups pour in from all sides, much faster than normal), a **Champion mini-boss at 5:00 and 8:00** (giant, tanky version of the stage's toughest enemy; drops an item). After **10:00 comes OVERTIME**: Overtime Reapers and elite waves that get ×1.35 stronger every 30 seconds. They will kill you quickly, so find the portal and leave.
 - **Maps:** 520 × 520 m (4× the old area) with terraced plateaus and cliffs (you can't walk up cliffs, so use ramps or jump), caves you walk through (the roof fades when you're inside), ruins, and floating islands reachable by jump pads. The Scorched Dunes stay mostly flat.
 - **Chests (15-20 per stage):** normal, large (better odds, ~13%), epic (only epic items, ~4%) and legendary (only legendary items, ~1%, with a light beacon). The price starts at 10 coins and rises with every chest you open in the run (10, 13, 16 … 28 after 5, 55 after 10, 140 after 20). Large/epic/legendary cost 2×/4×/8×.
