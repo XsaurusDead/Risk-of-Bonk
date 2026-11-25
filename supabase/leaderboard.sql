@@ -27,7 +27,7 @@ create table if not exists public.runs (
   player_id      uuid not null references public.players (id) on delete cascade,
   char_id        text not null check (char_id ~ '^[a-z0-9_]{1,32}$'),
   costume        smallint not null default 0 check (costume between 0 and 20),
-  kills          integer not null check (kills between 0 and 50000000),
+  kills          integer not null check (kills >= 0),
   score          integer not null check (score between 0 and 2000000000),
   stage          smallint not null check (stage between 1 and 10000),
   stages_cleared smallint not null check (stages_cleared between 0 and 10000),
@@ -36,10 +36,12 @@ create table if not exists public.runs (
   items          integer not null check (items between 0 and 1000000),
   victory        boolean not null default false,
   reason         text not null check (reason in ('death', 'victory', 'quit')),
-  created_at     timestamptz not null default now(),
-  -- plausibility: nobody kills more than ~60 enemies per second on average
-  constraint runs_kill_rate check (kills <= time_s * 60 + 200)
+  created_at     timestamptz not null default now()
 );
+-- no limit on kills (or kills per second): older versions of this file had one, remove it
+alter table public.runs drop constraint if exists runs_kill_rate;
+alter table public.runs drop constraint if exists runs_kills_check;
+alter table public.runs add constraint runs_kills_check check (kills >= 0);
 create index if not exists runs_rank_idx on public.runs (kills desc, score desc, created_at);
 create index if not exists runs_player_idx on public.runs (player_id, created_at desc);
 

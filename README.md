@@ -114,8 +114,8 @@ Without that config the game works as before (local board only; the Global tab s
 
 **Security:** the public key can't read or change the tables directly (row level security, no policies). It can only
 call four database functions: register a name, rename yourself, submit a run, read the board. Each player gets a
-secret token (stored in their browser) so nobody can post under someone else's name. The database also rejects
-impossible runs (more than ~60 kills per second, absurd values) and throttles spam (one run per 15 s per player,
+secret token (stored in their browser) so nobody can post under someone else's name. There is no limit on kills
+or kills per second; the database only rejects broken values (negative numbers etc.) and throttles spam (one run per 15 s per player,
 30 new names per minute). Like any browser game without a server-side simulation, a determined cheater could still
 fake a *plausible* run; you can delete runs or players any time in Supabase → **Table Editor** (`runs`, `players`).
 Free Supabase projects pause after a week without any traffic — resume it in the dashboard if that happens.
