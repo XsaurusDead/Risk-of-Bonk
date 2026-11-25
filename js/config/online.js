@@ -8,6 +8,6 @@
 //
 // Left empty, the game works exactly as before with only the local (this device) board.
 export const ONLINE = {
-  url: '',
-  key: '',
+  url: 'https://ulippxnckxsqbtnllanb.supabase.co',
+  key: 'sb_publishable_4qYMSD2-jsoLyBybhR4WcQ_Sncs7dbe',
 };
