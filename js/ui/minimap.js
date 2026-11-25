@@ -176,7 +176,7 @@ export const Minimap = {
     this.bigOpen = force !== undefined ? force : !this.bigOpen;
     document.getElementById('bigmap').classList.toggle('hidden', !this.bigOpen);
     if (this.bigOpen) {
-      Input.releaseLock();
+      Input.releaseLock(true); // the map is an overlay: the run keeps going, no pause menu
       this.drawBig();
     } else if (G.mode === 'playing') Input.requestLock();
   },

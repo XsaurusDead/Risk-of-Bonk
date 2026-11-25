@@ -5,6 +5,7 @@ import { Input } from './core/input.js';
 import { loadSave } from './core/save.js';
 import { Game } from './game/game.js';
 import { UI } from './ui/ui.js';
+import { Minimap } from './ui/minimap.js';
 import { initMaterials } from './game/models.js';
 import { Music } from './core/music.js';
 import { preloadAssets } from './game/assets.js';
@@ -98,8 +99,22 @@ function loop() {
 
   if (G.hitStop > 0) G.hitStop -= dt;
   if (Input.pressed.pause && G.mode !== 'chest') {
-    if (G.mode === 'playing') Game.pause();
+    if (Minimap.bigOpen) {
+      // Escape with the big map open: close the map and everything that's open with it
+      Minimap.toggleBig(false);
+      if (G.mode === 'paused') Game.resume();
+      else Input.requestLock();
+    } else if (G.mode === 'playing') Game.pause();
     else if (G.mode === 'paused') Game.resume();
+  }
+  // I: your items and their effects (pauses the run while you read)
+  if (Input.pressed.items && (G.mode === 'playing' || G.mode === 'paused')) {
+    if (G.mode === 'playing') {
+      if (Minimap.bigOpen) Minimap.toggleBig(false);
+      Game.pause();
+      UI.showScreen('items');
+    } else if (UI.screen === 'items') Game.resume();
+    else UI.showScreen('items');
   }
   try {
     switch (G.mode) {

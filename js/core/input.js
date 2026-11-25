@@ -2,7 +2,7 @@
 // and touch (virtual joystick + drag-to-look + on-screen buttons).
 import { G } from './state.js';
 
-const ACTIONS = ['primary', 'ability1', 'ability2', 'ultimate', 'jump', 'interact', 'pause', 'inventory'];
+const ACTIONS = ['primary', 'ability1', 'ability2', 'ultimate', 'jump', 'interact', 'pause', 'inventory', 'items'];
 
 const KEYMAP = {
   Space: 'jump',
@@ -15,6 +15,7 @@ const KEYMAP = {
   Escape: 'pause',
   KeyP: 'pause',
   Tab: 'inventory',
+  KeyI: 'items',
 };
 
 const PADMAP = {
@@ -110,7 +111,11 @@ export const Input = {
     document.addEventListener('pointerlockchange', () => {
       const was = this.pointerLocked;
       this.pointerLocked = document.pointerLockElement === canvas;
-      if (was && !this.pointerLocked && this.onPointerLockLost) this.onPointerLockLost();
+      if (was && !this.pointerLocked) {
+        // releasing the mouse on purpose (e.g. opening the big map) must not pause the game
+        if (this._quietUnlock) this._quietUnlock = false;
+        else if (this.onPointerLockLost) this.onPointerLockLost();
+      }
     });
 
     window.addEventListener('gamepadconnected', () => this.setDevice('pad'));
@@ -136,8 +141,12 @@ export const Input = {
       if (p && p.catch) p.catch(() => {});
     } catch (_) {}
   },
-  releaseLock() {
-    if (document.pointerLockElement) document.exitPointerLock();
+  /** Free the mouse. `quiet`: on purpose (an overlay that keeps the game running), so don't pause. */
+  releaseLock(quiet = false) {
+    if (document.pointerLockElement) {
+      this._quietUnlock = quiet;
+      document.exitPointerLock();
+    }
   },
 
   setDevice(d) {

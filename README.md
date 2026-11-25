@@ -32,9 +32,10 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 | Ultimate | R | Y / LB | gold button |
 | Jump (multi-jump) | Space | A | ⤒ |
 | Interact | E / F | X | ✋ (appears when near) |
-| Items & stats | Hold Tab | View/Back | 🎒 |
+| Items & stats (quick look) | Hold Tab | View/Back | 🎒 |
+| Items & Effects screen (pauses) | I, or *Items & Effects* in the pause menu | pause menu | pause menu |
 | Pause | Esc / P | Start | ⏸ |
-| Full map | M or click the minimap | – | tap the minimap |
+| Full map | M or click the minimap; Esc or M closes it (the run keeps going, no pause menu) | – | tap the minimap |
 | Pick level-up | 1 / 2 / 3 or click | D-pad + A | tap |
 
 ## How a run works

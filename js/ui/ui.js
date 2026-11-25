@@ -88,6 +88,11 @@ export const UI = {
 
     $('#btn-start').addEventListener('click', () => this.startRun());
     $('#btn-resume').addEventListener('click', () => Game.resume());
+    $('#btn-items-resume').addEventListener('click', () => Game.resume());
+    $$('[data-itab]').forEach((t) => t.addEventListener('click', () => {
+      sfx('ui');
+      this.renderItems(t.dataset.itab);
+    }));
     $('#btn-quit').addEventListener('click', () => {
       sfx('ui');
       Game.quitToMenu(false);
@@ -252,6 +257,7 @@ export const UI = {
       this.renderLogbook('ach');
     }
     if (name === 'settings') this.renderSettings();
+    if (name === 'items') this.renderItems(this.itemsTab || 'items');
     if (name === 'leaderboard') this.renderLeaderboard();
     if (name === 'title') {
       this.updateNameUi();
@@ -852,7 +858,8 @@ export const UI = {
 
   showPause(on) {
     if (on) {
-      $('#pause-stats').innerHTML = this.statsHtml();
+      // the pause menu shows your stats; items, tomes and weapons have their own screen (Items & Effects)
+      $('#pause-stats').innerHTML = this.statsParts().stats;
       this.showScreen('pause');
     } else this.showScreen('none');
   },
@@ -924,9 +931,37 @@ export const UI = {
     this.showScreen('gameover');
   },
 
+  /** The Items & Effects screen: every item you carry with what it does, your tomes/weapons and stats. */
+  renderItems(tab) {
+    this.itemsTab = tab;
+    $$('[data-itab]').forEach((t) => t.classList.toggle('active', t.dataset.itab === tab));
+    const p = G.player, body = $('#items-body');
+    if (!p) return (body.innerHTML = '');
+    const parts = this.statsParts();
+    if (tab === 'build') body.innerHTML = parts.tomes + parts.weapons;
+    else if (tab === 'stats') body.innerHTML = parts.stats;
+    else {
+      // rarest first, then in the order you found them
+      const ids = [...p.itemOrder].sort((a, b) => (RARITY[ITEMS[b].rarity]?.order ?? 0) - (RARITY[ITEMS[a].rarity]?.order ?? 0));
+      body.innerHTML = ids.length
+        ? `<p class="items-sum">${p.itemCount} item${p.itemCount === 1 ? '' : 's'} · ${ids.length} different — stacks add up (×N)</p><div class="item-cards">${ids.map((id) => {
+          const it = ITEMS[id], r = RARITY[it.rarity];
+          return `<div class="item-card" style="--c:${r.color}"><div class="ic">${it.icon}${p.items[id] > 1 ? `<b>×${p.items[id]}</b>` : ''}</div>
+            <div><div class="nm">${esc(it.name)}</div><div class="rr">${r.name}</div><div class="ds">${it.desc}</div></div></div>`;
+        }).join('')}</div>`
+        : `<p class="lb-empty">No items yet — open chests with coins, and look out for Moai and elite drops.</p>`;
+    }
+  },
+
   statsHtml() {
+    const s = this.statsParts();
+    return s.stats + s.tomes + s.weapons + s.items;
+  },
+
+  /** The pieces of the stats overlay (HTML strings). */
+  statsParts() {
     const p = G.player;
-    if (!p) return '';
+    if (!p) return { stats: '', tomes: '', weapons: '', items: '' };
     const s = p.stats;
     const pct = (v) => `${Math.round(v * 100)}%`;
     const armorRed = s.armor >= 0 ? 1 - 100 / (100 + s.armor) : 0;
@@ -937,13 +972,17 @@ export const UI = {
       ['XP gain', pct(s.xpMult)], ['Coin gain', pct(s.coinMult)], ['Dodge', pct(s.dodge)],
       ['Projectiles', '+' + (Math.round(s.projectiles * 100) / 100)], ['Life steal', pct(s.lifesteal)], ['Shield', Math.round(s.maxShield)],
     ];
-    let html = `<h3>Stats — Level ${p.level}</h3><div class="st-grid">${rows.map(([a, b]) => `<span>${a} <b>${b}</b></span>`).join('')}</div>`;
+    const out = { stats: '', tomes: '', weapons: '', items: '' };
+    out.stats = `<h3>Stats — Level ${p.level}</h3><div class="st-grid">${rows.map(([a, b]) => `<span>${a} <b>${b}</b></span>`).join('')}</div>`;
+    let html = '';
     const tids = Object.keys(p.tomes);
     html += `<h3>Tomes (${tids.length}/${TOME_SLOTS})</h3>`;
     html += tids.length ? `<div class="inv-list">${tids.map((id) => {
       const t = TOME_BY_ID[id], o = p.tomes[id];
       return `<div class="item-entry" style="--c:#7fd6ff"><div class="ic">${icon(t.icon)}</div><div><div class="nm">${t.name} <span class="lvl">Lv ${o.level}${o.level >= TOME_MAX ? ' MAX' : ''}</span></div><div class="ds">${t.fmt(o.value)}${t.note ? ` · ${t.note}` : ''}</div></div></div>`;
     }).join('')}</div>` : `<p style="color:var(--muted)">No tomes yet — pick them when you level up (max ${TOME_SLOTS} different).</p>`;
+    out.tomes = html;
+    html = '';
     html += `<h3>Weapons (${p.weaponOrder.length}/${WEAPON_SLOTS})</h3><div class="inv-list">${p.weaponOrder.map((id) => {
       const w = p.weapons[id], m = p.weaponMods(id);
       const def = WEAPONS[id];
@@ -956,13 +995,16 @@ export const UI = {
       if (m.crit) parts.push(`+${pct(m.crit)} crit`);
       return `<div class="item-entry" style="--c:#ffb22e"><div class="ic">${ic}</div><div><div class="nm">${name} <span class="lvl">Lv ${w.level}${w.level >= WEAPON_MAX ? ' MAX' : ''}${id === 'primary' ? ' · MAIN' : ''}</span></div><div class="ds">${def ? def.desc + '<br>' : ''}${parts.join(' · ')}</div></div></div>`;
     }).join('')}</div>`;
+    out.weapons = html;
+    html = '';
     if (p.itemOrder.length) {
       html += `<h3>Items (${p.itemCount})</h3><div class="inv-list">${p.itemOrder.map((id) => {
         const it = ITEMS[id];
         return `<div class="item-entry" style="--c:${RARITY[it.rarity].color}"><div class="ic">${it.icon}</div><div><div class="nm">${it.name} ×${p.items[id]}</div><div class="ds">${it.desc}</div></div></div>`;
       }).join('')}</div>`;
     } else html += `<p style="color:var(--muted)">No items yet — open chests with coins!</p>`;
-    return html;
+    out.items = html;
+    return out;
   },
 
   // ------------------------------------------------------------ chest roulette

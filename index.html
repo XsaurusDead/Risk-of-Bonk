@@ -228,11 +228,28 @@
         <h2>Paused</h2>
         <div class="menu-col">
           <button class="btn primary" id="btn-resume">Resume</button>
+          <button class="btn" data-go="items"><img class="pxi" src="assets/textures/raven-fantasy/fa158.png" alt=""> Items &amp; Effects <small class="key-hint">[I]</small></button>
           <button class="btn" data-go="settings"><img class="pxi" src="assets/textures/raven-fantasy/fa127.png" alt=""> Settings</button>
           <button class="btn" id="btn-savequit"><img class="pxi" src="assets/textures/raven-fantasy/fa10.png" alt=""> Save &amp; Quit</button>
           <button class="btn danger" id="btn-quit">Abandon Run</button>
         </div>
         <div id="pause-stats"></div>
+      </div>
+    </div>
+
+    <div id="screen-items" class="screen dim hidden">
+      <div class="panel wide items-panel">
+        <h2 class="glow"><img class="pxi" src="assets/textures/raven-fantasy/fa158.png" alt=""> Items &amp; Effects</h2>
+        <div class="tabs" id="items-tabs">
+          <button class="tab active" data-itab="items">Items</button>
+          <button class="tab" data-itab="build">Tomes &amp; Weapons</button>
+          <button class="tab" data-itab="stats">Stats</button>
+        </div>
+        <div id="items-body" class="scroll"></div>
+      </div>
+      <div class="screen-actions">
+        <button class="btn" data-back="pause">← Back</button>
+        <button class="btn primary" id="btn-items-resume">Resume</button>
       </div>
     </div>
 
