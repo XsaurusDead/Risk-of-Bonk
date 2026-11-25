@@ -437,8 +437,31 @@ export class World {
         dummy.scale.set(3.4 + this.rng(), 5 + this.rng() * 1.5, 3.4 + this.rng());
         dummy.updateMatrix();
         rocks.setMatrixAt(n++, dummy.matrix);
-        this.addCollider(x, z, 2.2, s.y - 2, s.y + 6.5);
+        // the wall rocks are solid from the side and you can stand on their tops
+        this.addCollider(x, z, 2.2, s.y - 2, s.y + 7, true);
       }
+    }
+    // smaller step rocks outside the walls: hop up step -> wall -> roof with a double jump
+    for (let t = -half + 1.3; t <= half; t += 5.2) {
+      for (const side of [-1, 1]) {
+        const off = s.w / 2 + 5.2 + this.rng() * 0.6;
+        const x = s.x + dx * t + px * side * off, z = s.z + dz * t + pz * side * off;
+        const base = Math.max(s.y, this.heightAt(x, z));
+        const k = 2.5 + this.rng() * 0.4;
+        dummy.position.set(x, base + 1.0, z);
+        dummy.rotation.set(this.rng() * 3, this.rng() * 3, 0);
+        dummy.scale.set(k, k * 1.1, k);
+        dummy.updateMatrix();
+        rocks.setMatrixAt(n++, dummy.matrix);
+        this.addCollider(x, z, 1.9, base - 1, base + 3.6, true);
+      }
+    }
+    // the roof is walkable too: its arch is approximated by a centre row and two side rows of
+    // colliders that start high above the tunnel floor, so walking through underneath stays free
+    for (let t = -half - 1; t <= half + 1; t += 2.4) {
+      const cx = s.x + dx * t, cz = s.z + dz * t;
+      this.addCollider(cx, cz, 2.6, s.y + 6.5, s.y + 9.4, true);
+      for (const side of [-1, 1]) this.addCollider(cx + px * side * 4.2, cz + pz * side * 4.2, 1.8, s.y + 6, s.y + 7.9, true);
     }
     rocks.count = n;
     rocks.castShadow = MAT.high;
@@ -833,7 +856,8 @@ export class World {
     // hide cave roofs while the player is inside
     const pl = G.player;
     for (const c of this.caves) {
-      const inside = pl && this.inCave(pl.pos.x, pl.pos.z) === c;
+      // only fade the roof when you're inside the tunnel, not when you're standing on top of it
+      const inside = pl && pl.pos.y < c.y + 5.5 && this.inCave(pl.pos.x, pl.pos.z) === c;
       const target = inside ? 0.12 : 1;
       c.roofMat.opacity += (target - c.roofMat.opacity) * Math.min(1, dt * 6);
       c.roofMat.depthWrite = c.roofMat.opacity > 0.9;
