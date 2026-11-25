@@ -311,7 +311,7 @@ export class World {
     return a + Math.floor(this.rng() * (b - a + 1));
   }
 
-  /** Decide where ruins / caves / islands go and flatten the ground for them (before the mesh is built). */
+  /** Decide where ruins and caves go and flatten the ground for them (before the mesh is built). */
   planStructures() {
     const st = this.stage.structures || {};
     const avoid = () => this.occupied();
@@ -331,12 +331,7 @@ export class World {
       for (let s = -16; s <= 16; s += 4) this.flatten(p.x + dx * s, p.z + dz * s, 5, y);
       this.structures.push({ type: 'cave', x: p.x, z: p.z, y, r: 22, rot, len: 34, w: 7 });
     }
-    for (let i = 0; i < this.rangeRoll(st.islands || [3, 5]); i++) {
-      const p = this.randomSpot(30, 40, 40, 0.5, avoid(), 25);
-      if (!p) continue;
-      const y = this.flatten(p.x, p.z, 4);
-      this.structures.push({ type: 'island', x: p.x, z: p.z, y, r: 10, top: y + 15 + this.rng() * 8, ir: 7 + this.rng() * 3 });
-    }
+    // (floating islands with jump pads were removed: they were hard to reach and blocked the view)
   }
 
   buildStructures() {

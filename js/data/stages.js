@@ -16,7 +16,7 @@ export const STAGES = [
     sun: 0xfff4d6, sunInt: 2.2, hemiSky: 0xbfe6ff, hemiGround: 0x4a6b2a, hemiInt: 1.1,
     ground: { low: 0x4f9a3a, mid: 0x6cbf45, high: 0x9ccf6a, slope: 0x7a6a4a, peak: 0xe8f0e0 },
     terrain: { amp: 8, freq: 0.012, octaves: 4, ridge: 0, edge: 26, terrace: { freq: 0.006, levels: 4, height: 7 } },
-    structures: { ruins: [6, 9], caves: [2, 3], islands: [3, 5] },
+    structures: { ruins: [6, 9], caves: [2, 3] },
     liquid: { level: -3.2, color: 0x3fa9ff, opacity: 0.75, emissive: 0x0a2a55, dps: 0, slow: 0.25 },
     decor: [
       { type: 'tree', models: TREES, count: 75, collide: 0.55, scale: [0.85, 1.35] },
@@ -38,7 +38,7 @@ export const STAGES = [
     sun: 0xffe0b0, sunInt: 2.6, hemiSky: 0xffe2b8, hemiGround: 0x9a6a3a, hemiInt: 1.1,
     ground: { low: 0xd9a86a, mid: 0xe8c08a, high: 0xf2d6a6, slope: 0xb07a48, peak: 0xc98e55 },
     terrain: { amp: 9, freq: 0.009, octaves: 3, ridge: 0.6, edge: 28 },
-    structures: { ruins: [8, 11], caves: [1, 2], islands: [2, 3] }, ruinTint: 0xd9b07a,
+    structures: { ruins: [8, 11], caves: [1, 2] }, ruinTint: 0xd9b07a,
     liquid: null,
     decor: [
       { type: 'cactus', count: 90, collide: 0.6, scale: [0.8, 1.6] },
@@ -58,7 +58,7 @@ export const STAGES = [
     sun: 0xeef6ff, sunInt: 2.0, hemiSky: 0xdfefff, hemiGround: 0x7d93a8, hemiInt: 1.2,
     ground: { low: 0xdde9f2, mid: 0xf4f9fc, high: 0xffffff, slope: 0x8a9cad, peak: 0xffffff },
     terrain: { amp: 12, freq: 0.011, octaves: 5, ridge: 0.8, edge: 30, terrace: { freq: 0.007, levels: 5, height: 9 } },
-    structures: { ruins: [4, 6], caves: [3, 4], islands: [2, 4] }, ruinTint: 0x9aa8b8,
+    structures: { ruins: [4, 6], caves: [3, 4] }, ruinTint: 0x9aa8b8,
     liquid: { level: -4, color: 0x9fdcff, opacity: 0.9, emissive: 0x1a3a55, dps: 0, slow: 0.4 },
     decor: [
       { type: 'pine', models: PINES, count: 120, collide: 0.55, scale: [0.9, 1.6] },
@@ -76,7 +76,7 @@ export const STAGES = [
     sun: 0xb9a0ff, sunInt: 1.1, hemiSky: 0x6a4aa8, hemiGround: 0x103a35, hemiInt: 1.3,
     ground: { low: 0x23413a, mid: 0x2f5a4a, high: 0x4a3a6a, slope: 0x2a2238, peak: 0x5a4a8a },
     terrain: { amp: 8, freq: 0.016, octaves: 4, ridge: 0.2, edge: 26, terrace: { freq: 0.008, levels: 4, height: 6 } },
-    structures: { ruins: [4, 6], caves: [4, 5], islands: [2, 3] }, ruinTint: 0x4a3a6a,
+    structures: { ruins: [4, 6], caves: [4, 5] }, ruinTint: 0x4a3a6a,
     liquid: { level: -2.5, color: 0x7aff3a, opacity: 0.85, emissive: 0x2a7a10, dps: 0.04, slow: 0.3, name: 'toxic sludge' },
     decor: [
       { type: 'giant_mushroom', count: 70, collide: 1.0, scale: [0.8, 2.0] },
@@ -96,7 +96,7 @@ export const STAGES = [
     sun: 0xffb080, sunInt: 1.8, hemiSky: 0xff7a4a, hemiGround: 0x2a0a05, hemiInt: 1.0,
     ground: { low: 0x2a2224, mid: 0x3a3034, high: 0x4a3c3c, slope: 0x1a1416, peak: 0x6a5050 },
     terrain: { amp: 10, freq: 0.013, octaves: 4, ridge: 0.5, edge: 30, terrace: { freq: 0.007, levels: 4, height: 8 } },
-    structures: { ruins: [5, 7], caves: [2, 3], islands: [3, 4] }, ruinTint: 0x3a3034,
+    structures: { ruins: [5, 7], caves: [2, 3] }, ruinTint: 0x3a3034,
     liquid: { level: -1.8, color: 0xff5a1f, opacity: 1, emissive: 0xff3a0a, dps: 0.12, slow: 0.2, name: 'lava' },
     decor: [
       { type: 'obsidian_spike', count: 70, collide: 0.9, scale: [0.8, 2.2] },
@@ -115,7 +115,7 @@ export const STAGES = [
     sun: 0xd9b0ff, sunInt: 1.5, hemiSky: 0x8a4aff, hemiGround: 0x0a0614, hemiInt: 1.2,
     ground: { low: 0x1a1030, mid: 0x2a1a4a, high: 0x3a2a5a, slope: 0x120a20, peak: 0x6a4a9a },
     terrain: { amp: 9, freq: 0.014, octaves: 4, ridge: 0.7, edge: 28, terrace: { freq: 0.006, levels: 5, height: 8 } },
-    structures: { ruins: [5, 7], caves: [2, 3], islands: [6, 8] }, ruinTint: 0x3a2a5a,
+    structures: { ruins: [5, 7], caves: [2, 3] }, ruinTint: 0x3a2a5a,
     liquid: { level: -2.6, color: 0x7a2aff, opacity: 0.9, emissive: 0x3a0a8a, dps: 0.08, slow: 0.3, name: 'void' },
     decor: [
       { type: 'void_crystal', count: 70, collide: 0.9, scale: [0.8, 2.2] },
@@ -134,7 +134,7 @@ export const STAGES = [
     sun: 0xfff0d0, sunInt: 1.9, hemiSky: 0xc8b8ff, hemiGround: 0x30285a, hemiInt: 1.25,
     ground: { low: 0xa8a0c8, mid: 0xdcd6ee, high: 0xfff4dc, slope: 0x7a70a0, peak: 0xffe08a },
     terrain: { amp: 5, freq: 0.01, octaves: 3, ridge: 0.2, edge: 30, terrace: { freq: 0.005, levels: 3, height: 6 } },
-    structures: { ruins: [8, 12], caves: [1, 2], islands: [4, 6] }, ruinTint: 0xf2e6c0,
+    structures: { ruins: [8, 12], caves: [1, 2] }, ruinTint: 0xf2e6c0,
     liquid: { level: -3.2, color: 0x6a5aff, opacity: 0.8, emissive: 0x2a1a8a, dps: 0.06, slow: 0.3, name: 'starlight' },
     decor: [
       { type: 'ruin_pillar', count: 45, collide: 1.0, scale: [1.1, 2.0], tint: 0xf2e6c0 },
