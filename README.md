@@ -67,6 +67,9 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
   higher you place. Ties are broken by a score (1000 per stage cleared + 5000 for beating the final boss + kills + 20 per
   level + 15 per minute). A kill counter sits under your coins during a run, and the game-over screen tells you when you made the board.
 - **Saving runs:** your run is checkpointed at every stage start, every 15 s and on *Save & Quit* (pause menu). *Continue Run* on the title screen picks it up again (the current stage gets a fresh map; character, level, items, tomes, weapon levels, coins and timer are kept). Dying, abandoning or ending the run clears the save.
+- **Enemy limit:** up to 400 living enemies (220 on Low quality, +150/+80 in overtime). Only enemies within 90 m count
+  towards the spawn targets, and enemies stuck more than 85 m away for 5 s are pulled back to a spawn point near you
+  (bosses and mini-bosses stay put), so enemies stuck somewhere on the map can never stop the spawns.
 - **Coins & chests:** enemies always drop XP, but **coins only about a quarter of the time** (elites, mini-bosses and bosses always drop them). A good stage 1 earns roughly enough for 12-15 chests, so you can't open everything without the Tome of Greed or gold items. Opening a chest freezes the game and spins a CS:GO-style item roulette that lands on your prize (skip with E / Space / A / tap).
   - Small chest: Common 70% · Rare 23% · Epic 6% · Legendary 1%
   - Large chest: Common 15% · Rare 55% · Epic 24% · Legendary 6%

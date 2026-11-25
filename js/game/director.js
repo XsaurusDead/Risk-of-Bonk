@@ -10,11 +10,22 @@
 import * as THREE from 'three';
 import { G } from '../core/state.js';
 import { ENEMIES, ELITES } from '../data/enemies.js';
-import { spawnEnemy, aliveCount } from './enemies.js';
+import { spawnEnemy, aliveCount, killEnemy } from './enemies.js';
 import { weightedPick, rand, pick } from '../core/util.js';
 import { sfx } from '../core/audio.js';
-import { shake } from './fx.js';
+import { shake, particles } from './fx.js';
 import { track } from '../core/save.js';
+
+/** Enemies farther than this from the player (for 5 s) are brought back near the player. */
+const LEASH_DIST = 85;
+/** Living enemies near the player: what the spawn targets compare against. */
+function activeCount() {
+  const p = G.player?.pos;
+  if (!p) return aliveCount();
+  let n = 0;
+  for (const e of G.enemies) if (!e.dead && Math.hypot(e.pos.x - p.x, e.pos.z - p.z) < 90) n++;
+  return n;
+}
 
 export const STAGE_TIME = 600;
 const _v = new THREE.Vector3();
@@ -32,9 +43,10 @@ export class Director {
     this.surgeMult = 1;
   }
 
+  /** Hard limit on living enemies (performance safety net; the spawn targets are far below it). */
   get cap() {
-    const base = G.quality === 'low' ? 75 : 140;
-    return this.t > STAGE_TIME ? base + (G.quality === 'low' ? 35 : 60) : base;
+    const base = G.quality === 'low' ? 220 : 400;
+    return this.t > STAGE_TIME ? base + (G.quality === 'low' ? 80 : 150) : base;
   }
 
   /** Seconds spent in overtime (past 10:00). */
@@ -103,9 +115,14 @@ export class Director {
     this.trickleT -= dt;
     if (this.trickleT <= 0) {
       this.trickleT = rand(0.6, 1.05) / (1 + run.stagesCleared * 0.08);
-      const alive = aliveCount();
+      // only enemies that are actually near you count, so a few stuck somewhere far away
+      // can never stop the spawns
+      const alive = activeCount();
       if (alive < target) this.spawnGroup(Math.min(target - alive, 2 + Math.floor(min / 2.5) + Math.floor(run.stagesCleared * 0.7) + Math.floor(Math.random() * 3)));
     }
+
+    // --- leash: enemies left far behind (stuck on terrain, lost in a cave...) come back to you
+    this.leash(dt);
 
     // --- huge wave: one minute of big groups arriving fast from all sides
     if (this.t < this.surgeUntil) {
@@ -164,6 +181,42 @@ export class Director {
     }
     return null;
   }
+  /**
+   * Enemies more than LEASH_DIST from the player for a few seconds are moved to a fresh
+   * spawn point near the player (bosses and champions stay put); broken ones are removed.
+   */
+  leash(dt) {
+    this.leashT = (this.leashT || 0) - dt;
+    if (this.leashT > 0) return;
+    this.leashT = 0.5;
+    const p = G.player.pos;
+    for (const e of G.enemies) {
+      if (e.dead) continue;
+      if (!Number.isFinite(e.pos.x) || !Number.isFinite(e.pos.y) || !Number.isFinite(e.pos.z)) {
+        killEnemy(e, { noReward: true });
+        continue;
+      }
+      if (e.isBoss || e.champion) continue;
+      const far = Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > LEASH_DIST;
+      e.farT = far ? (e.farT || 0) + 0.5 : 0;
+      if (e.farT < 5) continue;
+      const flyer = e.flying || e.ai === 'flyer' || e.ai === 'swooper';
+      const c = this.spawnCenter(22, 38, flyer);
+      if (!c) continue;
+      e.farT = 0;
+      e.pos.x = c.x;
+      e.pos.z = c.z;
+      e.pos.y = G.world.heightAt(c.x, c.z) + (e.flying ? e.hover || 0 : 0);
+      e.vy = 0;
+      e.knock?.set(0, 0, 0);
+      e.mv?.set(0, 0, 0);
+      e.state = 'chase';
+      e.lastX = e.pos.x;
+      e.lastZ = e.pos.z;
+      particles(e.pos, 0x9a5aff, 8, 4, 0.5, 0.35);
+    }
+  }
+
   jitter(c, r) {
     return c.clone().add(new THREE.Vector3(rand(-r, r), 0, rand(-r, r)));
   }
