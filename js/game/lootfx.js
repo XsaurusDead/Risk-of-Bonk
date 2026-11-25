@@ -182,7 +182,7 @@ function geo() {
  * Build the ground glow for an item of `rarity`. The group stands on the ground;
  * call `fx.userData.tick(dt)` every frame for the stars.
  */
-export function createLootFx(rarity = 'common', scale = 1.6) {
+export function createLootFx(rarity = 'common', scale = 1.6, { lite = false } = {}) {
   const [pri, sec] = LOOT_COLORS[rarity] || LOOT_COLORS.common;
   const tier = TIER[rarity] ?? 0;
   const g = geo();
@@ -196,11 +196,14 @@ export function createLootFx(rarity = 'common', scale = 1.6) {
   const fl1 = add(new THREE.Mesh(g.flare, flare(pri, sec)));
   fl1.rotation.x = -Math.PI / 2;
   fl1.position.y = 0.05;
-  add(new THREE.Mesh(g.core, glowCore(pri, sec)));
-  const p1 = add(new THREE.Mesh(g.pillar1, glowTube(pri, sec, { align: true, dir: [0, 1], scroll: 0 })));
-  p1.position.y = 1.0;
+  // `lite` (chests): just the ring and ground flare, plus the pillar and sparkles from epic up
+  if (!lite) add(new THREE.Mesh(g.core, glowCore(pri, sec)));
+  if (!lite || tier >= 2) {
+    const p1 = add(new THREE.Mesh(g.pillar1, glowTube(pri, sec, { align: true, dir: [0, 1], scroll: 0 })));
+    p1.position.y = 1.0;
+  }
   let ring2 = null;
-  if (tier >= 1) {
+  if (tier >= 1 && !lite) {
     ring2 = add(new THREE.Mesh(g.ring, glowTube(pri, sec, { scroll: 1 })));
     ring2.scale.setScalar(0.9);
     ring2.position.y = 0.3;
@@ -214,8 +217,8 @@ export function createLootFx(rarity = 'common', scale = 1.6) {
   }
 
   // rising stars (+ bigger floating sparkles from epic up)
-  const nStars = tier >= 3 ? 16 : 8;
-  const nShapes = tier >= 2 ? (tier >= 3 ? 16 : 8) : 0;
+  const nStars = lite ? (tier >= 2 ? 6 : 0) : tier >= 3 ? 16 : 8;
+  const nShapes = lite ? 0 : tier >= 2 ? (tier >= 3 ? 16 : 8) : 0;
   const parts = [];
   const mk = (size, color) => {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: star(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -250,6 +253,8 @@ export function createLootFx(rarity = 'common', scale = 1.6) {
       p.s.scale.setScalar(p.s.userData.size * Math.max(0.001, sc));
     }
   };
+  // chests are solid: their glow must not shine through the wood
+  if (lite) root.traverse((o) => { if (o.material) o.material.depthTest = true; });
   root.userData.dispose = () => root.traverse((o) => { if (o.material) o.material.dispose(); });
   return root;
 }

@@ -428,7 +428,7 @@ export const Game = {
       run.hpScaleHard = Math.pow(Math.max(1, dps / 50), 0.75);
       run.dmgScaleHard = Math.pow(Math.max(1, ehp / 110), 0.7);
     }
-    run.coinScale = Math.pow(run.diff, 0.6);
+    run.coinScale = Math.pow(run.diff, 0.5);
     run.xpScale = Math.pow(run.diff, 0.65);
   },
 

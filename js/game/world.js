@@ -11,6 +11,7 @@ import {
 import { terrainDetailTexture } from './textures.js';
 import { assetsReady, getModel, desertRockTexture } from './assets.js';
 import { attachGlyph, recolorGlyph } from './glyphs.js';
+import { createLootFx, updateLootFx } from './lootfx.js';
 
 // animated rune pillars (spell pack) floating above shrines: colour + design per kind
 const SHRINE_GLYPH = { heal: ['D', 17], combat: ['H', 24], boss: ['K', 29], xp: ['C', 20], moai: ['E', 10], magnet: ['H', 20] };
@@ -45,6 +46,18 @@ const SWAY = { grass: 0.32, dry_grass: 0.32, flower: 0.25, tree: 0.0035, pine: 0
 const COUNTS = { chest: [15, 20], heal: [1, 2], combat: [1, 3], boss: [1, 3], xp: [2, 5], moai: [3, 7], magnet: [0, 3] };
 // chest tier odds
 const CHEST_TIERS = { normal: 82, large: 13, epic: 4, legendary: 1 };
+
+/** Add the GodotLootVFX ground glow (light version) and find the floating gem of a chest. */
+function withChestGlow(built) {
+  // the ring (radius 0.45) should circle the chest, a little wider than its body
+  const fx = createLootFx(built.rarity || 'common', ((built.width || 1.5) * 0.8) / 0.45, { lite: true });
+  fx.position.y = 0.03;
+  built.group.add(fx);
+  built.fx = fx;
+  built.fxScale = fx.scale.x;
+  built.group.traverse((o) => { if (o.userData.spin) { built.gem = o; built.gemY = o.position.y; } });
+  return built;
+}
 
 export class World {
   constructor(stage, seed, loop = 0) {
@@ -472,7 +485,7 @@ export class World {
   placeInteractables() {
     const add = (kind, pos, extra = {}) => {
       let built;
-      if (kind === 'chest') built = buildChest(extra.tier);
+      if (kind === 'chest') built = withChestGlow(buildChest(extra.tier));
       else if (kind === 'moai') built = buildMoai();
       else if (kind === 'magnet') built = buildMagnetStatue();
       else built = buildShrine(kind);
@@ -487,7 +500,8 @@ export class World {
       }
       this.interactables.push(it);
       built.group.updateMatrixWorld(true);
-      const topY = new THREE.Box3().setFromObject(built.group).max.y;
+      // chests: just the box (not the floating gem, glow pillar or beam) is solid
+      const topY = built.height ? pos.y + built.height : new THREE.Box3().setFromObject(built.group).max.y;
       this.addCollider(pos.x, pos.z, kind === 'chest' ? 1 : kind === 'moai' ? 1.2 : 1.5, pos.y - 1, Math.min(topY, pos.y + 6), kind === 'chest');
       return it;
     };
@@ -522,13 +536,13 @@ export class World {
   spawnChest(pos, tier = 'normal', free = false) {
     const p = pos.clone();
     p.y = this.groundAt(p.x, p.z, p.y + 2);
-    const built = buildChest(tier);
+    const built = withChestGlow(buildChest(tier));
     built.group.position.copy(p);
     built.group.rotation.y = Math.random() * Math.PI * 2;
     this.group.add(built.group);
     const it = { kind: 'chest', pos: p, used: false, ...built, tier, free };
     this.interactables.push(it);
-    this.addCollider(p.x, p.z, 1, p.y - 1, p.y + 1.3, true);
+    this.addCollider(p.x, p.z, 1, p.y - 1, p.y + (built.height || 1.3), true);
     return it;
   }
 
@@ -760,6 +774,7 @@ export class World {
   }
 
   update(dt) {
+    updateLootFx(dt); // shared clock of every loot glow (chests and dropped items)
     this.t += dt;
     const PG = this.portal;
     if (PG?.glyphs) {
@@ -778,7 +793,33 @@ export class World {
           c.lidA = (c.lidA || 0) + c.lidV * dt;
           c.lid.rotation.x = c.lidA;
           c.glow.visible = false;
-        } else if (!c.used) c.glow.scale.y = 1 + Math.sin(this.t * 3 + c.pos.x) * 0.5;
+        } else if (!c.used) {
+          // the seam light pulses (relative to its built size: the mesh's scale *is* its size)
+          c.glowSY ??= c.glow.scale.y;
+          c.glow.scale.y = c.glowSY * (1 + Math.sin(this.t * 3 + c.pos.x) * 0.5);
+        }
+        // the item-style ground glow: on while closed and near enough to see, fades out when opened
+        if (c.fx) {
+          const near = !G.player || Math.hypot(G.player.pos.x - c.pos.x, G.player.pos.z - c.pos.z) < 90;
+          if (c.used) {
+            c.fxFade = Math.max(0, (c.fxFade ?? 1) - dt * 1.5);
+            c.fx.scale.setScalar(c.fxScale * (0.4 + 0.6 * c.fxFade));
+            if (c.fxFade <= 0) {
+              c.group.remove(c.fx);
+              c.fx.userData.dispose();
+              c.fx = null;
+            }
+          }
+          if (c.fx) {
+            c.fx.visible = near;
+            if (near) c.fx.userData.tick(dt);
+          }
+        }
+        if (c.gem) {
+          c.gem.visible = !c.used;
+          c.gem.rotation.y += dt * 1.5;
+          c.gem.position.y = c.gemY + Math.sin(this.t * 2 + c.pos.x) * 0.15;
+        }
       } else if (c.emblem) {
         c.emblem.rotation.y += dt * (c.used ? 0.2 : 1.2);
         if (c.glyph) c.glyph.visible = !c.used;

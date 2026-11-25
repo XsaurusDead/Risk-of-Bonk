@@ -559,30 +559,181 @@ const CHEST_LOOK = {
   epic: { s: 1.3, base: 0x3a1a5a, trim: 0xc461ff, glow: 0xd890ff },
   legendary: { s: 1.55, base: 0x5a3a08, trim: 0xffb22e, glow: 0xffd27a },
 };
+// ------------------------------------------------------------------ chests
+// Pixel-art textures (drawn once per tier, nearest-filtered like the sprite enemies):
+// wooden planks with grain and knots, riveted metal bands and a lock plate.
+const CHEST_STYLE = {
+  normal: { wood: ['#8a5a32', '#6e4424', '#a26c3c', '#4a2c16'], metal: ['#8d939c', '#5c616a', '#c4cad2'], gem: null, rarity: 'common', size: 1 },
+  large: { wood: ['#6a3e22', '#52301a', '#86512c', '#341c0e'], metal: ['#d8a838', '#9a7020', '#ffe28a'], gem: null, rarity: 'rare', size: 1.25 },
+  epic: { wood: ['#4a2e6a', '#382254', '#603c86', '#22133a'], metal: ['#c8d2e2', '#7c8aa4', '#ffffff'], gem: '#c070ff', rarity: 'epic', size: 1.4 },
+  legendary: { wood: ['#7a1e22', '#5e1418', '#9a2a2c', '#3a0a0c'], metal: ['#ffcc3a', '#c08a10', '#fff2a0'], gem: '#ffe066', rarity: 'legendary', size: 1.6 },
+};
+const chestTex = {};
+function pixelTexture(draw, w = 32, h = 32) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  return t;
+}
+function chestTextures(tier) {
+  if (chestTex[tier]) return chestTex[tier];
+  const L = CHEST_STYLE[tier];
+  let seed = tier.length * 97 + 13;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const [wBase, wDark, wLight, wGap] = L.wood;
+  // planks: 4 boards with grain streaks, knots and dark gaps
+  const wood = pixelTexture((g, w, h) => {
+    for (let y = 0; y < h; y++) {
+      const board = Math.floor(y / 8), row = y % 8;
+      for (let x = 0; x < w; x++) {
+        let col = row === 0 ? wGap : row === 1 ? wLight : row === 7 ? wDark : wBase;
+        if (row > 1 && row < 7 && rnd() < 0.18) col = rnd() < 0.5 ? wDark : wLight; // grain
+        if ((x + board * 11) % 19 === 0 && row > 1 && row < 7) col = wGap; // board joints
+        g.fillStyle = col;
+        g.fillRect(x, y, 1, 1);
+      }
+      if (row === 4 && rnd() < 0.7) { // a knot
+        const kx = Math.floor(rnd() * (w - 3));
+        g.fillStyle = wGap;
+        g.fillRect(kx, y - 1, 2, 2);
+      }
+    }
+  });
+  wood.wrapS = wood.wrapT = THREE.RepeatWrapping;
+  const [mBase, mDark, mLight] = L.metal;
+  // metal band: highlight on top, shadow below, rivets
+  const metal = pixelTexture((g, w, h) => {
+    g.fillStyle = mBase;
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = mLight;
+    g.fillRect(0, 0, w, 2);
+    g.fillStyle = mDark;
+    g.fillRect(0, h - 2, w, 2);
+    for (let x = 3; x < w; x += 8) {
+      g.fillStyle = mDark;
+      g.fillRect(x, 5, 3, 3);
+      g.fillStyle = mLight;
+      g.fillRect(x, 5, 1, 1);
+    }
+  }, 32, 12);
+  metal.wrapS = THREE.RepeatWrapping;
+  // lock plate with a keyhole (and a gem on epic / legendary chests)
+  const lock = pixelTexture((g, w, h) => {
+    g.fillStyle = mDark;
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = mBase;
+    g.fillRect(1, 1, w - 2, h - 2);
+    g.fillStyle = mLight;
+    g.fillRect(1, 1, w - 2, 1);
+    g.fillRect(1, 1, 1, h - 2);
+    if (L.gem) {
+      g.fillStyle = L.gem;
+      g.fillRect(5, 2, 6, 5);
+      g.fillStyle = '#ffffff';
+      g.fillRect(6, 3, 2, 1);
+    }
+    g.fillStyle = '#1a1008';
+    g.fillRect(7, 8, 2, 2);
+    g.fillRect(7.5, 10, 1, 4);
+  }, 16, 16);
+  return (chestTex[tier] = { wood, metal, lock });
+}
+const chestMats = {};
+function chestMat(tier, part) {
+  const key = tier + part;
+  if (!chestMats[key]) {
+    const t = chestTextures(tier);
+    chestMats[key] = new THREE.MeshStandardMaterial({ map: t[part], roughness: part === 'wood' ? 0.85 : 0.45, metalness: part === 'wood' ? 0 : 0.55 });
+  }
+  return chestMats[key];
+}
+function texBox(w, h, d, mat, x, y, z, repX = 1, repY = 1) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  if (repX !== 1 || repY !== 1) {
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * repX, uv.getY(i) * repY);
+  }
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+/** Half-cylinder along X (a classic rounded chest lid), centred on its axis. */
+function halfTube(r, len, mat, repX = 1, repY = 1, open = false) {
+  // theta 0..PI is the +X half; rotating about Z by 90 deg turns it into the upper half
+  const geo = new THREE.CylinderGeometry(r, r, len, 16, 1, open, 0, Math.PI);
+  if (repX !== 1 || repY !== 1) {
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * repX, uv.getY(i) * repY);
+  }
+  const m = new THREE.Mesh(geo, mat);
+  m.rotation.z = Math.PI / 2; // axis along X, the round side up
+  m.castShadow = true;
+  return m;
+}
+
+/**
+ * Wooden treasure chest with a rounded lid. Returns { group, lid, glow, rarity }:
+ * `lid` hinges at the back (rotate .x to open), `glow` is the light leaking from the seam.
+ */
 export function buildChest(tier = 'normal') {
   if (tier === true) tier = 'large';
   if (tier === false) tier = 'normal';
-  const L = CHEST_LOOK[tier] || CHEST_LOOK.normal;
-  const s = L.s;
+  if (!CHEST_STYLE[tier]) tier = 'normal';
+  const L = CHEST_STYLE[tier], CL = CHEST_LOOK[tier] || CHEST_LOOK.normal;
+  const s = L.size;
+  const W = 1.5 * s, H = 0.8 * s, D = 0.95 * s, R = D / 2;
+  const wood = chestMat(tier, 'wood'), metal = chestMat(tier, 'metal'), lockM = chestMat(tier, 'lock');
   const g = new THREE.Group();
-  g.add(mesh('box', L.base, [0, 0.4 * s, 0], [1.4 * s, 0.8 * s, 0.9 * s]));
-  g.add(mesh('box', L.trim, [0, 0.4 * s, 0], [1.45 * s, 0.12 * s, 0.95 * s]));
-  g.add(mesh('box', L.trim, [-0.62 * s, 0.4 * s, 0], [0.1 * s, 0.82 * s, 0.94 * s]), mesh('box', L.trim, [0.62 * s, 0.4 * s, 0], [0.1 * s, 0.82 * s, 0.94 * s]));
+  // body + metal bands (two vertical straps, a rim and corner posts)
+  g.add(texBox(W, H, D, wood, 0, H / 2, 0, 1.5 * s, 0.9));
+  const band = 0.1 * s;
+  for (const x of [-W * 0.3, W * 0.3]) g.add(texBox(band, H + 0.02, D + 0.04, metal, x, H / 2, 0, 0.3, 1));
+  g.add(texBox(W + 0.04, band * 0.8, D + 0.04, metal, 0, H - band * 0.4, 0, 1.6 * s, 1));
+  g.add(texBox(W + 0.04, band * 0.8, D + 0.04, metal, 0, band * 0.4, 0, 1.6 * s, 1));
+  for (const x of [-W / 2, W / 2]) for (const z of [-D / 2, D / 2]) g.add(texBox(band * 0.9, H + 0.03, band * 0.9, metal, x, H / 2, z, 0.25, 1));
+  // lid: hinge at the back edge; the half-tube sits on top of the body
   const lid = new THREE.Group();
-  lid.position.set(0, 0.8 * s, -0.45 * s);
-  lid.add(mesh('box', L.base, [0, 0.18 * s, 0.45 * s], [1.4 * s, 0.36 * s, 0.9 * s]));
-  lid.add(mesh('box', L.trim, [0, 0.18 * s, 0.9 * s], [0.25 * s, 0.3 * s, 0.06 * s]));
+  lid.position.set(0, H, -D / 2);
+  const tube = halfTube(R, W, wood, 1.5 * s, 1.2);
+  tube.position.set(0, 0, R);
+  lid.add(tube);
+  for (const x of [-W * 0.3, W * 0.3]) {
+    const strap = halfTube(R * 1.04, band, metal, 0.3, 1);
+    strap.position.set(x, 0, R);
+    lid.add(strap);
+  }
+  for (const x of [-W / 2, W / 2]) {
+    const cap = halfTube(R * 1.02, band * 0.6, metal, 0.2, 1);
+    cap.position.set(x, 0, R);
+    lid.add(cap);
+  }
+  // lock plate on the front, half on the lid, half on the body
+  const lock = texBox(0.32 * s, 0.36 * s, 0.06 * s, lockM, 0, 0.02 * s, D + 0.02, 1, 1);
+  lid.add(lock);
   g.add(lid);
-  const glow = mesh('box', L.glow, [0, 0.82 * s, 0], [1.2 * s, 0.05 * s, 0.75 * s], null, true);
+  // light leaking out of the seam: a thin glowing line along the front edge under the lid
+  const glow = mesh('box', CL.glow, [0, H, D / 2 + 0.015], [W * 0.82, 0.035 * s, 0.02], null, true);
   g.add(glow);
+  if (L.gem) {
+    // a floating gem marks the rare chests from afar
+    const gem = mesh('oct', CL.glow, [0, H + R + 0.9 * s, 0], [0.3 * s, 0.5 * s, 0.3 * s], null, true);
+    gem.userData.spin = true;
+    g.add(gem);
+  }
   if (tier === 'epic' || tier === 'legendary') {
-    // rarity beacon so special chests can be spotted from afar
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 30, 8, 1, true), new THREE.MeshBasicMaterial({ color: L.glow, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 30, 8, 1, true), new THREE.MeshBasicMaterial({ color: CL.glow, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }));
     beam.position.y = 15;
     g.add(beam);
-    g.add(mesh('oct', L.glow, [0, 2.2 * s, 0], [0.35, 0.55, 0.35], null, true));
   }
-  return { group: g, lid, glow };
+  return { group: g, lid, glow, rarity: L.rarity, height: H + R, width: W };
 }
 
 const SHRINE_LOOK = {

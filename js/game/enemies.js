@@ -15,6 +15,7 @@ import { dropCoins, dropXp, dropHeal, dropItem, rollItem, rollRarity, dropPoweru
 
 // power-up drop chances per kill (elites x8, champions/bosses always drop one)
 const POWERUP_DROP = { magnet: 0.006, slowmo: 0.004 };
+export const COIN_DROP_CHANCE = 0.25;
 import { attachGlyph } from './glyphs.js';
 
 export const ELITE_ITEM_CHANCE = 0.05; // random item, rarity rolled like a small chest (legendary rarest, luck helps)
@@ -220,7 +221,10 @@ export function killEnemy(e, o = {}) {
   const mult = e.elite ? 4 : 1;
   particles(_v.copy(e.pos).setY(e.pos.y + e.height * 0.4), e.elite ? e.elite.color : 0xffffff, e.isBoss ? 60 : 10, e.isBoss ? 14 : 6, 0.7, e.isBoss ? 0.8 : 0.4);
   if (!o.noReward) {
-    dropCoins(e.pos, e.def.coins * 0.6 * run.coinScale * mult * (e.champion ? 6 : 1) * (1 + Math.random() * 0.3));
+    // gold is scarcer than XP: normal enemies drop coins a quarter of the time
+    // (elites, champions and bosses always do), so chests stay a real choice
+    const special = e.elite || e.champion || e.isBoss;
+    if (special || Math.random() < COIN_DROP_CHANCE) dropCoins(e.pos, e.def.coins * 0.4 * run.coinScale * (e.elite ? 2.5 : 1) * (e.champion ? 6 : 1) * (1 + Math.random() * 0.3));
     dropXp(e.pos, e.def.xp * run.xpScale * mult);
     if (Math.random() < (e.elite ? 0.25 : 0.03)) dropHeal(e.pos);
     track('kills');

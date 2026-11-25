@@ -7,7 +7,7 @@ import { buildPickupGeo, litMaterial, glowMaterial } from './models.js';
 import { particles, floatText } from './fx.js';
 import { sfx } from '../core/audio.js';
 import { weightedPick, RARITY, RARITY_ORDER } from '../core/util.js';
-import { createLootFx, updateLootFx } from './lootfx.js';
+import { createLootFx } from './lootfx.js';
 import { ITEM_ICONS, iconSrc } from '../data/icons.js';
 
 // the item's pixel-art icon floats inside its loot glow
@@ -331,7 +331,6 @@ export function updatePickups(dt) {
   if (coinSfx) sfx('coin', 0.06);
   if (xpSfx) sfx('xp', 0.05);
 
-  if (items.length) updateLootFx(dt);
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
     it.age += dt;
