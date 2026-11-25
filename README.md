@@ -75,10 +75,15 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 - **Level-ups:** Megabonk-style. Pick 1 of 3 cards. Each level-up randomly offers **only tomes**, **only weapons**, or **a mix of both**.
   Every card is rolled at a rarity (Common ×1, Rare ×1.6, Epic ×2.4, Legendary ×4) that scales how much it gives; luck improves the odds.
   - **Tomes** — pick up to **4 different tomes** per run; each levels up to **Lv 99** (every pick is +1 level). The 16 tomes:
-    Power (damage), Precision (crit chance; above 100% turns into crit damage), Evasion (dodge, diminishing, max 80%), Defense (armor),
-    Greed (gold), Multishot (extra primary projectiles; fractions are a chance for one more), Fury (attack speed), the Skies (jumps, max +10),
-    Fortune (luck: chests, Moai, items and tome/weapon roll rarity), Wisdom (XP), Blood (life steal, max 30%), the Aegis (shield),
-    the Giant (size), Attraction (pickup range), Vitality (max HP) and Agility (move speed).
+    Power (damage), Precision (crit chance; above 100% turns into crit damage), Evasion (dodge, diminishing returns — approaches but never reaches 100%), Defense (armor),
+    Greed (gold), Multishot (extra primary projectiles; fractions are a chance for one more), Fury (attack speed), the Skies (jumps),
+    Fortune (luck: chests, Moai, items and tome/weapon roll rarity), Wisdom (XP), Blood (life steal), the Aegis (shield),
+    the Giant (size), Attraction (pickup range), Vitality (max HP) and Agility (move speed; counts half past +100%).
+    **No stat has a hard cap:** crit above 100% becomes crit damage (also per weapon), multishot past 16 shots and
+    Orbiting Blades / Frost Shards past their visual limit turn the extra count into damage, and life steal, jumps,
+    size, luck and projectiles grow without limit. Common roll per pick: +8% damage, +3.5% crit, +5% evasion, +5 armor,
+    +10% gold, +0.15 projectiles, +6.5% attack speed, +0.2 jumps, +0.07 luck, +8% XP, +0.6% life steal, +4% shield,
+    +5% size, +0.6 m pickup range, +8% max HP, +4% move speed (rare ×1.6, epic ×2.4, legendary ×4).
   - **Weapons** — you carry up to **4 weapons**. Slot 1 is always your survivor's **main weapon** (their primary attack,
     e.g. Kestrel's bow); the other **3 slots** are filled by picking new weapons from level-ups. Every weapon fires on its own
     and levels up to **Lv 50** (a pick improves one stat: damage, fire rate, size, crit chance or projectiles; every 10th
@@ -88,7 +93,7 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
   - The weapon bar (gold) and tome bar (blue) sit above the ability buttons; *Tab* (or the bag button) lists everything.
   - Tome data and weapon level stats live in `js/data/tomes.js`, the weapons themselves in `js/data/weapons.js`.
 - **Portal & boss:** find the portal (marker on screen), interact to summon the stage boss. Stand in the ring to charge the portal, kill the boss, then enter the portal.
-- **Scaling:** difficulty = `1.035^minutes × 1.2^stagesCleared`. Enemy HP, damage, spawn credits, coin/XP drops and chest prices all scale off it, so everything grows exponentially. Elites (Blazing, Glacial, Overloading, Vampiric) show up as it rises.
+- **Scaling (Megabonk-style):** difficulty = `1.045^minutes × 1.25^stagesCleared`. Enemy HP, damage, spawn rate, coin/XP drops and chest prices all scale off it. Your build only nudges enemies a little (HP × `(DPS/150)^0.35`, damage × `(effective HP/250)^0.35`), so a good build really feels strong: a decent stage-1 build kills the portal boss in ~25 s and a mini-boss in ~15 s. The first 5 minutes of a run hit softer (45% → 100% enemy damage) and start with fewer enemies. **Overtime keeps the old brutal curve** (`1.055^min × 1.3^stages`, HP following your DPS^0.75, damage your HP^0.7) on top of its exponential phases. Elites (Blazing, Glacial, Overloading, Vampiric) show up as it rises.
 
 ## Online leaderboard
 

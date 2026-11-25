@@ -166,8 +166,10 @@ export class Player {
     s.armor = b.armor + m.armor;
     s.regen = (b.regen + m.regen) * (1 + 0.1 * lvl);
     const rawCrit = 0.05 + m.crit;
+    s.critRaw = rawCrit;
+    s.critMultBase = 2 + m.critMult;
     s.crit = Math.min(1, rawCrit);
-    s.critMult = 2 + m.critMult + Math.max(0, rawCrit - 1); // overflow crit chance becomes crit damage
+    s.critMult = s.critMultBase + Math.max(0, rawCrit - 1); // overflow crit chance becomes crit damage
     s.cdMult = m.cdr;
     s.ultCdMult = m.cdr * m.ultCdr;
     s.jumps = b.jumps + m.jumps;
@@ -178,10 +180,11 @@ export class Player {
     s.coinMult = 1 + m.coins;
     s.area = 1 + m.area;
     s.lifeOnHit = m.lifeOnHit;
-    // item dodge and tome evasion stack with diminishing returns
-    s.dodge = Math.min(0.8, 1 - (1 - Math.min(0.9, m.dodge)) / (1 + m.tomeDodge));
+    // item dodge and tome evasion stack with diminishing returns: no cap, but never 100%
+    const itemDodge = m.dodge <= 0.6 ? m.dodge : 1 - 0.4 / (1 + (m.dodge - 0.6) / 0.4);
+    s.dodge = 1 - (1 - Math.max(0, itemDodge)) / (1 + m.tomeDodge);
     s.projectiles = m.projectiles;
-    s.lifesteal = Math.min(0.3, m.lifesteal);
+    s.lifesteal = m.lifesteal;
     s.maxShield = s.maxHp * m.shield;
     s.chestDiscount = m.chestDiscount;
     s.execute = m.execute;
@@ -282,10 +285,12 @@ export class Player {
   withWeapon(slot, fn) {
     if (G.weaponSlot) return fn();
     const s = this.stats, w = this.weaponMods(slot);
-    const d = s.damage, a = s.area, c = s.crit;
+    const d = s.damage, a = s.area, c = s.crit, cm = s.critMult;
     s.damage = d * w.dmg;
     s.area = a * w.area;
-    s.crit = Math.min(1, c + w.crit);
+    const raw = (s.critRaw ?? c) + w.crit;
+    s.crit = Math.min(1, raw);
+    s.critMult = (s.critMultBase ?? cm) + Math.max(0, raw - 1); // weapon crit overflow counts too
     G.weaponSlot = slot;
     try {
       return fn();
@@ -294,6 +299,7 @@ export class Player {
       s.damage = d;
       s.area = a;
       s.crit = c;
+      s.critMult = cm;
     }
   }
 
@@ -984,8 +990,10 @@ export class Player {
   fireExtraProjectiles(prim, auto, count) {
     if (!(count > 0)) return;
     let n = Math.floor(count) + (Math.random() < count % 1 ? 1 : 0);
-    n = Math.min(n, 12);
     if (!n) return;
+    const SHOTS = 16; // more than this would just be lag: the rest becomes extra damage
+    const over = n > SHOTS ? n / SHOTS : 1;
+    n = Math.min(n, SHOTS);
     const range = (prim.range || this.char.primary.range || 45) + 4;
     const targets = G.enemies
       .filter((e) => !e.dead && e.spawnT <= 0 && e !== auto && e.pos.distanceTo(this.pos) < range)
@@ -1008,7 +1016,10 @@ export class Player {
           aim = { point: pt, groundPoint: pt.clone(), target: null, dirFrom: (from) => pt.clone().sub(from).normalize() };
           this.aimYaw = yaw + off;
         }
-        this.withWeapon('primary', () => prim.fire(this, aim));
+        this.withWeapon('primary', () => {
+          this.stats.damage *= over;
+          try { prim.fire(this, aim); } finally { this.stats.damage /= over; }
+        });
         this.aimYaw = yaw;
       });
     }

@@ -23,22 +23,22 @@ const pct = (v) => `${Math.round(v * 1000) / 10}%`;
 
 // base = value of a common roll. `total` formats the summed value for the HUD/inventory.
 export const TOMES = [
-  { id: 'power', name: 'Tome of Power', icon: 1098, base: 0.05, stat: 'damage', fmt: (v) => `+${pct(v)} damage` },
-  { id: 'precision', name: 'Tome of Precision', icon: 1173, base: 0.02, stat: 'crit', fmt: (v) => `+${pct(v)} crit chance`, note: 'Crit chance above 100% turns into crit damage.' },
-  { id: 'evasion', name: 'Tome of Evasion', icon: 1078, base: 0.03, stat: 'dodge', fmt: (v) => `+${pct(v)} evasion`, note: 'Evasion has diminishing returns (max 80% dodge).' },
-  { id: 'bulwark', name: 'Tome of Defense', icon: 1099, base: 3, stat: 'armor', fmt: (v) => `+${Math.round(v * 10) / 10} armor` },
-  { id: 'greed', name: 'Tome of Greed', icon: 160, base: 0.06, stat: 'gold', fmt: (v) => `+${pct(v)} gold` },
-  { id: 'multishot', name: 'Tome of Multishot', icon: 1134, base: 0.1, stat: 'projectiles', fmt: (v) => `+${Math.round(v * 100) / 100} projectiles`, note: 'Fractions give a chance to fire one more.' },
-  { id: 'fury', name: 'Tome of Fury', icon: 1100, base: 0.04, stat: 'attackSpeed', fmt: (v) => `+${pct(v)} attack speed` },
-  { id: 'skies', name: 'Tome of the Skies', icon: 1144, base: 0.1, stat: 'jumps', fmt: (v) => `+${Math.round(v * 100) / 100} jumps`, note: 'Every full 1.0 is one more jump (max +10).' },
-  { id: 'fortune', name: 'Tome of Fortune', icon: 114, base: 0.04, stat: 'luck', fmt: (v) => `+${Math.round(v * 100) / 100} luck`, note: 'Better chest, Moai, item and tome/weapon roll odds.' },
-  { id: 'wisdom', name: 'Tome of Wisdom', icon: 101, base: 0.05, stat: 'xp', fmt: (v) => `+${pct(v)} experience` },
-  { id: 'vampire', name: 'Tome of Blood', icon: 1064, base: 0.003, stat: 'lifesteal', fmt: (v) => `+${pct(v)} life steal`, note: 'Heals a share of the damage you deal (max 30%).' },
-  { id: 'aegis', name: 'Tome of the Aegis', icon: 1043, base: 0.025, stat: 'shield', fmt: (v) => `+${pct(v)} max HP as shield` },
-  { id: 'giant', name: 'Tome of the Giant', icon: 1047, base: 0.03, stat: 'area', fmt: (v) => `+${pct(v)} size` },
-  { id: 'magnet', name: 'Tome of Attraction', icon: 117, base: 0.35, stat: 'pickup', fmt: (v) => `+${Math.round(v * 10) / 10}m pickup range` },
-  { id: 'vitality', name: 'Tome of Vitality', icon: 1042, base: 0.05, stat: 'maxHp', fmt: (v) => `+${pct(v)} max HP` },
-  { id: 'agility', name: 'Tome of Agility', icon: 1170, base: 0.025, stat: 'moveSpeed', fmt: (v) => `+${pct(v)} movement speed`, note: 'Diminishing returns past +100%.' },
+  { id: 'power', name: 'Tome of Power', icon: 1098, base: 0.08, stat: 'damage', fmt: (v) => `+${pct(v)} damage` },
+  { id: 'precision', name: 'Tome of Precision', icon: 1173, base: 0.035, stat: 'crit', fmt: (v) => `+${pct(v)} crit chance`, note: 'Crit chance above 100% turns into extra crit damage.' },
+  { id: 'evasion', name: 'Tome of Evasion', icon: 1078, base: 0.05, stat: 'dodge', fmt: (v) => `+${pct(v)} evasion`, note: 'No cap — diminishing returns, so you get close to (but never exactly) 100% dodge.' },
+  { id: 'bulwark', name: 'Tome of Defense', icon: 1099, base: 5, stat: 'armor', fmt: (v) => `+${Math.round(v * 10) / 10} armor` },
+  { id: 'greed', name: 'Tome of Greed', icon: 160, base: 0.1, stat: 'gold', fmt: (v) => `+${pct(v)} gold` },
+  { id: 'multishot', name: 'Tome of Multishot', icon: 1134, base: 0.15, stat: 'projectiles', fmt: (v) => `+${Math.round(v * 100) / 100} projectiles`, note: 'Fractions give a chance to fire one more.' },
+  { id: 'fury', name: 'Tome of Fury', icon: 1100, base: 0.065, stat: 'attackSpeed', fmt: (v) => `+${pct(v)} attack speed` },
+  { id: 'skies', name: 'Tome of the Skies', icon: 1144, base: 0.2, stat: 'jumps', fmt: (v) => `+${Math.round(v * 100) / 100} jumps`, note: 'Every full 1.0 is one more jump.' },
+  { id: 'fortune', name: 'Tome of Fortune', icon: 114, base: 0.07, stat: 'luck', fmt: (v) => `+${Math.round(v * 100) / 100} luck`, note: 'Better chest, Moai, item and tome/weapon roll odds.' },
+  { id: 'wisdom', name: 'Tome of Wisdom', icon: 101, base: 0.08, stat: 'xp', fmt: (v) => `+${pct(v)} experience` },
+  { id: 'vampire', name: 'Tome of Blood', icon: 1064, base: 0.006, stat: 'lifesteal', fmt: (v) => `+${pct(v)} life steal`, note: 'Heals a share of the damage you deal.' },
+  { id: 'aegis', name: 'Tome of the Aegis', icon: 1043, base: 0.04, stat: 'shield', fmt: (v) => `+${pct(v)} max HP as shield` },
+  { id: 'giant', name: 'Tome of the Giant', icon: 1047, base: 0.05, stat: 'area', fmt: (v) => `+${pct(v)} size` },
+  { id: 'magnet', name: 'Tome of Attraction', icon: 117, base: 0.6, stat: 'pickup', fmt: (v) => `+${Math.round(v * 10) / 10}m pickup range` },
+  { id: 'vitality', name: 'Tome of Vitality', icon: 1042, base: 0.08, stat: 'maxHp', fmt: (v) => `+${pct(v)} max HP` },
+  { id: 'agility', name: 'Tome of Agility', icon: 1170, base: 0.04, stat: 'moveSpeed', fmt: (v) => `+${pct(v)} movement speed`, note: 'Counts half past +100%.' },
 ];
 export const TOME_BY_ID = Object.fromEntries(TOMES.map((t) => [t.id, t]));
 
@@ -56,7 +56,7 @@ export function applyTomes(m, tomes) {
       case 'gold': m.coins += v; break;
       case 'projectiles': m.projectiles += v; break;
       case 'attackSpeed': m.attackSpeed += v; break;
-      case 'jumps': m.jumps += Math.min(10, Math.floor(v + 1e-6)); break;
+      case 'jumps': m.jumps += Math.floor(v + 1e-6); break;
       case 'luck': m.luck += v; break;
       case 'xp': m.xp += v; break;
       case 'lifesteal': m.lifesteal += v; break;
@@ -64,7 +64,7 @@ export function applyTomes(m, tomes) {
       case 'area': m.area += v; break;
       case 'pickup': m.pickup += v; break;
       case 'maxHp': m.maxHpPct += v; break;
-      case 'moveSpeed': m.moveSpeed += v <= 1 ? v : 1 + (v - 1) / (1 + (v - 1)); break;
+      case 'moveSpeed': m.moveSpeed += v <= 1 ? v : 1 + (v - 1) * 0.5; break;
     }
   }
 }

@@ -601,7 +601,7 @@ body.touch #hud-buffs { top: 92px; }
 .lb-modes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .lb-modes .lb-me { margin-left: auto; }
 .lb-modes .lb-me b { color: #ffd36b; }
-.lb-row.global { grid-template-columns: 2.4em minmax(6em, 1.3fr) minmax(7em, 1.3fr) 6em 4em 4.5em 3em 5em 5em; }
+.lb-row.global { grid-template-columns: 36px minmax(0, 1.4fr) minmax(0, 1.3fr) 92px 52px 62px 40px 76px 76px; }
 .lb-player { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-player small { opacity: 0.6; font-weight: 400; }
 .lb-row.me { background: rgba(255, 211, 107, 0.14); outline: 1px solid rgba(255, 211, 107, 0.45); }
@@ -612,3 +612,6 @@ body.touch #hud-buffs { top: 92px; }
   .lb-row.global { grid-template-columns: 28px minmax(0, 1fr) 5.5em 3.5em; }
   .lb-row.global > :nth-child(3), .lb-row.global > :nth-child(7), .lb-row.global > :nth-child(8), .lb-row.global > :nth-child(9) { display: none; }
 }
+
+.lb-row > span { min-width: 0; white-space: nowrap; }
+.lb-score { display: flex; align-items: center; gap: 4px; }

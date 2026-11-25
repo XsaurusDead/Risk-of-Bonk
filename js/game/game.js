@@ -383,8 +383,10 @@ export const Game = {
   updateDifficulty() {
     const run = G.run;
     const minutes = run.time / 60;
-    // Exponential in both time and stages cleared.
-    run.diff = Math.pow(1.055, minutes) * Math.pow(1.3, run.stagesCleared);
+    // Exponential in both time and stages cleared (Megabonk-style: enemies mostly scale with
+    // time, so a good build really feels strong). Overtime keeps the old, much harsher curve.
+    run.diff = Math.pow(1.045, minutes) * Math.pow(1.25, run.stagesCleared);
+    run.diffHard = Math.pow(1.055, minutes) * Math.pow(1.3, run.stagesCleared);
     // Enemies keep up with YOU: their health follows your damage per second, their damage
     // follows how much punishment you can take (HP, armor, shield). Updated twice a second.
     run.powerT = (run.powerT || 0) - G.dt;
@@ -402,10 +404,14 @@ export const Game = {
       }
       const dps = Math.max(formula, Math.min(run.dpsAvg || 0, formula * 3));
       run.playerDps = dps;
-      run.hpScale = Math.pow(Math.max(1, dps / 50), 0.75);
+      // only a gentle nudge from your build (strong builds should feel strong)...
+      run.hpScale = Math.pow(Math.max(1, dps / 150), 0.35);
       const ehp = s.maxHp * (1 + Math.max(0, s.armor) / 100) + (s.maxShield || 0);
       run.playerEhp = ehp;
-      run.dmgScale = Math.pow(Math.max(1, ehp / 110), 0.7);
+      run.dmgScale = Math.pow(Math.max(1, ehp / 250), 0.35);
+      // ...except in overtime, which still hunts you down whatever you built
+      run.hpScaleHard = Math.pow(Math.max(1, dps / 50), 0.75);
+      run.dmgScaleHard = Math.pow(Math.max(1, ehp / 110), 0.7);
     }
     run.coinScale = Math.pow(run.diff, 0.6);
     run.xpScale = Math.pow(run.diff, 0.65);
@@ -740,11 +746,11 @@ export const Game = {
     const critF = 1 + s.crit * (s.critMult - 1);
     const formulaDps = s.damage * s.attackSpeed * critF * 4 * (1 + 0.05 * p.itemCount);
     const dps = Math.max(formulaDps, Math.min(run.dps || 0, formulaDps * 2));
-    const hp = Math.max(e.maxHp * 2, dps * 110);
+    const hp = Math.max(e.maxHp * 1.5, dps * 75);
     e.maxHp = e.hp = hp;
     // a heavy hit should take ~12% of your effective health
     const ehp = s.maxHp * (1 + Math.max(0, s.armor) / 100) * (1 / s.dmgTakenMult);
-    e.dmg = Math.max(e.dmg, ehp * 0.12);
+    e.dmg = Math.max(e.dmg, ehp * 0.1);
     run.boss = e;
     if (G.ui) {
       G.ui.banner(e.def.name, e.def.title, true);

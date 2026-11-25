@@ -38,6 +38,10 @@ const SLOT_NAMES = ['Primary', 'Ability 1', 'Ability 2', 'Ultimate'];
 const SLOTS = ['primary', 'ability1', 'ability2', 'ultimate'];
 const _v = new THREE.Vector3();
 
+/** 1059 -> "1 059" (thin-space groups: unambiguous in every locale). */
+function num(n) {
+  return String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f');
+}
 function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
@@ -499,8 +503,8 @@ export const UI = {
       const outcome = e.victory ? `<span class="lb-won" title="Beat the final boss">${icon(UI_ICONS.crown)}</span>` : e.reason === 'quit' ? '<span class="lb-quit" title="Abandoned">⏏</span>' : '';
       return `<div class="lb-row ${e.victory ? 'won' : ''}">${medal(i)}
         <span class="lb-char">${characterIcon(e.charId)}<b style="color:${c.color}">${esc(c.name)}</b>${e.costume ? `<small>${esc(co?.name || '')}</small>` : ''}</span>
-        <span class="lb-score">${icon(1165)} ${(e.kills || 0).toLocaleString()}</span>
-        <span>${e.stage}${outcome}</span><span>${formatTime(e.time)}</span><span>${e.level}</span><span class="lb-sub">${(e.score || 0).toLocaleString()}</span><span>${e.items}</span><span class="lb-date">${date(e.date)}</span></div>`;
+        <span class="lb-score">${icon(1165)} ${num(e.kills)}</span>
+        <span>${e.stage}${outcome}</span><span>${formatTime(e.time)}</span><span>${e.level}</span><span class="lb-sub">${num(e.score)}</span><span>${e.items}</span><span class="lb-date">${date(e.date)}</span></div>`;
     }).join('') : `<p class="lb-empty">No runs yet — finish a run (win, die or abandon it) to get on the board.</p>`;
   },
 
@@ -537,8 +541,8 @@ export const UI = {
       return `<div class="lb-row global ${e.victory ? 'won' : ''} ${e.player_id === me ? 'me' : ''}">${medal(i)}
         <span class="lb-player">${esc(e.name)}${e.player_id === me ? ' <small>(you)</small>' : ''}</span>
         <span class="lb-char">${characterIcon(e.char_id)}<b style="color:${c.color}">${esc(c.name)}</b></span>
-        <span class="lb-score">${icon(1165)} ${(e.kills || 0).toLocaleString()}</span>
-        <span>${e.stage}${outcome}</span><span>${formatTime(e.time_s)}</span><span>${e.level}</span><span class="lb-sub">${(e.score || 0).toLocaleString()}</span><span class="lb-date">${date(e.created_at)}</span></div>`;
+        <span class="lb-score">${icon(1165)} ${num(e.kills)}</span>
+        <span>${e.stage}${outcome}</span><span>${formatTime(e.time_s)}</span><span>${e.level}</span><span class="lb-sub">${num(e.score)}</span><span class="lb-date">${date(e.created_at)}</span></div>`;
     }).join('') : `<p class="lb-empty">Nobody is on the global board yet — finish a run and be the first!</p>`);
   },
 
@@ -597,7 +601,7 @@ export const UI = {
         ['Most items in one run', s.itemsHeld || 0], ['Biggest hit', formatNum(s.maxHit || 0)], ['Critical hits', s.crits || 0], ['Enemies frozen', s.freezes || 0],
         ['Ultimates used', s.ultsUsed || 0],
       ];
-      body.innerHTML = `<div class="rec">${rows.map(([a, b]) => `<span>${a}</span><b>${typeof b === 'number' ? b.toLocaleString() : b}</b>`).join('')}</div>`;
+      body.innerHTML = `<div class="rec">${rows.map(([a, b]) => `<span>${a}</span><b>${typeof b === 'number' ? (Number.isInteger(b) ? num(b) : b.toLocaleString()) : b}</b>`).join('')}</div>`;
     }
   },
 
@@ -871,7 +875,7 @@ export const UI = {
       <div class="go-stat"><b>${formatTime(s.time)}</b>Time</div>
       <div class="go-stat"><b>${s.level}</b>Level</div>
       <div class="go-stat"><b>${s.items.reduce((a, [, n]) => a + n, 0)}</b>Items</div>
-      <div class="go-stat"><b>${s.kills.toLocaleString()}</b>Kills</div></div>`;
+      <div class="go-stat"><b>${num(s.kills)}</b>Kills</div></div>`;
     sfx('legendary');
     this.showScreen('victory');
   },
@@ -884,7 +888,7 @@ export const UI = {
       <div class="go-stat"><b>${formatTime(s.time)}</b>Time survived</div>
       <div class="go-stat"><b>${s.stage}</b>Stage reached</div>
       <div class="go-stat"><b>${s.level}</b>Level</div>
-      <div class="go-stat"><b>${s.kills.toLocaleString()}</b>Kills</div>
+      <div class="go-stat"><b>${num(s.kills)}</b>Kills</div>
       <div class="go-stat"><b style="color:${lbl.color}">${lbl.name}</b>Difficulty</div></div>`;
     if (s.items.length) {
       html += `<h3>Items</h3><div class="go-items">${s.items.map(([id, n]) => {

@@ -43,10 +43,17 @@ export function spawnEnemy(id, pos, opts = {}) {
   const loopMult = 1 + run.loop * 0.5;
   const champ = !!opts.champion;
   const ot = opts.otMult || 1; // overtime scaling (after the 10 minute mark)
-  // keeps up with the player's build: HP follows their DPS, damage follows their effective HP
-  const hpScale = run.hpScale || 1, dmgScale = run.dmgScale || 1;
-  const hpMult = (opts.boss ? Math.pow(diff, 1.08) : diff) * loopMult * (elite ? elite.hpMult : 1) * (champ ? 32 : 1) * ot * hpScale;
-  const dmgMult = Math.pow(diff, 0.8) * (1 + run.loop * 0.25) * (elite ? elite.dmgMult : 1) * (champ ? 2.4 : 1) * Math.pow(ot, 0.9) * dmgScale;
+  // Normal play: time-based difficulty with a gentle nudge from the player's build.
+  // Overtime (ot > 1) uses the old, brutal curve that follows the player's DPS and HP.
+  const hard = ot > 1;
+  const d = hard ? run.diffHard || diff : diff;
+  const hpScale = (hard ? run.hpScaleHard : run.hpScale) || 1, dmgScale = (hard ? run.dmgScaleHard : run.dmgScale) || 1;
+  const bossHp = opts.boss ? (hard ? Math.pow(d, 0.08) : 1.5) : 1; // portal bosses: a real fight, not a wall
+  const champHp = champ ? (hard ? 32 : 10) : 1;
+  const hpMult = d * bossHp * loopMult * (elite ? elite.hpMult : 1) * champHp * ot * hpScale;
+  // the first minutes of a run (stage 1, first loop) hit softer: 45% -> 100% over 5 minutes
+  const warmup = hard || run.stagesCleared || run.loop ? 1 : 0.45 + 0.55 * Math.min(1, run.time / 300);
+  const dmgMult = warmup * Math.pow(d, hard ? 0.8 : 0.7) * (1 + run.loop * 0.25) * (elite ? elite.dmgMult : 1) * (champ ? (hard ? 2.4 : 1.8) : 1) * Math.pow(ot, 0.9) * dmgScale;
 
   const { geo, glow, roles } = enemyGeometry(id, def);
   const mat = MAT.vc.clone();

@@ -54,7 +54,8 @@ export const WEAPONS = {
     always: true,
     fire() {}, // damage is dealt continuously in update()
     update(p, s, dt) {
-      const n = Math.min(12, s.count);
+      const n = Math.min(16, s.count);
+      const over = s.count / n; // no cap: blades past 16 add their damage to the others
       const rad = 3.2 * s.area;
       s.state.angle = (s.state.angle || 0) + dt * 2.6 * s.rate;
       s.state.meshes ||= [];
@@ -74,7 +75,7 @@ export const WEAPONS = {
         for (const e of findTargets(m.position, 0.9 + 0.3 * s.area, 8)) {
           if ((s.state.hitT.get(e) || -9) > now - 0.45 / s.rate) continue;
           s.state.hitT.set(e, now);
-          p.withWeapon(s.id, () => dealDamage(e, p.stats.damage * 0.5, { procCoef: 0.5, knockback: 3, dir: V().set(Math.cos(a + 1.57), 0, Math.sin(a + 1.57)) }));
+          p.withWeapon(s.id, () => dealDamage(e, p.stats.damage * 0.5 * over, { procCoef: 0.5, knockback: 3, dir: V().set(Math.cos(a + 1.57), 0, Math.sin(a + 1.57)) }));
           particles(m.position, 0xbfe8ff, 2, 3, 0.2, 0.2);
         }
       });
@@ -142,11 +143,12 @@ export const WEAPONS = {
     desc: 'Fires a ring of piercing ice shards for 110% damage that chill enemies.',
     fire(p, s) {
       if (!findTargets(p.pos, RANGE, 1).length) return false;
-      const n = Math.min(24, s.count);
+      const n = Math.min(32, s.count);
+      const over = s.count / n; // no cap: shards past 32 add their damage to the others
       const off = Math.random() * Math.PI * 2;
       for (let i = 0; i < n; i++) {
         const a = off + (i / n) * Math.PI * 2;
-        spawnProjectile({ pos: chest(p), dir: V().set(Math.cos(a), 0, Math.sin(a)), speed: 30, shape: 'shard', size: 0.35, color: 0x9fe8ff, damage: p.stats.damage * 1.1, pierce: 2, life: 1.0, status: { slow: 0.3 } });
+        spawnProjectile({ pos: chest(p), dir: V().set(Math.cos(a), 0, Math.sin(a)), speed: 30, shape: 'shard', size: 0.35, color: 0x9fe8ff, damage: p.stats.damage * 1.1 * over, pierce: 2, life: 1.0, status: { slow: 0.3 } });
       }
       sfx('freeze', 0.1);
       return true;
