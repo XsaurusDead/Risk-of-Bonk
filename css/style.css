@@ -642,3 +642,15 @@ body.touch #hud-buffs { top: 92px; }
 .item-card .ds { font-size: 13px; color: #d8dce8; line-height: 1.35; }
 .key-hint { opacity: 0.55; font-size: 11px; margin-left: 4px; }
 @media (max-width: 700px) { .item-cards { grid-template-columns: 1fr; } }
+
+/* ---------------- Survivor tab (pause) ---------------- */
+.sv-head { display: flex; gap: 14px; align-items: center; padding: 10px 12px; margin-bottom: 10px; border-radius: 12px; background: color-mix(in srgb, var(--c) 14%, rgba(0, 0, 0, 0.35)); border: 2px solid color-mix(in srgb, var(--c) 60%, transparent); }
+.sv-ic { width: 56px; height: 56px; display: grid; place-items: center; font-size: 36px; }
+.sv-ic .pxi { width: 52px; height: 52px; }
+.sv-name { font-size: 22px; font-weight: 900; color: var(--c); }
+.sv-name span { font-size: 13px; color: var(--muted); font-weight: 600; margin-left: 6px; }
+.sv-lore { font-size: 13px; color: #d8dce8; margin-top: 2px; }
+#items-body .cs-card .cdv b { color: #7dff9a; }
+/* the pause menu scrolls instead of squeezing its buttons when the window is short */
+#screen-pause .panel { overflow-y: auto; }
+#screen-pause .panel > h2, #screen-pause .menu-col, #screen-pause .menu-col .btn { flex-shrink: 0; }

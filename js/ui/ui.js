@@ -89,6 +89,11 @@ export const UI = {
     $('#btn-start').addEventListener('click', () => this.startRun());
     $('#btn-resume').addEventListener('click', () => Game.resume());
     $('#btn-items-resume').addEventListener('click', () => Game.resume());
+    $('#btn-abilities').addEventListener('click', () => {
+      sfx('ui');
+      this.itemsTab = 'survivor';
+      this.showScreen('items');
+    });
     $$('[data-itab]').forEach((t) => t.addEventListener('click', () => {
       sfx('ui');
       this.renderItems(t.dataset.itab);
@@ -137,6 +142,7 @@ export const UI = {
     Minimap.bind();
     this.bindSelect();
     Input.onDeviceChange = (d) => this.onDevice(d);
+    Input.overlayOpen = () => Minimap.bigOpen;
     Input.onPointerLockLost = () => {
       if (G.mode === 'playing') Game.pause();
     };
@@ -931,6 +937,43 @@ export const UI = {
     this.showScreen('gameover');
   },
 
+  /**
+   * Your survivor in this run: passive, primary and the three abilities with their keys,
+   * base cooldowns and what they are right now (with your cooldown items/tomes).
+   */
+  survivorHtml() {
+    const p = G.player;
+    if (!p) return '';
+    const c = p.char, s = p.stats;
+    const keys = { kbm: ['AUTO', 'RMB / Q', 'SHIFT', 'R'], pad: ['AUTO', 'LT', 'RB', 'Y'], touch: ['AUTO', '⚡', '2nd', 'ULT'] }[Input.device] || ['AUTO', 'RMB / Q', 'SHIFT', 'R'];
+    const n1 = (v) => (Math.round(v * 10) / 10).toString();
+    let html = `<div class="sv-head" style="--c:${c.color}"><div class="sv-ic">${characterIcon(p.charId)}</div><div>
+      <div class="sv-name">${esc(c.name)} <span>Level ${p.level}</span></div><div class="sv-lore">${esc(c.lore || '')}</div></div></div>`;
+    html += `<div class="cs-sec"><h4>Passive</h4><div class="cs-card" style="--c:${c.color}"><div class="ico">${c.passive.icon}</div><div>
+      <div class="hd">${esc(c.passive.name)}<span class="tag">PASSIVE</span></div><div class="ds">${esc(c.passive.desc)}</div></div></div></div>`;
+    html += '<div class="cs-sec"><h4>Abilities</h4>';
+    [c.primary, ...c.abilities].forEach((sk, i) => {
+      let cd;
+      if (i === 0) {
+        const now = sk.rate * s.attackSpeed;
+        cd = `${n1(sk.rate)}/s${Math.abs(now - sk.rate) > 0.05 ? ` → <b>${n1(now)}/s</b>` : ''}`;
+      } else {
+        const mult = i === 3 ? s.ultCdMult : s.cdMult;
+        const now = sk.cd * mult;
+        const charges = (sk.charges || 1) + (s.extraCharges || 0);
+        cd = `${n1(sk.cd)}s${Math.abs(now - sk.cd) > 0.05 ? ` → <b>${n1(now)}s</b>` : ''}${charges > 1 ? ` · ${charges} charges` : ''}`;
+      }
+      const tag = i === 0 ? '<span class="tag auto">AUTO-ATTACK</span>' : `<span class="tag key">${keys[i]}</span>`;
+      const slot = ['Primary', 'Ability 1', 'Ability 2', 'Ultimate'][i];
+      const lvl = i === 0 && p.weapons?.primary ? ` · weapon Lv ${p.weapons.primary.level}` : '';
+      html += `<div class="cs-card ${i === 3 ? 'ult' : ''}" style="--c:${i === 3 ? '#ffb22e' : c.color}"><div class="ico">${sk.icon}</div><div>
+        <div class="hd">${esc(sk.name)}<span class="tag">${slot.toUpperCase()}</span>${tag}<span class="cdv">⏱ ${cd}</span></div>
+        <div class="ds">${esc(sk.desc)}${i === 0 ? ` Fires automatically at the nearest enemy${lvl}.` : ''}</div></div></div>`;
+    });
+    html += '</div>';
+    return html;
+  },
+
   /** The Items & Effects screen: every item you carry with what it does, your tomes/weapons and stats. */
   renderItems(tab) {
     this.itemsTab = tab;
@@ -938,7 +981,8 @@ export const UI = {
     const p = G.player, body = $('#items-body');
     if (!p) return (body.innerHTML = '');
     const parts = this.statsParts();
-    if (tab === 'build') body.innerHTML = parts.tomes + parts.weapons;
+    if (tab === 'survivor') body.innerHTML = this.survivorHtml();
+    else if (tab === 'build') body.innerHTML = parts.tomes + parts.weapons;
     else if (tab === 'stats') body.innerHTML = parts.stats;
     else {
       // rarest first, then in the order you found them

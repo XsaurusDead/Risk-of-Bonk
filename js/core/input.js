@@ -43,6 +43,8 @@ export const Input = {
   wantPointerLock: false,
   onDeviceChange: null,
   onPointerLockLost: null,
+  /** Set by the UI: true while an overlay that needs the mouse (big map) is open. */
+  overlayOpen: null,
   onKey: null,
   numberPressed: 0,
 
@@ -111,6 +113,12 @@ export const Input = {
     document.addEventListener('pointerlockchange', () => {
       const was = this.pointerLocked;
       this.pointerLocked = document.pointerLockElement === canvas;
+      // a lock that arrives late (requested while playing, granted after pausing / opening a
+      // menu or the map) would swallow every menu click: give the mouse straight back
+      if (this.pointerLocked && (G.mode !== 'playing' || this.overlayOpen?.())) {
+        this._quietUnlock = true;
+        document.exitPointerLock();
+      }
       if (was && !this.pointerLocked) {
         // releasing the mouse on purpose (e.g. opening the big map) must not pause the game
         if (this._quietUnlock) this._quietUnlock = false;

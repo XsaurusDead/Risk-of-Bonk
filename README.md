@@ -34,6 +34,7 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 | Interact | E / F | X | ✋ (appears when near) |
 | Items & stats (quick look) | Hold Tab | View/Back | 🎒 |
 | Items & Effects screen (pauses) | I, or *Items & Effects* in the pause menu | pause menu | pause menu |
+| Your survivor's passive & abilities (keys, cooldowns now) | *Survivor & Abilities* in the pause menu (or the *Survivor* tab) | pause menu | pause menu |
 | Pause | Esc / P | Start | ⏸ |
 | Full map | M or click the minimap; Esc or M closes it (the run keeps going, no pause menu) | – | tap the minimap |
 | Pick level-up | 1 / 2 / 3 or click | D-pad + A | tap |
