@@ -203,6 +203,43 @@ export const ENEMIES = {
       ['cyl', 0x3a2a1a, [0.7, 1.6, 0.3], [0.08, 2.6, 0.08]], ['box', 0xd8d8e8, [0.7, 2.85, 0.75], [0.06, 0.25, 1.1], [0.3, 0, 0], true],
     ],
   },
+  // ================= Sprite enemies (assets/models/Normal enemies), rebuilt as 3D voxels =================
+  pumpkin_creeper: {
+    name: 'Pumpkin Creeper', hp: 75, dmg: 11, speed: 5.2, radius: 0.7, height: 1.9, ai: 'melee', attackRange: 2.6, xp: 5, coins: 4, cost: 9, vox: 'pumpkin',
+    model: [['sphere', 0xff8a1e, [0, 1.6, 0], [0.8, 0.7, 0.8]], ['cyl', 0x3f8a2a, [0, 0.7, 0], [0.5, 1.2, 0.5]]],
+  },
+  storm_cloud: {
+    name: 'Storm Cloud', hp: 55, dmg: 10, speed: 5.5, radius: 0.8, height: 1.5, ai: 'flyer', range: 24, projSpeed: 30, projColor: 0x9ff0ff, hover: 5, xp: 5, coins: 4, cost: 8, vox: 'cloud',
+    model: [['sphere', 0xc8cde0, [0, 0.75, 0], [1.5, 1.2, 1.2]]],
+  },
+  cursed_spirit: {
+    name: 'Cursed Spirit', hp: 70, dmg: 12, speed: 5, radius: 0.7, height: 2.4, ai: 'ranged', range: 26, projSpeed: 24, projColor: 0xff7a3a, burnOnHit: true, xp: 6, coins: 5, cost: 10, vox: 'spirit',
+    model: [['cyl', 0xd8406a, [0, 1.4, 0], [0.8, 1.6, 0.6]], ['cone', 0xffaa22, [0, 0.4, 0], [0.6, 0.8, 0.6]]],
+  },
+  bone_warrior: {
+    name: 'Bone Warrior', hp: 90, dmg: 13, speed: 5.5, radius: 0.7, height: 2.1, ai: 'melee', attackRange: 2.4, xp: 6, coins: 4, cost: 10, vox: 'skeleton_gold',
+    model: [['box', 0xc9a35a, [0, 1.1, 0], [0.7, 1.6, 0.4]]],
+  },
+  frost_skeleton: {
+    name: 'Frost Skeleton', hp: 100, dmg: 13, speed: 5.5, radius: 0.7, height: 2.1, ai: 'melee', attackRange: 2.4, slowOnHit: true, xp: 6, coins: 5, cost: 11, vox: 'skeleton_teal',
+    model: [['box', 0x3aa8a0, [0, 1.1, 0], [0.7, 1.6, 0.4]]],
+  },
+  shadow_skeleton: {
+    name: 'Shadow Skeleton', hp: 140, dmg: 17, speed: 6, radius: 0.7, height: 2.1, ai: 'melee', attackRange: 2.4, xp: 8, coins: 6, cost: 13, vox: 'skeleton_dark',
+    model: [['box', 0x4a4458, [0, 1.1, 0], [0.7, 1.6, 0.4]]],
+  },
+  reef_lurker: {
+    name: 'Reef Lurker', hp: 60, dmg: 12, speed: 8, radius: 0.7, height: 1.7, ai: 'swooper', hover: 3, xp: 5, coins: 4, cost: 8, vox: 'fish_teal',
+    model: [['sphere', 0x2a9a9a, [0, 0.85, 0], [0.8, 1.6, 0.8]]],
+  },
+  cave_lurker: {
+    name: 'Cave Lurker', hp: 75, dmg: 13, speed: 8, radius: 0.7, height: 1.7, ai: 'swooper', hover: 3, xp: 5, coins: 4, cost: 9, vox: 'fish_grey',
+    model: [['sphere', 0x8a8f98, [0, 0.85, 0], [0.8, 1.6, 0.8]]],
+  },
+  ice_lurker: {
+    name: 'Ice Lurker', hp: 75, dmg: 13, speed: 8.5, radius: 0.7, height: 1.7, ai: 'swooper', hover: 3, slowOnHit: true, xp: 5, coins: 4, cost: 9, vox: 'fish_blue',
+    model: [['sphere', 0x3a7adf, [0, 0.85, 0], [0.8, 1.6, 0.8]]],
+  },
   // ================= Minions summoned by bosses (not in stage pools) =================
 };
 
@@ -222,46 +259,37 @@ export const BOSSES = {
       ['ico', 0x7cff9a, [0, 3.6, 1.2], [1.0, 1.0, 0.6], null, true], ['cone', 0x4f8f3a, [0, 6.6, 0], [1.2, 0.8, 1.2]], ...glowEyes(5.7, 1.1, 0.45, 0.25, 0x7cff9a),
     ],
   },
+  // ---- stages 2-5: models from assets/models/Enemies (ids kept so saves/achievements carry over)
+  // Stage 2: the rock boss sprite sheets, rebuilt in 3D voxels (js/game/voxelsprites.js)
   scorpion_king: {
-    name: 'Scorpion King', title: 'Tyrant of the Dunes', hp: 2900, dmg: 28, speed: 6, radius: 3, height: 4, ai: 'boss', xp: 140, coins: 140,
-    patterns: ['charge', 'volley', 'burst', 'summon'], projColor: 0x99ff33, summon: 'scarab',
-    model: [
-      ['sphere', 0x8a4b1c, [0, 1.6, 0], [3.0, 1.6, 4.4]], ['sphere', 0x6e3a14, [0, 1.8, 2.4], [2.0, 1.3, 1.6]],
-      ['sphere', 0x8a4b1c, [0, 2.4, -2.6], [1.3, 1.2, 1.3]], ['sphere', 0x8a4b1c, [0, 3.6, -3.1], [1.1, 1.1, 1.1]], ['sphere', 0x8a4b1c, [0, 4.8, -2.6], [1.0, 1.0, 1.0]],
-      ['cone', 0x99ff33, [0, 5.3, -1.6], [0.5, 1.4, 0.5], [2.2, 0, 0], true],
-      ['box', 0x6e3a14, [-2.2, 1.6, 3.3], [0.8, 0.8, 2.2], [0, 0.4, 0]], ['box', 0x6e3a14, [2.2, 1.6, 3.3], [0.8, 0.8, 2.2], [0, -0.4, 0]],
-      ['cone', 0x4a2a10, [-2.0, 1.6, 4.8], [0.6, 1.2, 0.6], [1.57, 0, 0]], ['cone', 0x4a2a10, [2.0, 1.6, 4.8], [0.6, 1.2, 0.6], [1.57, 0, 0]],
-      ['cone', 0xd4af37, [0, 3.2, 2.4], [1.4, 1.0, 1.0], null], ...glowEyes(2.2, 3.15, 0.4, 0.18, 0xff2222),
-    ],
+    name: 'Cragmaw', title: 'the Crystal-Clawed', hp: 2900, dmg: 28, speed: 4.4, radius: 2.2, height: 6, ai: 'boss', xp: 140, coins: 140,
+    vox: 'rockboss', swipeT: 0.75,
+    voxPat: { slam: { anim: 'stomp' }, swipe: { anim: 'swipe' }, charge: { anim: 'walk', speed: 2.2, loop: true }, default: { anim: 'stomp' } },
+    patterns: ['slam', 'swipe', 'charge', 'burst', 'summon'], projColor: 0x55ffe0, summon: 'scarab',
+    model: [['box', 0x6b5a4a, [0, 3, 0], [3.4, 4, 2.4]], ['box', 0x4a3f36, [0, 5.4, 0.2], [1.8, 1.4, 1.6]], ...glowEyes(5.5, 1.0, 0.4, 0.2, 0x55ffe0)],
   },
+  // Stage 3: RAVENHIDE, the PSX werewolf (animated GLB)
   frost_titan: {
-    name: 'Frost Titan', title: 'Heart of the Glacier', hp: 3300, dmg: 30, speed: 4, radius: 2.8, height: 7, ai: 'boss', xp: 160, coins: 160,
-    patterns: ['slam', 'burst', 'rain', 'summon'], projColor: 0x99eeff, summon: 'ice_imp', freezes: true,
-    model: [
-      ['oct', 0xbfeaff, [0, 3.6, 0], [3.6, 4.0, 2.6]], ['ico', 0xdff6ff, [0, 6.2, 0], [1.8, 1.8, 1.8]],
-      ['oct', 0x8fd3ff, [-2.6, 3.6, 0], [1.2, 3.8, 1.2]], ['oct', 0x8fd3ff, [2.6, 3.6, 0], [1.2, 3.8, 1.2]],
-      ['cone', 0xffffff, [-0.8, 7.4, 0], [0.4, 1.4, 0.4], null, true], ['cone', 0xffffff, [0.8, 7.4, 0], [0.4, 1.4, 0.4], null, true], ['cone', 0xffffff, [0, 7.7, 0], [0.4, 1.6, 0.4], null, true],
-      ['cyl', 0x8fd3ff, [-1.0, 1.0, 0], [1.2, 2.0, 1.2]], ['cyl', 0x8fd3ff, [1.0, 1.0, 0], [1.2, 2.0, 1.2]], ...glowEyes(6.3, 0.85, 0.4, 0.22, 0x33ccff),
-    ],
+    name: 'Ravenhide', title: 'the Frostfang Werewolf', hp: 3300, dmg: 30, speed: 6.5, radius: 1.8, height: 4.6, ai: 'boss', xp: 160, coins: 160,
+    glb: 'ravenhide', slamT: 1.3, leapSlam: true, swipeT: 0.55,
+    patterns: ['slam', 'swipe', 'charge', 'rain', 'summon'], projColor: 0x99eeff, summon: 'ice_imp', freezes: true,
+    model: [['oct', 0x3a3530, [0, 2.4, 0], [2.4, 3, 1.8]], ['ico', 0x4a4038, [0, 4.2, 0.4], [1.4, 1.4, 1.6]], ...glowEyes(4.3, 1.1, 0.35, 0.18, 0x99eeff)],
   },
+  // Stage 4: the King Slime sprites in 3D voxels
   spore_mother: {
-    name: 'Spore Mother', title: 'Queen of the Hollow', hp: 3600, dmg: 30, speed: 3, radius: 3.2, height: 6.5, ai: 'boss', xp: 180, coins: 180,
-    patterns: ['burst', 'summon', 'rain', 'volley'], projColor: 0xd84a8a, summon: 'sporeling',
-    model: [
-      ['cyl', 0xf0e6d0, [0, 2.0, 0], [2.0, 4.0, 2.0]], ['sphere', 0xd84a8a, [0, 4.8, 0], [7.0, 3.0, 7.0]],
-      ['sphere', 0xffffff, [1.6, 5.8, 1.0], [0.8, 0.5, 0.8]], ['sphere', 0xffffff, [-1.8, 5.6, -0.8], [0.9, 0.5, 0.9]], ['sphere', 0xffffff, [0.2, 6.2, -1.8], [0.7, 0.4, 0.7]],
-      ['sphere', 0x2fc6b5, [0, 3.4, 0], [6.4, 0.5, 6.4], null, true], ...glowEyes(2.8, 1.0, 0.5, 0.28, 0x2fffe0),
-    ],
+    name: 'King Slime', title: 'Monarch of the Hollow', hp: 3600, dmg: 30, speed: 4, radius: 2.6, height: 5.5, ai: 'boss', xp: 180, coins: 180,
+    vox: 'kingslime', slamT: 1.4, leapSlam: true,
+    voxPat: { slam: { anim: 'walk', land: 'attack', loop: true }, default: { anim: 'attack' } },
+    patterns: ['slam', 'summon', 'burst', 'rain'], projColor: 0x7cff4a, summon: 'slime',
+    model: [['sphere', 0x5fd35f, [0, 2.2, 0], [5.5, 4.4, 4.5]], ['cone', 0xffd43b, [0, 4.8, 0], [1.2, 0.9, 1.2]], ...glowEyes(2.8, 2.2, 0.8, 0.35, 0xff2222)],
   },
+  // Stage 5: the demon sprite sheet in 3D voxels
   inferno_drake: {
-    name: 'Inferno Drake', title: 'Lord of the Caldera', hp: 3900, dmg: 34, speed: 7, radius: 3, height: 4, ai: 'boss', flying: true, hover: 7, xp: 200, coins: 200,
-    patterns: ['burst', 'rain', 'volley', 'charge'], projColor: 0xff5522, summon: 'ember_wisp', burnOnHit: true,
-    model: [
-      ['sphere', 0x8a1c10, [0, 2, 0], [2.4, 2.0, 4.6]], ['sphere', 0xa82513, [0, 2.8, 2.8], [1.4, 1.2, 1.8]], ['cone', 0x2a1a17, [0, 2.4, -3.4], [0.8, 3.0, 0.8], [-1.57, 0, 0]],
-      ['tetra', 0x5a1008, [-3.4, 2.6, 0], [5.0, 0.2, 3.0]], ['tetra', 0x5a1008, [3.4, 2.6, 0], [5.0, 0.2, 3.0]],
-      ['cone', 0x2a1a17, [-0.5, 3.8, 2.6], [0.3, 1.0, 0.3], [-0.6, 0, 0]], ['cone', 0x2a1a17, [0.5, 3.8, 2.6], [0.3, 1.0, 0.3], [-0.6, 0, 0]],
-      ['box', 0xff8c3a, [0, 1.3, 0], [1.0, 0.3, 3.6], null, true], ...glowEyes(3.0, 3.6, 0.45, 0.2, 0xffdd33),
-    ],
+    name: 'Gorehorn', title: 'Butcher of the Caldera', hp: 3900, dmg: 34, speed: 5, radius: 2.2, height: 7, ai: 'boss', xp: 200, coins: 200,
+    vox: 'demon', swipeT: 0.8,
+    voxPat: { swipe: { anim: 'cleave' }, charge: { anim: 'walk', speed: 2.4, loop: true }, rain: { anim: 'idle', speed: 2.5, loop: true }, default: { anim: 'cleave' } },
+    patterns: ['swipe', 'charge', 'rain', 'burst', 'swipe'], projColor: 0xff6a22, summon: 'ember_wisp', burnOnHit: true,
+    model: [['box', 0x8a2a10, [0, 3.4, 0], [2.6, 3.6, 1.8]], ['cone', 0xffaa22, [-0.7, 6.2, 0], [0.4, 1.2, 0.4], null, true], ['cone', 0xffaa22, [0.7, 6.2, 0], [0.4, 1.2, 0.4], null, true], ...glowEyes(5.2, 0.9, 0.35, 0.18, 0xffdd33)],
   },
   void_herald: {
     name: 'Void Herald', title: 'Voice of Nothing', hp: 4400, dmg: 36, speed: 5, radius: 2.6, height: 7, ai: 'boss', flying: true, hover: 3, xp: 240, coins: 240,

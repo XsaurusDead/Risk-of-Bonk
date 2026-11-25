@@ -9,7 +9,8 @@ import { skinTexture } from './textures.js';
 import { spawnProjectile, damagePlayer, dealDamage, spawnZone, findTargets } from './combat.js';
 import { particles, ring, telegraph, shake, floatText, gibs } from './fx.js';
 import { addRimLight } from './models.js';
-import { buildEnemyModel, playAnim } from './enemymodels.js';
+import { buildEnemyModel, playAnim, loadEnemyModel } from './enemymodels.js';
+import { buildVoxModel, setVoxAnim, updateVox, hasVoxAnim, voxAnimLength, VOX_FACING, loadVoxModel } from './voxelsprites.js';
 import { dropCoins, dropXp, dropHeal, dropItem, rollItem, rollRarity, dropPowerup, enemyTimeScale } from './pickups.js';
 
 // power-up drop chances per kill (elites x8, champions/bosses always drop one)
@@ -58,9 +59,11 @@ export function spawnEnemy(id, pos, opts = {}) {
 
   // animated GLB model if there is one (and it's loaded), else the procedural model
   const glb = def.glb ? buildEnemyModel(def.glb, def.height) : null;
-  const { geo, glow, roles } = glb ? { geo: null, glow: null, roles: [] } : enemyGeometry(id, def);
   const mat = glb ? glb.mat : MAT.vc.clone();
-  if (def.skin && !glb) {
+  // 2D sprite art rebuilt as an animated voxel model
+  const vox = !glb && def.vox ? buildVoxModel(def.vox, mat) : null;
+  const { geo, glow, roles } = glb || vox ? { geo: null, glow: null, roles: [] } : enemyGeometry(id, def);
+  if (def.skin && !glb && !vox) {
     mat.map = skinTexture(def.skin);
     if (MAT.high) {
       mat.bumpMap = mat.map;
@@ -71,16 +74,16 @@ export function spawnEnemy(id, pos, opts = {}) {
   // rim light makes enemies pop off the background; colour hints at elites/champions
   const rimCol = elite ? elite.color : champ ? 0xffcc55 : opts.boss ? 0xff5577 : 0xfff1dd;
   // textured (GLB) models keep their own look: just a faint rim
-  addRimLight(mat, rimCol, glb ? 0.3 : elite || champ || opts.boss ? 0.9 : 0.45);
+  addRimLight(mat, rimCol, glb ? 0.3 : vox ? (elite || champ ? 0.7 : 0.25) : elite || champ || opts.boss ? 0.9 : 0.45);
   // a little individual variety in tint
-  if (!opts.boss) mat.color.setRGB(0.9 + Math.random() * 0.2, 0.9 + Math.random() * 0.2, 0.9 + Math.random() * 0.2);
+  if (!opts.boss && !vox) mat.color.setRGB(0.9 + Math.random() * 0.2, 0.9 + Math.random() * 0.2, 0.9 + Math.random() * 0.2);
   const group = new THREE.Group();
   // fully-glowing models (e.g. wisps) use their glow geometry as the body
-  const body = glb ? glb.group : new THREE.Mesh(geo || glow, mat);
+  const body = glb ? glb.group : vox ? vox.mesh : new THREE.Mesh(geo || glow, mat);
   body.castShadow = G.quality !== 'low' && (opts.boss || Math.random() < 0.5);
   group.add(body);
   if (glow && geo) group.add(new THREE.Mesh(glow, MAT.glow));
-  if (!geo && !glb) mat.emissiveIntensity = 1;
+  if (!geo && !glb && !vox) mat.emissiveIntensity = 1;
   // animatable rig parts, each hinged at its pivot
   const rig = {};
   for (const r of roles) {
@@ -96,6 +99,7 @@ export function spawnEnemy(id, pos, opts = {}) {
     group.add(node);
     rig[r.role] = node;
   }
+  const bodyParts = [...group.children];
   const scale = (elite && !champ ? 1.5 : elite ? 1.15 : 1) * (champ ? 2.1 : 1) * (opts.boss ? 1 : 0.92 + Math.random() * 0.16);
   group.scale.setScalar(scale);
   group.rotation.order = 'YXZ';
@@ -118,7 +122,7 @@ export function spawnEnemy(id, pos, opts = {}) {
     sq: 0, sqv: 0, tilt: 0, tiltv: 0, walkPh: Math.random() * 6, lastX: pos.x, lastZ: pos.z, bank: 0, pitch: 0,
     jelly: JELLY.has(id) || def.ai === 'hopper', bodyColor: def.model[0][1],
     rig: roles.length ? rig : null, animT: Math.random() * 10, armX: 0, champion: champ, overtime: ot > 1,
-    anim: glb ? glb.anim : null, introT: glb && opts.boss ? 2.4 : 0,
+    anim: glb ? glb.anim : null, introT: glb && opts.boss ? 2.4 : 0, vox: vox ? vox.vox : null, voxMesh: vox ? vox.mesh : null, landT: 0, wasAttacking: false,
     mv: new THREE.Vector3(), wantX: 0, wantZ: 0, breathe: Math.random() * 6,
   };
   if (champ) {
@@ -140,12 +144,45 @@ export function spawnEnemy(id, pos, opts = {}) {
     playAnim(e.anim, 'idle', { fade: 0 }); // never show the rig's T-pose
     e.anim.mixer.update(0);
   }
+  // model still loading (slow connection / very early spawn): swap it in as soon as it's ready
+  e.bodyParts = bodyParts;
+  if ((def.glb && !glb) || (def.vox && !vox)) {
+    (def.glb ? loadEnemyModel(def.glb) : loadVoxModel(def.vox)).then((ok) => {
+      if (ok && !e.dead && G.enemies.includes(e)) swapInModel(e);
+    });
+  }
   group.position.copy(e.pos);
   G.enemies.push(e);
   particles(e.pos, elite ? elite.color : 0x553366, opts.boss ? 50 : 10, opts.boss ? 12 : 4, 0.8, opts.boss ? 0.8 : 0.35);
   // summoning circle so close spawns are readable
   if (!opts.instant) telegraph(e.pos.clone().setY(G.world.heightAt(e.pos.x, e.pos.z)), e.radius * e.scale * 1.8, elite ? elite.color : opts.boss ? 0xff3355 : 0x9a5aff, e.spawnT);
   return e;
+}
+
+/** Replace a fallback (procedural) body with the enemy's real GLB / voxel model. */
+function swapInModel(e) {
+  const def = e.def;
+  const glb = def.glb ? buildEnemyModel(def.glb, def.height) : null;
+  const mat = glb ? glb.mat : MAT.vc.clone();
+  const vox = !glb && def.vox ? buildVoxModel(def.vox, mat) : null;
+  if (!glb && !vox) return;
+  for (const o of e.bodyParts) e.mesh.remove(o);
+  const body = glb ? glb.group : vox.mesh;
+  e.mesh.add(body);
+  e.bodyParts = [body];
+  const rimCol = e.elite ? e.elite.color : e.champion ? 0xffcc55 : e.isBoss ? 0xff5577 : 0xfff1dd;
+  addRimLight(mat, rimCol, glb ? 0.3 : e.elite || e.champion ? 0.7 : 0.25);
+  e.mat.dispose();
+  e.mat = mat;
+  e.rig = null;
+  if (glb) {
+    e.anim = glb.anim;
+    playAnim(e.anim, 'idle', { fade: 0 });
+    e.anim.mixer.update(0);
+  } else {
+    e.vox = vox.vox;
+    e.voxMesh = vox.mesh;
+  }
 }
 
 export function clearEnemies() {
@@ -229,6 +266,17 @@ export function killEnemy(e, o = {}) {
   e.dvel = e.isBoss || o.noReward ? new THREE.Vector3(0, e.isBoss ? 2 : 0, 0) : away.multiplyScalar(7 / heavy).setY((6 + Math.random() * 3) / heavy);
   e.dspin = (e.isBoss ? 0.8 : 5 + Math.random() * 6) * (Math.random() < 0.5 ? -1 : 1);
   e.drot = 0;
+  // models with a death animation play it instead of tumbling
+  if (!o.noReward && e.vox && hasVoxAnim(e.vox, 'death')) {
+    e.deathAnim = true;
+    setVoxAnim(e.vox, 'death', true);
+    e.deathMax = e.deathT = Math.max(e.deathMax, voxAnimLength(e.vox, 'death') + 0.45);
+  } else if (!o.noReward && e.anim?.actions.death) {
+    e.deathAnim = true;
+    playAnim(e.anim, 'death', { once: true, fade: 0.1 });
+    e.deathMax = e.deathT = Math.max(e.deathMax, e.anim.actions.death.getClip().duration + 0.6);
+  }
+  if (e.deathAnim) e.dvel.multiplyScalar(0.3);
   e.flash = 0.15;
   if (!o.noReward) {
     const n = Math.min(16, Math.round(5 + e.radius * e.scale * 3 + (e.isBoss ? 20 : 0)));
@@ -237,37 +285,109 @@ export function killEnemy(e, o = {}) {
   }
 }
 
+/** Wind-up length of the boss patterns that land a hit at a set moment. */
+function patternT(e) {
+  return e.pattern === 'slam' ? e.def.slamT || 1.1 : e.pattern === 'swipe' ? e.def.swipeT || 0.75 : 1;
+}
+
+/** Which clip a boss plays for its current attack (from the model's `patterns` config). */
+function patternAnim(e, cfgs) {
+  const pc = cfgs?.[e.pattern] || cfgs?.default || { anim: 'roar' };
+  if (e.pattern === 'slam' && e.landT > 0 && pc.land) return { st: pc.land, o: { once: true, fade: 0.05 }, pc };
+  const T = patternT(e);
+  const wu = pc.impact != null && !pc.fit ? Math.max(0, T - pc.impact) : pc.windupUntil || 0;
+  if (e.t < wu) return { st: pc.windup || 'idle', o: { timeScale: pc.windupTs || 1.5, fade: 0.12 }, pc, windup: true };
+  return { st: pc.anim, o: { once: !pc.loop, timeScale: pc.fit ? pc.impact / T : pc.ts || 1, fade: 0.1 }, pc };
+}
+
+/** Fraction of a leap slam's wind-up at which the boss leaves the ground. */
+function leapStart(e, T) {
+  const pc = e.anim?.cfg.patterns?.slam;
+  if (pc && pc.impact != null && !pc.fit) return Math.max(0.2, 1 - (pc.impact * 1.1) / T);
+  return e.vox ? 0.25 : 0.3;
+}
+
 /** Skeletal (GLB) animation: pick the clip from what the enemy is doing. */
 function animateModel(e, dt, moved, held) {
-  const a = e.anim;
+  const a = e.anim, cfg = a.cfg;
   if (held) return; // frozen / stunned: keep the pose
   let st, o = {};
   if (e.introT > 0) {
     e.introT -= dt;
     st = 'roar';
     o = { once: true };
-  } else if (e.state === 'attack') {
-    switch (e.pattern) {
-      case 'slam': // leap: the landing (2.2 s into the clip) lines up with the impact
-        st = 'leap';
-        o = { once: true, timeScale: 2.2 / (e.def.slamT || 1.1), fade: 0.1 };
-        break;
-      case 'charge':
-        st = e.t < 0.8 ? 'idle' : 'run';
-        o = { timeScale: e.t < 0.8 ? 2.5 : 1.8, fade: 0.12 };
-        break;
-      default: // roars for rock rain, shockwaves, volleys and summons
-        st = 'roar';
-        o = { once: true, timeScale: 1.1 };
+  } else if (e.state === 'attack' || e.landT > 0) {
+    ({ st, o } = patternAnim(e, cfg.patterns));
+    // a new attack restarts its clip
+    if (e.animSerial !== e.atkSerial) {
+      o.restart = true;
+      e.animSerial = e.atkSerial;
     }
   } else {
     const sp = moved / Math.max(dt, 1e-4);
-    st = sp > 6.5 ? 'run' : sp > 0.4 ? 'walk' : 'idle';
+    st = sp > (cfg.runAbove || 6.5) ? 'run' : sp > 0.4 ? 'walk' : 'idle';
     if (st === 'walk') o.timeScale = Math.max(0.6, sp / 4.5);
     if (st === 'run') o.timeScale = Math.max(0.8, sp / 9);
   }
+  if (e.landT > 0) e.landT -= dt;
   playAnim(a, st, o);
   a.mixer.update(dt);
+}
+
+/**
+ * Sprite-based (voxel) models read best from the front: turn them mostly toward the camera
+ * (keeping a bit of their real heading so their depth shows) and show the mirror side
+ * (the back of the voxel model) when they move the other way across the screen.
+ */
+function faceCamera(e, vx, vz) {
+  const cam = G.camera;
+  if (!cam) return;
+  const toCam = Math.atan2(cam.position.x - e.pos.x, cam.position.z - e.pos.z);
+  const lean = clamp(angleDiff(toCam, e.yaw), -0.5, 0.5);
+  let mirror = e.voxMirror || false;
+  const facing = VOX_FACING[e.def.vox];
+  if (facing) {
+    // screen-right direction for this enemy, from the camera's point of view
+    const rx = Math.cos(toCam), rz = -Math.sin(toCam);
+    const side = vx * rx + vz * rz;
+    if (Math.abs(side) > 0.6) mirror = (side > 0) !== (facing === 'right');
+    e.voxMirror = mirror;
+  }
+  e.voxMesh.rotation.y = angleDiff(e.yaw, toCam + lean * 0.6 + (mirror ? Math.PI : 0));
+}
+
+/** Voxel (sprite) animation: flip through the frames of the current action. */
+function animateVox(e, dt, moved, held) {
+  const v = e.vox;
+  if (held) return;
+  const sp = moved / Math.max(dt, 1e-4);
+  let st, speed = 1;
+  if (e.isBoss && (e.state === 'attack' || e.landT > 0)) {
+    const pc = e.def.voxPat?.[e.pattern] || e.def.voxPat?.default || { anim: 'attack' };
+    st = e.pattern === 'slam' && e.landT > 0 && pc.land ? pc.land : pc.anim;
+    speed = pc.speed || 1;
+    // one-shot attacks are timed so the hit frame lands with the damage
+    if (!pc.loop && hasVoxAnim(v, st) && (e.pattern === 'slam' || e.pattern === 'swipe') && !(e.landT > 0)) {
+      speed = clamp(voxAnimLength(v, st) / (patternT(e) * 1.25), 0.6, 2.2);
+    }
+    if (e.animSerial !== e.atkSerial || (e.landT > 0 && v.name !== st)) {
+      e.animSerial = e.atkSerial;
+      setVoxAnim(v, st, true);
+    }
+  } else {
+    const attacking = e.state === 'windup' || e.state === 'attack' || e.state === 'fuse' || e.state === 'dive';
+    if (attacking && hasVoxAnim(v, 'attack')) {
+      st = 'attack';
+      if (!e.wasAttacking) setVoxAnim(v, 'attack', true);
+    } else {
+      st = sp > 0.4 && hasVoxAnim(v, 'walk') ? 'walk' : 'idle';
+      if (st === 'walk') speed = clamp(sp / Math.max(1, e.speed), 0.5, 1.8);
+    }
+    e.wasAttacking = attacking;
+  }
+  if (e.landT > 0) e.landT -= dt;
+  setVoxAnim(v, st);
+  updateVox(v, e.voxMesh, dt, speed);
 }
 
 /** Procedural limb animation: walk cycles, arm swings & attacks, wing flaps, tails, heads. */
@@ -352,13 +472,22 @@ export function updateEnemies(dt) {
           particles(e.pos, 0xbbaa99, 3, 2, 0.3, 0.25, 8);
         } else dv.set(dv.x * 0.8, 0, dv.z * 0.8);
       }
-      e.drot += e.dspin * dt;
       const m = e.mesh;
       m.position.copy(e.pos);
-      if (e.isBoss) m.position.y -= (1 - e.deathT / e.deathMax) * e.height * 0.5;
-      m.rotation.x = -e.drot;
-      m.rotation.z = e.drot * 0.35;
-      const k = Math.min(1, e.deathT / (e.deathMax * 0.35));
+      let k;
+      if (e.deathAnim) {
+        // the model's own death animation, then a quick shrink
+        if (e.vox) updateVox(e.vox, e.voxMesh, dt);
+        else if (e.anim) e.anim.mixer.update(dt);
+        m.rotation.x = m.rotation.z = 0;
+        k = Math.min(1, e.deathT / 0.3);
+      } else {
+        e.drot += e.dspin * dt;
+        if (e.isBoss) m.position.y -= (1 - e.deathT / e.deathMax) * e.height * 0.5;
+        m.rotation.x = -e.drot;
+        m.rotation.z = e.drot * 0.35;
+        k = Math.min(1, e.deathT / (e.deathMax * 0.35));
+      }
       const pop = e.deathMax - e.deathT < 0.08 ? 1.15 : 1;
       m.scale.setScalar(Math.max(0, e.scale * k * pop));
       e.flash -= dt;
@@ -393,6 +522,7 @@ function updateEnemy(e, dt, p, rdt = dt) {
       playAnim(e.anim, 'crouch'); // rises out of the summoning circle crouched, then roars
       e.anim.mixer.update(dt);
     }
+    if (e.vox) updateVox(e.vox, e.voxMesh, dt);
     return;
   }
   // statuses
@@ -533,6 +663,8 @@ function updateEnemy(e, dt, p, rdt = dt) {
   m.scale.set(e.scale * (1 - sq * 0.45), e.scale * (1 + sq), e.scale * (1 - sq * 0.45));
   if (e.rig) animateRig(e, dt, Math.min(1, moved / Math.max(dt, 1e-4) / 4), frozen || stunned);
   if (e.anim) animateModel(e, dt, moved, frozen || stunned);
+  if (e.vox) animateVox(e, dt, moved, frozen || stunned);
+  if (e.voxMesh) faceCamera(e, vx, vz);
   if (e.flash > 0) e.flash -= dt;
   const em = e.mat.emissive;
   if (e.flash > 0) em.copy(FLASH).multiplyScalar(0.8);
@@ -885,6 +1017,7 @@ function bossAI(e, dt, p, dist, dx, dz) {
     if (e.atkCd <= 0) {
       if (!e.patternQueue.length) e.patternQueue = shuffle([...e.def.patterns]);
       e.pattern = e.patternQueue.pop();
+      e.atkSerial = (e.atkSerial || 0) + 1;
       e.state = 'attack';
       e.t = 0;
       e.aux = 0;
@@ -905,6 +1038,14 @@ function bossAI(e, dt, p, dist, dx, dz) {
 function startPattern(e, p) {
   const def = e.def;
   switch (e.pattern) {
+    case 'swipe': {
+      // a wide claw / cleaver swing in front of the boss
+      const fx = p.pos.x - e.pos.x, fz = p.pos.z - e.pos.z, d = Math.hypot(fx, fz) || 1;
+      e.swipeAt = e.pos.clone().add(_v.set((fx / d) * 4.5, 0, (fz / d) * 4.5));
+      e.swipeAt.y = G.world.heightAt(e.swipeAt.x, e.swipeAt.z);
+      telegraph(e.swipeAt.clone(), 6, 0xff3333, def.swipeT || 0.75);
+      break;
+    }
     case 'slam':
       e.slamR = 10;
       if (def.leapSlam) {
@@ -949,8 +1090,9 @@ function runPattern(e, dt, p, dist) {
     case 'slam': {
       const T = def.slamT || 1.1;
       if (e.leapTo && e.t < T) {
-        // airborne between 30% and 100% of the wind-up: arc over to the target
-        const f = Math.max(0, Math.min(1, (e.t / T - 0.3) / 0.7));
+        // airborne from the model's take-off moment to the end of the wind-up: arc over to the target
+        const t0 = e.leapT0 ??= leapStart(e, T);
+        const f = Math.max(0, Math.min(1, (e.t / T - t0) / (1 - t0)));
         const s = f * f * (3 - 2 * f);
         e.pos.x = e.leapFrom.x + (e.leapTo.x - e.leapFrom.x) * s;
         e.pos.z = e.leapFrom.z + (e.leapTo.z - e.leapFrom.z) * s;
@@ -965,6 +1107,8 @@ function runPattern(e, dt, p, dist) {
           e.pos.z = e.leapTo.z;
           e.leapTo = null;
         }
+        e.leapT0 = null;
+        e.landT = 0.55; // landing animation (e.g. the King Slime's splash)
         ring(e.pos, e.slamR, 0xffaa66, 0.5);
         particles(e.pos, 0x998877, 40, 12, 0.8, 0.7);
         shake(0.6);
@@ -976,6 +1120,24 @@ function runPattern(e, dt, p, dist) {
         return true;
       }
       return false;
+    }
+    case 'swipe': {
+      const T = def.swipeT || 0.75;
+      if (e.t < T * 0.6) facePlayer(e, p, dt);
+      if (e.t >= T && !e.aux2) {
+        e.aux2 = 1;
+        const at = e.swipeAt;
+        particles(at, def.projColor, 26, 10, 0.5, 0.5);
+        ring(at, 6, def.projColor, 0.35);
+        shake(0.35);
+        sfx('swing');
+        sfx('boom', 0.5);
+        if (Math.hypot(p.pos.x - at.x, p.pos.z - at.z) < 6.4 && Math.abs(p.pos.y - at.y) < 3.5) {
+          damagePlayer(e.dmg * 1.3, e, enemyStatus(e));
+          p.knockback(_v.set(p.pos.x - e.pos.x, 0, p.pos.z - e.pos.z).normalize(), 14);
+        }
+      }
+      return e.t > T + 0.35;
     }
     case 'burst': {
       const waves = e.enraged ? 4 : 3;

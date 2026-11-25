@@ -218,13 +218,46 @@ while the loading screen is shown; the original upload stays untouched next to i
 
 ### Boss models
 
-- **Stage 1 boss — Blackhorn of the Shattered Peaks**: the horned demon from `assets/models/Enemies/` (FBX + texture),
-  converted to `assets/models/game/blackhorn.glb` (1.2 MB) with six animations: idle, walk, run, roar, leap and crouch.
-  It rises crouched from the summoning circle, roars, then walks/runs at you. Its attacks are synced to the animations:
-  **leap slam** (jumps onto where you stand, up to 22 m, red circle marks the landing), **horn charge** (run animation),
-  **rock rain** and **shockwave rings** (both with the roar). The boss keeps the old id `stone_colossus`, so saves and
-  achievements carry over. Model loading/animation lives in `js/game/enemymodels.js`; a boss gets one with `glb: '<key>'`
-  in `js/data/enemies.js` (the procedural model stays as a fallback while the file loads).
+| Stage | Boss (id kept for saves) | Source | How it's made |
+|---|---|---|---|
+| 1 Meadows | **Blackhorn** of the Shattered Peaks (`stone_colossus`) | `assets/models/Enemies/Blackhorn…` (FBX) | converted to `assets/models/game/blackhorn.glb`, 6 clips |
+| 2 Dunes | **Cragmaw**, the Crystal-Clawed (`scorpion_king`) | `TopDown_RockBoss_EBrosAssets` (2D sheets) | voxel 3D, idle/walk/stomp/swipe |
+| 3 Peaks | **Ravenhide**, the Frostfang Werewolf (`frost_titan`) | `RAVENHIDE – Retro PSX Werewolf` (GLB) | `assets/models/game/ravenhide.glb`, 12 clips incl. death |
+| 4 Hollow | **King Slime**, Monarch of the Hollow (`spore_mother`) | `KingSlime-CamacebraGames` (2D frames) | voxel 3D, idle/move/attack |
+| 5 Caldera | **Gorehorn**, Butcher of the Caldera (`inferno_drake`) | `boss_demon_slime_FREE_v1.0` (2D sheet) | voxel 3D, idle/walk/cleave/hit/death |
+
+Attacks are synced to the animations: **leap slam** (Blackhorn, Ravenhide, King Slime jump onto where you stand,
+red circle = landing; the King Slime splashes on landing), **swipe** (new: a wide claw/cleaver hit in front, red circle
+— Cragmaw, Ravenhide, Gorehorn), **horn/quadruped charge**, **stomp**, and roars for rock rain, shockwaves and summons.
+Models with a death animation (Ravenhide, Gorehorn, Pumpkin, Cloud, Spirit) play it instead of the tumble.
+Animated models load in the background when a stage starts; if one isn't ready when the enemy spawns, it shows the
+old procedural model for a moment and swaps in the real one as soon as it has loaded.
+
+**Boss health bar:** the *Pixel Health Bar* art (`assets/textures/ui/bossbar_*.png`), drawn at exactly 3× so the pixels
+stay crisp; the red fill is clipped to the remaining health, a pale trail shows recent damage, plus the percentage.
+
+### Sprite enemies (2D → 3D voxels)
+
+`js/game/voxelsprites.js` turns pixel-art sprites into real 3D models at load time: every opaque pixel becomes a voxel
+column whose thickness grows towards the middle of the shape (so they come out rounded, not flat), equal neighbours are
+merged into larger faces, and every animation frame becomes its own small mesh that the game flips through like a
+flipbook (on top of the usual squash, lean and bob). Sprite models turn mostly towards the camera, keep a bit of their
+real heading so their depth shows, and mirror when they walk the other way. Only the used files are shipped
+(`assets/sprites/`); the original uploads stay in `assets/models/Enemies` and `assets/models/Normal enemies`.
+
+New normal enemies:
+
+| Enemy | Art | Type | Stages |
+|---|---|---|---|
+| Pumpkin Creeper | Free Fantasy Enemy Pack 1 – Pumpkin (idle/walk/vine attack/death) | melee | Meadows, Hollow |
+| Storm Cloud | Free Fantasy Enemy Pack 1 – CloudMonster (lightning attack, death) | flying ranged | Meadows, Peaks |
+| Cursed Spirit | Free Fantasy Enemy Pack 1 – CursedSpirit (fireball attack, death; burns) | ranged | Caldera, Void, Throne |
+| Bone Warrior / Frost Skeleton / Shadow Skeleton | Monsters Pack – Skeleton (3 colours) | melee (frost slows) | Dunes / Peaks / Void + Throne |
+| Reef / Cave / Ice Lurker | Monsters Pack – Fish (3 colours) | swooping flyer (ice slows) | Meadows / Hollow / Peaks |
+
+Credits: *King Slime* by Camacebra Games (CC BY 3.0, itch.io/camacebra); *Rock Boss* by EBros Assets; *Demon Slime* boss
+(FREE v1.0); *Free Fantasy Enemy Pack 1*; *Monsters Pack [FREE]*; *RAVENHIDE – Retro PSX Werewolf*; *Pixel Health Bar* —
+see each pack's original page for its licence.
 
 ## Survivors (17)
 

@@ -749,7 +749,9 @@ export const UI = {
   setBoss(e, name) {
     this.boss = e;
     $('#hud-boss').classList.toggle('hidden', !e);
-    if (e) $('#hud-boss-name').textContent = name || `${e.def.name} — ${e.def.title}`;
+    if (e) $('#hud-boss-name').textContent = name || `${e.def.name}${/^of /.test(e.def.title) ? ' ' : ' — '}${e.def.title}`;
+    this.bossTrail = undefined;
+    this.lastBossHp = undefined;
   },
 
   // ------------------------------------------------------------ Moai
@@ -1207,7 +1209,17 @@ export const UI = {
     // boss
     if (this.boss) {
       const e = this.boss;
-      $('#hud-boss-fill').style.width = ((Math.max(0, e.hp) / e.maxHp) * 100).toFixed(1) + '%';
+      // the fill covers pixels 4..124 of the 128px bar art
+      const f = Math.max(0, Math.min(1, e.hp / e.maxHp));
+      const clip = (v) => `inset(0 ${(100 - (4 + v * 120) / 1.28).toFixed(2)}% 0 0)`;
+      if (this.bossTrail === undefined || this.bossTrail < f) this.bossTrail = f;
+      else this.bossTrail = Math.max(f, this.bossTrail - G.dt * 0.25 * (0.3 + (this.bossTrail - f) * 6));
+      const fill = $('#hud-boss-fill');
+      fill.style.clipPath = clip(f);
+      $('#hud-boss-trail').style.clipPath = clip(this.bossTrail);
+      fill.classList.toggle('hit', this.lastBossHp !== undefined && e.hp < this.lastBossHp);
+      this.lastBossHp = e.hp;
+      $('#hud-boss-pct').textContent = Math.ceil(f * 100) + '%';
       if (e.dead) this.setBoss(null);
     }
 

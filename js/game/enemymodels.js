@@ -18,6 +18,30 @@ export const ENEMY_MODELS = {
     url: D + 'blackhorn.glb', height: 6.5,
     anims: { idle: 'idle', walk: 'walk', run: 'run', roar: 'roar', leap: 'leap', crouch: 'crouch' },
     speed: { run: 1.15, walk: 1.1 },
+    // boss pattern -> clip. `impact`: seconds into the clip where the hit lands; `fit` stretches
+    // the clip over the whole wind-up, otherwise it starts so the impact lines up
+    patterns: {
+      slam: { anim: 'leap', impact: 2.2, fit: true },
+      charge: { windup: 'idle', windupTs: 2.5, windupUntil: 0.8, anim: 'run', ts: 1.8, loop: true },
+      default: { anim: 'roar', ts: 1.1 },
+    },
+    runAbove: 6.5,
+  },
+  // RAVENHIDE - Retro PSX Werewolf (assets/models/Enemies)
+  ravenhide: {
+    url: D + 'ravenhide.glb', height: 4.6,
+    anims: {
+      idle: 'idle werewolf', walk: 'walk werewolf', run: 'run cuadruped werewolf.002', roar: 'roar werewolf', leap: 'front attack werewolf.001',
+      slash: 'SLASH attack werewolf.002', death: 'death werewolf.002', hit: 'hit reaction werewolf.001', crouch: 'walk cuadruped werewolf.001',
+    },
+    speed: { run: 1.0, walk: 1.2 },
+    patterns: {
+      slam: { windup: 'roar', windupTs: 1.6, anim: 'leap', impact: 0.45 },
+      swipe: { anim: 'slash', impact: 0.5 },
+      charge: { windup: 'roar', windupTs: 2, windupUntil: 0.8, anim: 'run', ts: 1.5, loop: true },
+      default: { anim: 'roar', ts: 1.1 },
+    },
+    runAbove: 5,
   },
 };
 
@@ -71,8 +95,9 @@ export function buildEnemyModel(key, height) {
   for (const [state, name] of Object.entries(def.anims)) {
     const clip = t.clips.find((c) => c.name === name);
     if (clip) actions[state] = mixer.clipAction(clip);
+    else console.warn('[enemymodels]', key, 'has no clip', name);
   }
-  return { group, mat, anim: { mixer, actions, cur: null, speed: def.speed || {} } };
+  return { group, mat, anim: { mixer, actions, cur: null, speed: def.speed || {}, cfg: def } };
 }
 
 /** Cross-fade to `state` (no-op if it's already playing). `once` plays it a single time. */

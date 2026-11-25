@@ -29,7 +29,7 @@ export const STAGES = [
       { type: 'flower', models: ['Flower_3_Group', 'Flower_4_Group'], count: 140, collide: 0, scale: [0.4, 0.65] },
       { type: 'ruin_pillar', count: 18, collide: 1.0, scale: [0.8, 1.4] },
     ],
-    enemies: { slime: 5, goblin_archer: 3, wisp: 3, stone_golem: 1 },
+    enemies: { slime: 5, goblin_archer: 3, wisp: 3, stone_golem: 1, pumpkin_creeper: 3, reef_lurker: 2, storm_cloud: 2 },
     boss: 'stone_colossus',
   },
   {
@@ -49,7 +49,7 @@ export const STAGES = [
       { type: 'sandstone', count: 40, collide: 1.6, scale: [0.8, 2.2] },
       { type: 'obelisk', count: 10, collide: 1.2, scale: [1, 1.6] },
     ],
-    enemies: { scarab: 5, dune_ram: 2, cactus_spitter: 3, sand_wurm: 2 },
+    enemies: { scarab: 5, dune_ram: 2, cactus_spitter: 3, sand_wurm: 2, bone_warrior: 4 },
     boss: 'scorpion_king',
   },
   {
@@ -66,7 +66,7 @@ export const STAGES = [
       { type: 'ice_spike', count: 50, collide: 0.9, scale: [0.7, 2.0] },
       { type: 'rock', models: ROCKS, count: 35, collide: 1.2, scale: [0.8, 2.0], tint: 0xc8d4e4, tilt: 0.3 },
     ],
-    enemies: { snow_slime: 4, ice_imp: 3, yeti: 1, frost_wisp: 3 },
+    enemies: { snow_slime: 4, ice_imp: 3, yeti: 1, frost_wisp: 3, frost_skeleton: 3, ice_lurker: 2, storm_cloud: 1 },
     boss: 'frost_titan',
     snow: true,
   },
@@ -87,7 +87,7 @@ export const STAGES = [
       { type: 'grass', count: 700, collide: 0, scale: [0.6, 1.3], tint: 0x2a6a5a },
       { type: 'crystal', count: 40, collide: 0.8, scale: [0.6, 1.6], tint: 0x2fffe0 },
     ],
-    enemies: { sporeling: 4, shroom_shaman: 3, cave_bat: 3, glow_beetle: 2 },
+    enemies: { sporeling: 4, shroom_shaman: 3, cave_bat: 3, glow_beetle: 2, pumpkin_creeper: 3, cave_lurker: 2 },
     boss: 'spore_mother',
   },
   {
@@ -105,7 +105,7 @@ export const STAGES = [
       { type: 'rock', models: ROCKS, proc: false, count: 25, collide: 1.2, scale: [0.8, 2.0], tint: 0x5a4848, tilt: 0.4 },
       { type: 'grass', count: 250, collide: 0, scale: [0.5, 0.9], tint: 0x3a2a22 },
     ],
-    enemies: { magma_hound: 4, fire_imp: 3, obsidian_brute: 1, ember_wisp: 3 },
+    enemies: { magma_hound: 4, fire_imp: 3, obsidian_brute: 1, ember_wisp: 3, cursed_spirit: 3 },
     boss: 'inferno_drake',
     embers: true,
   },
@@ -125,7 +125,7 @@ export const STAGES = [
       { type: 'plant', models: ['Plant_1_Big', 'Fern_1'], proc: false, count: 60, collide: 0, scale: [0.4, 0.8], tint: 0xb080ff },
       { type: 'grass', count: 500, collide: 0, scale: [0.6, 1.2], tint: 0x5a2a8a },
     ],
-    enemies: { void_reaver: 3, eye_stalker: 3, null_shade: 3, void_bomber: 3 },
+    enemies: { void_reaver: 3, eye_stalker: 3, null_shade: 3, void_bomber: 3, shadow_skeleton: 3, cursed_spirit: 1 },
     boss: 'void_herald',
   },
   {
@@ -144,7 +144,7 @@ export const STAGES = [
       { type: 'floating_rock', count: 35, collide: 0, scale: [1, 2.6] },
       { type: 'grass', count: 400, collide: 0, scale: [0.5, 1.1], tint: 0xcfc6f0 },
     ],
-    enemies: { void_reaver: 2, obsidian_brute: 1, yeti: 1, eye_stalker: 2, null_shade: 2, magma_hound: 2 },
+    enemies: { void_reaver: 2, obsidian_brute: 1, yeti: 1, eye_stalker: 2, null_shade: 2, magma_hound: 2, shadow_skeleton: 2, cursed_spirit: 1 },
     boss: 'apex_sovereign',
   },
 ];

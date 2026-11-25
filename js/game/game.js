@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { G } from '../core/state.js';
 import { Input } from '../core/input.js';
 import { STAGES } from '../data/stages.js';
-import { BOSSES } from '../data/enemies.js';
+import { BOSSES, ENEMIES } from '../data/enemies.js';
 import { ITEMS } from '../data/items.js';
 import { TOMES, TOME_SLOTS, TOME_MAX, WEAPON_MAX, WEAPON_SLOTS, WEAPON_STATS, PRIMARY_UPS, ROLL_RARITY } from '../data/tomes.js';
 import { WEAPONS, WEAPON_IDS } from '../data/weapons.js';
@@ -21,6 +21,18 @@ import { updateMinions, clearMinions } from './minions.js';
 import { windUniform } from './models.js';
 import { buildCharacter, loadCharModel, hasCharModel } from './charmodels.js';
 import { loadEnemyModel } from './enemymodels.js';
+import { loadVoxModel } from './voxelsprites.js';
+
+/** Start loading every GLB / voxel model this stage can spawn (boss, its minions, the pool). */
+function preloadStageModels(stage) {
+  const ids = Object.keys(stage.enemies || {});
+  const boss = BOSSES[stage.boss];
+  if (boss?.summon) ids.push(boss.summon);
+  for (const def of [boss, ...ids.map((id) => ENEMIES[id])]) {
+    if (def?.glb) loadEnemyModel(def.glb);
+    if (def?.vox) loadVoxModel(def.vox);
+  }
+}
 import { sfx } from '../core/audio.js';
 import { track, trackMax, commitRunBests, persist, selectedCostume } from '../core/save.js';
 import { weightedPick, shuffle, rand } from '../core/util.js';
@@ -369,9 +381,8 @@ export const Game = {
     for (const m of G.minions) m.pos.copy(p.pos);
 
     trackMax('stageReached', run.stageNum + 1);
-    // the stage boss's animated model loads in the background (it's needed minutes later)
-    const bossDef = BOSSES[stage.boss];
-    if (bossDef?.glb) loadEnemyModel(bossDef.glb);
+    // animated / voxel models of this stage's enemies and boss build in the background
+    preloadStageModels(stage);
     G.mode = 'playing';
     if (G.ui) {
       G.ui.onStageStart();
