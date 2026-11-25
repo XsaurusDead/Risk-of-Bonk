@@ -216,6 +216,16 @@ while the loading screen is shown; the original upload stays untouched next to i
 - If a model fails to load, the stage falls back to the built-in procedural decoration.
 - Which models a stage uses lives in the `decor` lists in `js/data/stages.js` (`models: [...]`); the loading and material set-up is in `js/game/assets.js`.
 
+### Boss models
+
+- **Stage 1 boss — Blackhorn of the Shattered Peaks**: the horned demon from `assets/models/Enemies/` (FBX + texture),
+  converted to `assets/models/game/blackhorn.glb` (1.2 MB) with six animations: idle, walk, run, roar, leap and crouch.
+  It rises crouched from the summoning circle, roars, then walks/runs at you. Its attacks are synced to the animations:
+  **leap slam** (jumps onto where you stand, up to 22 m, red circle marks the landing), **horn charge** (run animation),
+  **rock rain** and **shockwave rings** (both with the roar). The boss keeps the old id `stone_colossus`, so saves and
+  achievements carry over. Model loading/animation lives in `js/game/enemymodels.js`; a boss gets one with `glb: '<key>'`
+  in `js/data/enemies.js` (the procedural model stays as a fallback while the file loads).
+
 ## Survivors (17)
 
 The survivor select screen shows one survivor at a time: an animated 3D preview (it shows off its attack every few seconds, drag to rotate), base stats, the passive, auto-attack and all three abilities with cooldowns and keys, its character level and its costumes. Switch with the ‹ › arrows, A/D or the arrow keys, the D-pad, a swipe, or the portrait strip at the top. Q/E or D-pad up/down cycles costumes.

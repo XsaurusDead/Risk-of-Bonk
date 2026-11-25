@@ -9,6 +9,7 @@ import { skinTexture } from './textures.js';
 import { spawnProjectile, damagePlayer, dealDamage, spawnZone, findTargets } from './combat.js';
 import { particles, ring, telegraph, shake, floatText, gibs } from './fx.js';
 import { addRimLight } from './models.js';
+import { buildEnemyModel, playAnim } from './enemymodels.js';
 import { dropCoins, dropXp, dropHeal, dropItem, rollItem, rollRarity, dropPowerup, enemyTimeScale } from './pickups.js';
 
 // power-up drop chances per kill (elites x8, champions/bosses always drop one)
@@ -55,9 +56,11 @@ export function spawnEnemy(id, pos, opts = {}) {
   const warmup = hard || run.stagesCleared || run.loop ? 1 : 0.45 + 0.55 * Math.min(1, run.time / 300);
   const dmgMult = warmup * Math.pow(d, hard ? 0.8 : 0.7) * (1 + run.loop * 0.25) * (elite ? elite.dmgMult : 1) * (champ ? (hard ? 2.4 : 1.8) : 1) * Math.pow(ot, 0.9) * dmgScale;
 
-  const { geo, glow, roles } = enemyGeometry(id, def);
-  const mat = MAT.vc.clone();
-  if (def.skin) {
+  // animated GLB model if there is one (and it's loaded), else the procedural model
+  const glb = def.glb ? buildEnemyModel(def.glb, def.height) : null;
+  const { geo, glow, roles } = glb ? { geo: null, glow: null, roles: [] } : enemyGeometry(id, def);
+  const mat = glb ? glb.mat : MAT.vc.clone();
+  if (def.skin && !glb) {
     mat.map = skinTexture(def.skin);
     if (MAT.high) {
       mat.bumpMap = mat.map;
@@ -67,16 +70,17 @@ export function spawnEnemy(id, pos, opts = {}) {
   }
   // rim light makes enemies pop off the background; colour hints at elites/champions
   const rimCol = elite ? elite.color : champ ? 0xffcc55 : opts.boss ? 0xff5577 : 0xfff1dd;
-  addRimLight(mat, rimCol, elite || champ || opts.boss ? 0.9 : 0.45);
+  // textured (GLB) models keep their own look: just a faint rim
+  addRimLight(mat, rimCol, glb ? 0.3 : elite || champ || opts.boss ? 0.9 : 0.45);
   // a little individual variety in tint
   if (!opts.boss) mat.color.setRGB(0.9 + Math.random() * 0.2, 0.9 + Math.random() * 0.2, 0.9 + Math.random() * 0.2);
   const group = new THREE.Group();
   // fully-glowing models (e.g. wisps) use their glow geometry as the body
-  const body = new THREE.Mesh(geo || glow, mat);
+  const body = glb ? glb.group : new THREE.Mesh(geo || glow, mat);
   body.castShadow = G.quality !== 'low' && (opts.boss || Math.random() < 0.5);
   group.add(body);
   if (glow && geo) group.add(new THREE.Mesh(glow, MAT.glow));
-  if (!geo) mat.emissiveIntensity = 1;
+  if (!geo && !glb) mat.emissiveIntensity = 1;
   // animatable rig parts, each hinged at its pivot
   const rig = {};
   for (const r of roles) {
@@ -114,6 +118,7 @@ export function spawnEnemy(id, pos, opts = {}) {
     sq: 0, sqv: 0, tilt: 0, tiltv: 0, walkPh: Math.random() * 6, lastX: pos.x, lastZ: pos.z, bank: 0, pitch: 0,
     jelly: JELLY.has(id) || def.ai === 'hopper', bodyColor: def.model[0][1],
     rig: roles.length ? rig : null, animT: Math.random() * 10, armX: 0, champion: champ, overtime: ot > 1,
+    anim: glb ? glb.anim : null, introT: glb && opts.boss ? 2.4 : 0,
     mv: new THREE.Vector3(), wantX: 0, wantZ: 0, breathe: Math.random() * 6,
   };
   if (champ) {
@@ -130,6 +135,10 @@ export function spawnEnemy(id, pos, opts = {}) {
   if (opts.boss) {
     e.spawnT = 1.5;
     e.atkCd = 2.5;
+  }
+  if (e.anim) {
+    playAnim(e.anim, 'idle', { fade: 0 }); // never show the rig's T-pose
+    e.anim.mixer.update(0);
   }
   group.position.copy(e.pos);
   G.enemies.push(e);
@@ -226,6 +235,39 @@ export function killEnemy(e, o = {}) {
     gibs(e.pos, e.bodyColor, n, e.isBoss ? 12 : 7, Math.min(0.7, 0.22 + e.radius * 0.12));
     if (e.jelly) particles(_v.copy(e.pos).setY(e.pos.y + 0.4), e.bodyColor, 12, 6, 0.7, 0.3, 20);
   }
+}
+
+/** Skeletal (GLB) animation: pick the clip from what the enemy is doing. */
+function animateModel(e, dt, moved, held) {
+  const a = e.anim;
+  if (held) return; // frozen / stunned: keep the pose
+  let st, o = {};
+  if (e.introT > 0) {
+    e.introT -= dt;
+    st = 'roar';
+    o = { once: true };
+  } else if (e.state === 'attack') {
+    switch (e.pattern) {
+      case 'slam': // leap: the landing (2.2 s into the clip) lines up with the impact
+        st = 'leap';
+        o = { once: true, timeScale: 2.2 / (e.def.slamT || 1.1), fade: 0.1 };
+        break;
+      case 'charge':
+        st = e.t < 0.8 ? 'idle' : 'run';
+        o = { timeScale: e.t < 0.8 ? 2.5 : 1.8, fade: 0.12 };
+        break;
+      default: // roars for rock rain, shockwaves, volleys and summons
+        st = 'roar';
+        o = { once: true, timeScale: 1.1 };
+    }
+  } else {
+    const sp = moved / Math.max(dt, 1e-4);
+    st = sp > 6.5 ? 'run' : sp > 0.4 ? 'walk' : 'idle';
+    if (st === 'walk') o.timeScale = Math.max(0.6, sp / 4.5);
+    if (st === 'run') o.timeScale = Math.max(0.8, sp / 9);
+  }
+  playAnim(a, st, o);
+  a.mixer.update(dt);
 }
 
 /** Procedural limb animation: walk cycles, arm swings & attacks, wing flaps, tails, heads. */
@@ -347,6 +389,10 @@ function updateEnemy(e, dt, p, rdt = dt) {
     e.mesh.position.set(e.pos.x, e.pos.y - (1 - k) * e.height * e.scale, e.pos.z);
     e.mesh.scale.setScalar(e.scale * (0.3 + 0.7 * k));
     if (e.isBoss && Math.random() < 0.5) particles(e.pos, 0xff3355, 2, 8, 0.6, 0.6);
+    if (e.anim) {
+      playAnim(e.anim, 'crouch'); // rises out of the summoning circle crouched, then roars
+      e.anim.mixer.update(dt);
+    }
     return;
   }
   // statuses
@@ -474,7 +520,7 @@ function updateEnemy(e, dt, p, rdt = dt) {
     const amt = Math.min(1, moved / Math.max(dt, 1e-4) / 4);
     m.position.y += Math.abs(Math.sin(e.walkPh)) * 0.14 * e.scale * amt;
     roll = Math.sin(e.walkPh) * 0.07 * amt;
-  } else if (e.isBoss && moved > 0.001) {
+  } else if (e.isBoss && moved > 0.001 && !e.anim) {
     e.walkPh += moved * 0.7;
     roll = Math.sin(e.walkPh) * 0.04;
   } else e.walkPh += moved * 1.5;
@@ -486,6 +532,7 @@ function updateEnemy(e, dt, p, rdt = dt) {
   sq += Math.sin(e.breathe) * 0.018;
   m.scale.set(e.scale * (1 - sq * 0.45), e.scale * (1 + sq), e.scale * (1 - sq * 0.45));
   if (e.rig) animateRig(e, dt, Math.min(1, moved / Math.max(dt, 1e-4) / 4), frozen || stunned);
+  if (e.anim) animateModel(e, dt, moved, frozen || stunned);
   if (e.flash > 0) e.flash -= dt;
   const em = e.mat.emissive;
   if (e.flash > 0) em.copy(FLASH).multiplyScalar(0.8);
@@ -827,6 +874,10 @@ function bossAI(e, dt, p, dist, dx, dz) {
     e.patternQueue = ['summon'];
   }
   const cdMult = e.phase3 ? 0.45 : e.enraged ? 0.65 : 1;
+  if (e.introT > 0) {
+    facePlayer(e, p, dt);
+    return;
+  }
   if (e.state === 'chase') {
     const want = e.flying ? 14 : 7;
     if (dist > want) moveToward(e, p.pos.x, p.pos.z, dt);
@@ -856,7 +907,19 @@ function startPattern(e, p) {
   switch (e.pattern) {
     case 'slam':
       e.slamR = 10;
-      telegraph(e.pos.clone(), e.slamR, 0xff3333, 1.1);
+      if (def.leapSlam) {
+        // leap onto the player's position (at most 22 m away)
+        e.leapFrom = e.pos.clone();
+        const to = _v.set(p.pos.x - e.pos.x, 0, p.pos.z - e.pos.z);
+        const d = to.length();
+        if (d > 22) to.multiplyScalar(22 / d);
+        e.leapTo = e.pos.clone().add(to);
+        G.world.clampBounds(e.leapTo);
+        e.leapTo.y = G.world.heightAt(e.leapTo.x, e.leapTo.z);
+        e.slamR = 8;
+        telegraph(e.leapTo.clone(), e.slamR, 0xff3333, def.slamT || 1.1);
+        sfx('roar', 0.5);
+      } else telegraph(e.pos.clone(), e.slamR, 0xff3333, def.slamT || 1.1);
       break;
     case 'charge':
       e.auxDir.set(p.pos.x - e.pos.x, 0, p.pos.z - e.pos.z).normalize();
@@ -883,8 +946,25 @@ function startPattern(e, p) {
 function runPattern(e, dt, p, dist) {
   const def = e.def;
   switch (e.pattern) {
-    case 'slam':
-      if (e.t >= 1.1) {
+    case 'slam': {
+      const T = def.slamT || 1.1;
+      if (e.leapTo && e.t < T) {
+        // airborne between 30% and 100% of the wind-up: arc over to the target
+        const f = Math.max(0, Math.min(1, (e.t / T - 0.3) / 0.7));
+        const s = f * f * (3 - 2 * f);
+        e.pos.x = e.leapFrom.x + (e.leapTo.x - e.leapFrom.x) * s;
+        e.pos.z = e.leapFrom.z + (e.leapTo.z - e.leapFrom.z) * s;
+        const gy = G.world.heightAt(e.pos.x, e.pos.z);
+        e.pos.y = Math.max(gy, e.leapFrom.y + (e.leapTo.y - e.leapFrom.y) * s + Math.sin(Math.PI * f) * 7);
+        e.vy = 0;
+        faceDir(e, e.leapTo.x - e.leapFrom.x, e.leapTo.z - e.leapFrom.z, dt, 10);
+      }
+      if (e.t >= T) {
+        if (e.leapTo) {
+          e.pos.x = e.leapTo.x;
+          e.pos.z = e.leapTo.z;
+          e.leapTo = null;
+        }
         ring(e.pos, e.slamR, 0xffaa66, 0.5);
         particles(e.pos, 0x998877, 40, 12, 0.8, 0.7);
         shake(0.6);
@@ -896,6 +976,7 @@ function runPattern(e, dt, p, dist) {
         return true;
       }
       return false;
+    }
     case 'burst': {
       const waves = e.enraged ? 4 : 3;
       e.aux -= dt;

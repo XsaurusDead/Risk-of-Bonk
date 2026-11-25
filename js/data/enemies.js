@@ -209,9 +209,12 @@ export const ENEMIES = {
 // ================= BOSSES =================
 // patterns: slam | burst | volley | summon | charge | rain | spin
 export const BOSSES = {
+  // Stage 1 boss: animated model (assets/models/game/blackhorn.glb). The id stays
+  // 'stone_colossus' so saves and achievements keep working; `model` is the fallback.
   stone_colossus: {
-    name: 'Stone Colossus', title: 'Warden of the Meadow', hp: 2600, dmg: 26, speed: 4.2, radius: 2.6, height: 6.5, ai: 'boss', xp: 120, coins: 120,
-    patterns: ['slam', 'volley', 'charge', 'rain'], projColor: 0x7cff9a, summon: 'stone_golem',
+    name: 'Blackhorn', title: 'of the Shattered Peaks', hp: 2600, dmg: 26, speed: 5.2, radius: 2.2, height: 6.5, ai: 'boss', xp: 120, coins: 120,
+    glb: 'blackhorn', slamT: 1.6, leapSlam: true,
+    patterns: ['slam', 'charge', 'rain', 'burst'], projColor: 0xff7a3a, summon: 'stone_golem',
     model: [
       ['box', 0x8b8f96, [0, 3.4, 0], [3.6, 3.0, 2.4]], ['box', 0x7a7e85, [0, 5.6, 0.2], [2.0, 1.5, 1.8]],
       ['box', 0x6e7279, [-2.4, 3.2, 0], [1.2, 3.6, 1.2]], ['box', 0x6e7279, [2.4, 3.2, 0], [1.2, 3.6, 1.2]],

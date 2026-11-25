@@ -20,6 +20,7 @@ import { initPickups, updatePickups, clearPickups, dropItem, rollRarity, rollIte
 import { updateMinions, clearMinions } from './minions.js';
 import { windUniform } from './models.js';
 import { buildCharacter, loadCharModel, hasCharModel } from './charmodels.js';
+import { loadEnemyModel } from './enemymodels.js';
 import { sfx } from '../core/audio.js';
 import { track, trackMax, commitRunBests, persist, selectedCostume } from '../core/save.js';
 import { weightedPick, shuffle, rand } from '../core/util.js';
@@ -368,6 +369,9 @@ export const Game = {
     for (const m of G.minions) m.pos.copy(p.pos);
 
     trackMax('stageReached', run.stageNum + 1);
+    // the stage boss's animated model loads in the background (it's needed minutes later)
+    const bossDef = BOSSES[stage.boss];
+    if (bossDef?.glb) loadEnemyModel(bossDef.glb);
     G.mode = 'playing';
     if (G.ui) {
       G.ui.onStageStart();

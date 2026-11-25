@@ -90,7 +90,7 @@ export async function preloadCharacterModels() {
 export const hasCharModel = (id) => !!templates[id];
 
 /** Bounding box of the (skinned) vertices with `clip` applied at its first frame. */
-function posedBox(obj, clip) {
+export function posedBox(obj, clip) {
   let mixer = null;
   if (clip) {
     mixer = new THREE.AnimationMixer(obj);
