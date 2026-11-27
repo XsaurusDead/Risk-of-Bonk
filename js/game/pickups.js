@@ -112,6 +112,11 @@ export function activatePower(type, dur) {
   if (!run) return;
   run.powers ||= {};
   run.powers[type] = Math.max(run.powers[type] || 0, dur ?? POWERUPS[type].dur);
+  // magnet (pickup or statue): every coin and XP orb on the whole map starts flying at you now
+  if (type === 'magnet') for (const kind of ['coin', 'xp']) for (const c of list[kind]) {
+    c.magnet = true;
+    c.age = Math.max(c.age, 0.5);
+  }
   const P = POWERUPS[type];
   sfx(type === 'slowmo' ? 'freeze' : 'item');
   if (G.player) {
@@ -282,13 +287,15 @@ export function updatePickups(dt) {
       const dx = px - c.x, dy = py - c.y, dz = pz - c.z;
       const d2 = dx * dx + dy * dy + dz * dz;
       const r = kind === 'heal' ? Math.min(range, 6) : range;
-      if (!c.magnet && c.age > 0.35 && !p.dead && (d2 < r * r || (globalMagnet && kind !== 'heal'))) {
+      // map-wide magnet: no pickup delay, everything (also fresh drops) is pulled in
+      if (!c.magnet && !p.dead && ((c.age > 0.35 && d2 < r * r) || (globalMagnet && kind !== 'heal' && c.age > 0.1))) {
         c.magnet = true;
         c.age = Math.min(c.age, 1);
       }
       if (c.magnet) {
         const d = Math.sqrt(d2) || 1;
-        const sp = 18 + c.age * 6 + (globalMagnet ? d * 1.2 : 0);
+        // far orbs fly much faster so the whole map arrives within ~1-1.5 s
+        const sp = 18 + c.age * 6 + (globalMagnet || d > 30 ? d * 2.6 : 0);
         c.x += (dx / d) * sp * dt;
         c.y += (dy / d) * sp * dt;
         c.z += (dz / d) * sp * dt;

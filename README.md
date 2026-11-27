@@ -56,8 +56,8 @@ GitHub Pages: the included workflow (`.github/workflows/pages.yml`) deploys auto
 - **Shrines:** Healing (1-2, heals 50% HP), Combat (1-3, summons challengers and pays out an item), Mountain/Boss (1-3, doubles → quadruples → octuples the portal boss, each boss drops loot), Wisdom (2-5, random XP based on your level).
 - **Moai statues (3-7):** pick 1 of 3 random items, or take a **Devil's Trademark** (a special currency, shown next to your coins; its use comes later).
 - **Bunny hopping:** jump again right as you land (or press jump just before touching down) to keep your momentum and gain +12% speed per perfect hop, up to +90%. Stop hopping and it decays.
-- **Magnet statues (0-3):** activate one and every coin and XP orb on the whole map flies to you for 20 seconds.
-- **Power-ups (rare enemy drops, elites ×8, bosses always):** **Magnet** — 15 s of pulling all gold and XP from the entire map;
+- **Magnet statues (0-3):** activate one and every coin and XP orb on the whole map flies to you (all of it arrives within ~1.5 s), and new drops keep coming for 20 seconds.
+- **Power-ups (rare enemy drops: 0.3% Magnet / 0.2% Time Warp per kill, elites ×5, mini-bosses 50%, bosses always):** **Magnet** — 15 s of pulling all gold and XP from the entire map (everything on the map starts flying at you the moment you pick it up and arrives within ~1.5 s);
   **Time Warp** — 15 s of slow motion for enemies, their shots and their attacks (35% speed). The stage clock, spawns, you and your
   burns/poisons keep running at full speed. Active power-ups show as chips with a countdown under the objective.
 - **Minimap:** top right, rotates with your camera and shows the portal, all chests by tier, shrines, Moai, jump pads and caves (no enemies). Click it or press **M** for the full map.

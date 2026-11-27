@@ -14,7 +14,7 @@ import { buildVoxModel, setVoxAnim, updateVox, hasVoxAnim, voxAnimLength, VOX_FA
 import { dropCoins, dropXp, dropHeal, dropItem, rollItem, rollRarity, dropPowerup, enemyTimeScale } from './pickups.js';
 
 // power-up drop chances per kill (elites x8, champions/bosses always drop one)
-const POWERUP_DROP = { magnet: 0.006, slowmo: 0.004 };
+const POWERUP_DROP = { magnet: 0.003, slowmo: 0.002 };
 export const COIN_DROP_CHANCE = 0.25;
 import { attachGlyph } from './glyphs.js';
 
@@ -241,8 +241,9 @@ export function killEnemy(e, o = {}) {
       if (!e.isBoss && !e.champion) eliteLoot(e);
     }
     // power-ups
-    const up = e.isBoss || e.champion ? 1 : e.elite ? 8 : 1;
-    if (e.isBoss || e.champion) dropPowerup(e.pos.clone().setY(e.pos.y + 1.5), Math.random() < 0.6 ? 'magnet' : 'slowmo');
+    // (rare: 0.3% magnet / 0.2% time warp per kill, elites x5; bosses always, mini-bosses half the time)
+    const up = e.isBoss || e.champion ? 1 : e.elite ? 5 : 1;
+    if (e.isBoss || (e.champion && Math.random() < 0.5)) dropPowerup(e.pos.clone().setY(e.pos.y + 1.5), Math.random() < 0.6 ? 'magnet' : 'slowmo');
     else if (Math.random() < POWERUP_DROP.magnet * up) dropPowerup(e.pos.clone().setY(e.pos.y + 1.2), 'magnet');
     else if (Math.random() < POWERUP_DROP.slowmo * up) dropPowerup(e.pos.clone().setY(e.pos.y + 1.2), 'slowmo');
     if (p && !p.dead) {
