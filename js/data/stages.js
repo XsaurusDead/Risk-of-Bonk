@@ -148,3 +148,19 @@ export const STAGES = [
     boss: 'apex_sovereign',
   },
 ];
+
+
+// The Red Market: reached through the red portal (costs a Devil's Trademark). Time stands
+// still, nothing spawns; buy items, then walk through its portal into the next stage.
+export const SHOP_STAGE = {
+  id: 'shop', name: 'The Red Market', subtitle: 'Time stands still. Spend wisely.', shop: true,
+  sky: 0x3a0a18, fog: 0x2a0812, fogFar: 95,
+  sun: 0xffb0a0, sunInt: 1.4, hemiSky: 0xff8a8a, hemiGround: 0x2a0a10, hemiInt: 1.0,
+  ground: { low: 0x3a2228, mid: 0x4a2a30, high: 0x5a3238, slope: 0x3a1a20, peak: 0x5a2a30 },
+  terrain: { amp: 0.4, freq: 0.02, octaves: 2, ridge: 0, edge: 0, bowl: true },
+  structures: { ruins: [0, 0], caves: [0, 0] },
+  decor: [],
+  enemies: {},
+  boss: null,
+  ruinTint: 0x6a4048,
+};

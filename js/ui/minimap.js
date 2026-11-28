@@ -15,6 +15,8 @@ const MARK = {
   combat: { icon: '⚔️', col: '#ff4433', label: 'Combat shrine' },
   boss: { icon: '💀', col: '#b455ff', label: 'Boss shrine' },
   pillar: { icon: '🗼', col: '#ffd060', label: 'Charge pillar' },
+  redportal: { icon: '🔴', col: '#ff3b4f', label: 'Red portal (Red Market)' },
+  shop: { icon: '🛒', col: '#ff8866', label: 'Merchant' },
   moai: { icon: '🗿', col: '#ff8070', label: 'Moai' },
   magnet: { icon: '🧲', col: '#ff5566', label: 'Magnet statue' },
   portal: { icon: '🌀', col: '#ff3355', label: 'Portal' },

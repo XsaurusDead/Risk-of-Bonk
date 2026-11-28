@@ -5,6 +5,8 @@
 //             may only reference a character that is unlocked EARLIER in the
 //             graph (checked by validateUnlockGraph in save.js), so the chain
 //             can never deadlock.
+import { MYTHIC_UNLOCKS } from './mythics.js';
+
 export const DEFAULT_CHARACTERS = ['vanguard', 'bonker'];
 
 // Hand-written core achievements (ids are stable; saves reference them).
@@ -20,6 +22,8 @@ export const ACHIEVEMENTS = [
   { id: 'into_the_void', name: 'Into the Void', desc: 'Reach stage 6 (Void Sanctum).', cond: { scope: 'run', stat: 'stageReached', value: 6 }, reward: { character: 'nyx' } },
 
   // ---------- Generic item unlocks ----------
+  // ---------- Mythic items (Red Market only) ----------
+  ...MYTHIC_UNLOCKS.map(([id, name, desc, cond, item]) => ({ id, name, desc, cond, reward: { item } })),
   { id: 'chaos_seeker', name: 'Chaos Seeker', desc: 'Defeat 2 stage bosses (all runs).', cond: { scope: 'life', stat: 'bossKills', value: 2 }, reward: { tome: 'chaos' } },
   { id: 'big_spender', name: 'Big Spender', desc: 'Spend 5000 coins on chests (all runs).', cond: { scope: 'life', stat: 'coinsSpent', value: 5000 }, reward: { item: 'piggy_bank' } },
   { id: 'treasure_hunter', name: 'Treasure Hunter', desc: 'Open 60 chests (all runs).', cond: { scope: 'life', stat: 'chests', value: 60 }, reward: { item: 'golden_idol' } },
@@ -43,7 +47,7 @@ export const ACHIEVEMENTS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Generated achievements (405 in total, incl. the hand-written ones).
+// Generated achievements (425 in total, incl. the hand-written ones).
 //
 // Rewards for the expansion content are handed out here. Every reward is
 // placed on an achievement that can be completed with content unlocked earlier
@@ -51,7 +55,7 @@ export const ACHIEVEMENTS = [
 // survivor), and validateUnlockGraph() in save.js re-checks the whole chain at
 // boot, so the save can never get stuck.
 // ---------------------------------------------------------------------------
-export const TOTAL_ACHIEVEMENTS = 405;
+export const TOTAL_ACHIEVEMENTS = 425;
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
 const fmtN = (v) => v.toLocaleString('en-US');
 const LABEL = {

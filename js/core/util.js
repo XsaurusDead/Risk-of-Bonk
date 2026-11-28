@@ -155,5 +155,7 @@ export const RARITY = {
   rare: { name: 'Rare', color: '#4fb3ff', hex: 0x4fb3ff, order: 1 },
   epic: { name: 'Epic', color: '#c461ff', hex: 0xc461ff, order: 2 },
   legendary: { name: 'Legendary', color: '#ffb22e', hex: 0xffb22e, order: 3 },
+  // shop-only (Red Market); never rolled by chests (not in RARITY_ORDER)
+  mythic: { name: 'Mythic', color: '#ff3b4f', hex: 0xff3b4f, order: 4 },
 };
 export const RARITY_ORDER = ['common', 'rare', 'epic', 'legendary'];

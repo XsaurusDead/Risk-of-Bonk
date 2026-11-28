@@ -18,6 +18,7 @@ import { beam, ring, particles } from '../game/fx.js';
 import { sfx } from '../core/audio.js';
 import * as THREE from 'three';
 import { EXT_ITEMS } from './items_ext.js';
+import { MYTHIC_ITEMS } from './mythics.js';
 import { applyModsObj } from './modutil.js';
 
 const hyper = (x, n) => 1 - 1 / (1 + x * n); // hyperbolic stacking (never reaches 100%)
@@ -217,6 +218,7 @@ const list = [
 ];
 
 list.push(...EXT_ITEMS);
+list.push(...MYTHIC_ITEMS); // shop-only (rarity 'mythic' is never rolled by chests)
 export const ITEMS = {};
 for (const it of list) {
   if (it.statMods && !it.mods) {

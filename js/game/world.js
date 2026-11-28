@@ -44,10 +44,11 @@ function desertVariant(mat) {
 const SWAY = { grass: 0.32, dry_grass: 0.32, flower: 0.25, tree: 0.0035, pine: 0.003, dead_tree: 0.004, giant_mushroom: 0.002, glow_shroom: 0.08, cactus: 0.0008 };
 
 // how many of each interactable a stage rolls (min..max)
-const COUNTS = { chest: [15, 20], heal: [1, 2], combat: [1, 3], boss: [1, 3], pillar: [2, 4], moai: [3, 7], magnet: [0, 3] };
+const COUNTS = { chest: [15, 20], heal: [1, 2], combat: [1, 3], boss: [1, 3], pillar: [11, 15], moai: [3, 7], magnet: [0, 3] };
 /** Charge pillars: radius of the zone you stand in, and seconds of standing to fill it. */
 export const PILLAR_RADIUS = 9;
 export const PILLAR_TIME = 18;
+export const GOLDEN_PILLAR_CHANCE = 0.02;
 // chest tier odds
 const CHEST_TIERS = { normal: 82, large: 13, epic: 4, legendary: 1 };
 
@@ -81,12 +82,17 @@ export class World {
     this.rng = mulberry32(seed);
     this.liquidLevel = stage.liquid ? stage.liquid.level : -999;
     this.t = 0;
+    if (stage.shop) {
+      this.buildShopWorld();
+      return;
+    }
     this.buildHeights();
     this.buildTerrain();
     this.buildLiquid();
     this.placePortal();
     this.flatten(0, 0, 12);
     this.flatten(this.portalPos.x, this.portalPos.z, 12);
+    this.flatten(this.portalPos.x + (this.portalPos.x > 0 ? -10 : 10), this.portalPos.z, 6, this.heightAt(this.portalPos.x, this.portalPos.z));
     this.planStructures();
     this.rebuildTerrainGeometry();
     this.buildStructures();
@@ -114,6 +120,11 @@ export class World {
       const sharp = lerp(0.04, 0.42, smoothstep(0.45, 0.8, ramp));
       const step = f + smoothstep(0.5 - sharp, 0.5 + sharp, fr);
       h += (step - T.levels * 0.45) * T.height;
+    }
+    if (s.bowl) {
+      // the Red Market sits in a crater: flat plaza, rising rim
+      const r = Math.hypot(x, z);
+      return h + smoothstep(30, 46, r) * 26;
     }
     // edge mountains form the arena wall
     const d = Math.max(Math.abs(x), Math.abs(z));
@@ -303,6 +314,8 @@ export class World {
 
   occupied() {
     const list = [{ x: 0, z: 0, r: 14 }, { x: this.portalPos.x, z: this.portalPos.z, r: 14 }];
+    // room for the red portal beside it (see buildRedPortal)
+    list.push({ x: this.portalPos.x + (this.portalPos.x > 0 ? -10 : 10), z: this.portalPos.z, r: 7 });
     for (const s of this.structures) list.push({ x: s.x, z: s.z, r: s.r });
     for (const it of this.interactables) list.push({ x: it.pos.x, z: it.pos.z, r: 4 });
     return list;
@@ -693,11 +706,14 @@ export class World {
       else if (kind === 'moai') built = buildMoai();
       else if (kind === 'magnet') built = buildMagnetStatue();
       else if (kind === 'pillar') {
-        built = buildPillar();
+        // 2% are golden: their upgrade choice is all legendary
+        const golden = this.rng() < GOLDEN_PILLAR_CHANCE;
+        built = buildPillar(golden);
+        built.golden = golden;
         built.zone.scale.setScalar(PILLAR_RADIUS);
       }
       else built = buildShrine(kind);
-      if (kind !== 'chest') stoneify(built.group, rockTexFor(this.stage.id));
+      if (kind !== 'chest' && !built.golden) stoneify(built.group, rockTexFor(this.stage.id));
       built.group.position.copy(pos);
       built.group.rotation.y = this.rng() * Math.PI * 2;
       this.group.add(built.group);
@@ -929,6 +945,117 @@ export class World {
       this.portal.glyphs.push(attachGlyph(holder, 'B', 24, 3.2, 0));
     }
     this.portal.glyphState = 'idle';
+    if (!this.stage.shop && !this.stage.final) this.buildRedPortal();
+  }
+
+  /** The red portal beside the stage portal: to the Red Market (needs a Devil's Trademark). */
+  buildRedPortal() {
+    // side by side in the stage portal's plane, on the side facing the map centre
+    const side = this.portalPos.x > 0 ? -1 : 1;
+    const x = this.portalPos.x + side * 10, z = this.portalPos.z;
+    const pos = new THREE.Vector3(x, this.heightAt(x, z), z);
+    const p = buildPortal();
+    stoneify(p.group, rockTexFor(this.stage.id));
+    p.group.traverse((o) => {
+      if (!o.isMesh || !o.material || o.material.map) return;
+      const c = o.material.color;
+      if (!c) return;
+      // everything that glows turns blood red
+      const hsl = {};
+      c.getHSL(hsl);
+      if (hsl.s > 0.35 || o.material.isMeshBasicMaterial) {
+        o.material = o.material.clone();
+        o.material.color.setRGB(1, 0.12, 0.2).multiplyScalar(o.material.isMeshBasicMaterial ? 2 : 1);
+      }
+    });
+    if (p.core) {
+      p.core.material = p.core.material.clone();
+      p.core.material.color.setRGB(0.85, 0.02, 0.08);
+      p.core.material.opacity = 0.85;
+    }
+    p.group.position.copy(pos);
+    p.group.scale.setScalar(0.85);
+    p.group.visible = false;
+    this.group.add(p.group);
+    const it = { kind: 'redportal', pos, used: true, group: p.group, core: p.core };
+    this.redPortal = it;
+    this.interactables.push(it);
+  }
+
+  /** The Red Market map: a plaza in a crater with the merchant's stall and an exit portal. */
+  buildShopWorld() {
+    this.buildHeights();
+    this.buildTerrain();
+    this.half = 34;
+    this.portalPos = new THREE.Vector3(0, 0, 21);
+    this.rebuildTerrainGeometry();
+    this.portalPos.y = this.heightAt(0, 21);
+    const y0 = this.heightAt(0, 0);
+    this.stoneMat = MAT.stone;
+    const parts = [];
+    // plaza: a round slab with a red inlay ring
+    parts.push(['cyl', 0x4a3438, [0, 0.2, 0], [50, 0.4, 50]], ['cyl', 0x7a1a26, [0, 0.42, 0], [20, 0.05, 20]], ['cyl', 0x4a3438, [0, 0.45, 0], [17, 0.05, 17]]);
+    // a ring of broken columns around the plaza
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      if (Math.abs(Math.cos(a)) < 0.3 && Math.sin(a) > 0) continue; // the way to the exit portal
+      const h = 3 + (i % 3) * 1.6;
+      parts.push(['cyl', 0x5a4448, [Math.cos(a) * 25, h / 2, Math.sin(a) * 25], [1.3, h, 1.3]]);
+      this.addCollider(Math.cos(a) * 25, Math.sin(a) * 25, 0.8, y0 - 1, y0 + h, true);
+    }
+    // the stall: counter, back shelves, posts and a striped awning
+    parts.push(['box', 0x5a3a24, [0, 0.95, -10], [9, 1.5, 1.8]], ['box', 0x7a5232, [0, 1.75, -10], [9.4, 0.15, 2.1]]);
+    parts.push(['box', 0x4a2e1c, [0, 2.2, -12.6], [9, 4, 0.6]]);
+    for (let k = 0; k < 3; k++) parts.push(['box', 0x6a4428, [0, 1.2 + k * 1.1, -12.1], [8.4, 0.12, 0.8]]);
+    for (const x of [-4.4, 4.4]) parts.push(['box', 0x4a2e1c, [x, 2.6, -9.2], [0.3, 5.2, 0.3]]);
+    for (let k = 0; k < 7; k++) parts.push(['box', k % 2 ? 0x1a1014 : 0xb01828, [-4.5 + k * 1.5 + 0.75, 5.35, -10.7], [1.5, 0.15, 3.6], [0.25, 0, 0]]);
+    // the merchant: a hooded figure behind the counter
+    parts.push(['cone', 0x2a1018, [0, 1.9, -11.3], [1.6, 3.2, 1.6]], ['sphere', 0x1a0a10, [0, 3.7, -11.3], [1.0, 1.1, 1.0]], ['cone', 0x3a1420, [0, 4.4, -11.3], [1.2, 1.4, 1.2]]);
+    parts.push(['sphere', 0xff3344, [-0.22, 3.75, -10.85], [0.16, 0.12, 0.1], null, true], ['sphere', 0xff3344, [0.22, 3.75, -10.85], [0.16, 0.12, 0.1], null, true]);
+    this.addCollider(0, -10, 4.6, y0 - 1, y0 + 1.7, true);
+    this.addCollider(-2.3, -10, 2.4, y0 - 1, y0 + 1.7, true);
+    this.addCollider(2.3, -10, 2.4, y0 - 1, y0 + 1.7, true);
+    // pedestals: 10 wares in an arc, 5 mythics in front (their crystals take the item's colour)
+    this.shopPedestals = [];
+    const ped = (x, z, mythic) => {
+      parts.push(['cyl', mythic ? 0x5a1a24 : 0x5a4448, [x, 0.6, z], [1.2, 1.2, 1.2]], ['cyl', 0x3a2a2e, [x, 1.25, z], [1.5, 0.15, 1.5]]);
+      this.addCollider(x, z, 0.7, y0 - 1, y0 + 1.3, true);
+      const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.42), new THREE.MeshBasicMaterial({ color: mythic ? 0xff3b4f : 0xcccccc }));
+      c.position.set(x, y0 + 2.1, z);
+      this.group.add(c);
+      this.disposables.push(c.geometry, c.material);
+      this.shopPedestals.push({ mesh: c, mythic, baseY: c.position.y });
+    };
+    for (let i = 0; i < 10; i++) {
+      const a = Math.PI + 0.35 + (i / 9) * (Math.PI - 0.7);
+      ped(Math.cos(a) * 13, Math.sin(a) * 9 - 4, false);
+    }
+    for (let i = 0; i < 5; i++) ped((i - 2) * 3.2, -5.5, true);
+    // braziers with fire
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const x = Math.cos(a) * 19, z = Math.sin(a) * 19;
+      parts.push(['cyl', 0x2a2024, [x, 0.8, z], [1.2, 1.6, 1.2]], ['cone', 0xff6a22, [x, 2.0, z], [0.9, 1.0, 0.9], null, true]);
+      this.addCollider(x, z, 0.8, y0 - 1, y0 + 1.6, true);
+    }
+    const merged = buildMerged(parts);
+    for (const [geo, mat] of [[merged.geo, this.stoneMat], [merged.glow, MAT.glow]]) {
+      if (!geo) continue;
+      this.disposables.push(geo);
+      const m = new THREE.Mesh(geo, mat);
+      m.position.y = y0;
+      m.castShadow = MAT.high;
+      m.receiveShadow = true;
+      this.group.add(m);
+    }
+    for (const [x, z, col] of [[0, -8, 0xff4455], [0, 10, 0xff8866]]) {
+      const l = new THREE.PointLight(col, 40, 30, 1.8);
+      l.position.set(x, y0 + 5, z);
+      this.group.add(l);
+    }
+    this.interactables.push({ kind: 'shop', pos: new THREE.Vector3(0, y0, -7.6), used: false });
+    this.buildPortalMesh();
+    this.portal.state = 'ready';
   }
 
   get chargeRadius() {
@@ -1026,10 +1153,10 @@ export class World {
         // the runes light up one by one as it charges; the zone fills from the middle
         c.crystal.rotation.y += dt * (c.used ? 0.3 : 1.4 + (c.charge || 0) * 4);
         c.crystal.position.y = c.crystalY + Math.sin(this.t * 2 + c.pos.x) * 0.2;
-        c.crystal.material.color.set(c.used ? 0x55ff99 : c.state === 'charging' ? 0xffc040 : 0x7fd6ff);
+        c.crystal.material.color.set(c.used ? 0x55ff99 : c.golden ? 0xffd700 : c.state === 'charging' ? 0xffc040 : 0x7fd6ff);
         c.runes.forEach((r, i) => {
           const lit = c.used || (c.charge || 0) >= (i + 1) / c.runes.length;
-          r.material.color.set(lit ? 0xffd060 : 0x335577);
+          r.material.color.set(lit ? 0xffd060 : c.golden ? 0x8a6a10 : 0x335577);
         });
         c.zone.visible = c.state === 'charging';
         c.fill.visible = c.state === 'charging';
@@ -1047,6 +1174,17 @@ export class World {
       }
     }
     for (const p of this.jumpPads) p.ring.scale.setScalar(1.6 + Math.sin(this.t * 6) * 0.15);
+    if (this.redPortal) {
+      const show = (G.run?.devilMarks || 0) > 0;
+      this.redPortal.group.visible = show;
+      this.redPortal.used = !show;
+      if (show && this.redPortal.core) this.redPortal.core.rotation.z += dt * 2;
+    }
+    if (this.shopPedestals) for (const sp of this.shopPedestals) {
+      sp.mesh.rotation.y += dt * 1.5;
+      sp.mesh.position.y = sp.baseY + Math.sin(this.t * 2 + sp.mesh.position.x) * 0.15;
+      sp.mesh.visible = !sp.sold;
+    }
     this.cullChunks();
     // hide cave roofs while the player is inside
     const pl = G.player;

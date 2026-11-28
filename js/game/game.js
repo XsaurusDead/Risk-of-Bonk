@@ -3,9 +3,9 @@
 import * as THREE from 'three';
 import { G } from '../core/state.js';
 import { Input } from '../core/input.js';
-import { STAGES } from '../data/stages.js';
+import { STAGES, SHOP_STAGE } from '../data/stages.js';
 import { BOSSES, ENEMIES } from '../data/enemies.js';
-import { ITEMS } from '../data/items.js';
+import { ITEMS, ITEM_LIST } from '../data/items.js';
 import { TOMES, TOME_SLOTS, TOME_MAX, WEAPON_MAX, WEAPON_SLOTS, WEAPON_STATS, PRIMARY_UPS, ROLL_RARITY } from '../data/tomes.js';
 import { WEAPONS, WEAPON_IDS } from '../data/weapons.js';
 import { icon } from '../data/icons.js';
@@ -35,8 +35,8 @@ function preloadStageModels(stage) {
   }
 }
 import { sfx } from '../core/audio.js';
-import { track, trackMax, commitRunBests, persist, selectedCostume, isTomeUnlocked } from '../core/save.js';
-import { weightedPick, shuffle, rand } from '../core/util.js';
+import { track, trackMax, commitRunBests, persist, selectedCostume, isTomeUnlocked, isItemUnlocked } from '../core/save.js';
+import { weightedPick, shuffle, rand, RARITY } from '../core/util.js';
 import { saveRun, clearRun, loadRunData } from '../core/runsave.js';
 import { Music } from '../core/music.js';
 import { recordRun } from '../core/leaderboard.js';
@@ -474,7 +474,7 @@ export const Game = {
   update(dt) {
     const run = G.run;
     const p = G.player;
-    run.time += dt;
+    if (!run.inShop) run.time += dt; // time stands still in the Red Market
     G.time = run.time;
     this.updateDifficulty();
     run.secT += dt;
@@ -484,7 +484,7 @@ export const Game = {
     }
 
     p.update(dt);
-    if (!p.dead) this.director.update(dt);
+    if (!p.dead && !run.inShop) this.director.update(dt);
     updateEnemies(dt);
     updateMinions(dt);
     updateCombat(dt);
@@ -500,7 +500,7 @@ export const Game = {
       run.finalSpawnT -= dt;
       if (run.finalSpawnT <= 0) this.spawnFinalBoss();
     }
-    run.saveT += dt;
+    if (!run.inShop) run.saveT += dt;
     if (run.saveT > 15 && !p.dead) {
       run.saveT = 0;
       saveRun();
@@ -559,9 +559,21 @@ export const Game = {
     switch (it.kind) {
       case 'chest': return this.openChest(o);
       case 'portal':
+        if (G.world.stage.shop) return this.exitShop();
         if (o.state === 'idle') this.activatePortal();
         else if (o.state === 'ready') this.leaveStage();
         return;
+      case 'shop': return this.openShop();
+      case 'redportal':
+        if (!(G.run.devilMarks > 0)) return;
+        if (G.world.portal.state !== 'ready') {
+          G.ui?.toastText('The red portal opens once the stage portal is charged and the boss is dead.');
+          sfx('deny', 0.3);
+          return;
+        }
+        G.run.devilMarks--;
+        track('redPortals');
+        return this.leaveStage(true);
       case 'heal': return this.useShrine(o, () => {
         const p = G.player;
         p.heal(p.stats.maxHp * 0.5);
@@ -772,6 +784,12 @@ export const Game = {
         track('shrinesUsed');
         track('pillarsCharged');
         p.pendingLevelUps++;
+        if (o.golden) {
+          // golden pillar: this level-up offers only legendary choices
+          p.pendingGolden = (p.pendingGolden || 0) + 1;
+          track('goldenPillars');
+          G.ui?.banner('Golden Pillar', 'A legendary choice awaits', true);
+        }
         particles(o.pos.clone().setY(o.pos.y + 5), 0xffd060, 50, 10, 1, 0.6);
         ring(o.pos, PILLAR_RADIUS, 0x55ff99, 0.8);
         floatText(p.pos.clone().setY(p.pos.y + 2.6), 'UPGRADE!', '#ffd060', true);
@@ -891,13 +909,119 @@ export const Game = {
     G.ui?.banner('Champion defeated', 'It dropped something shiny');
   },
 
-  leaveStage() {
+  /** Leave the stage (the next one loads; `toShop`: visit the Red Market on the way). */
+  leaveStage(toShop = false) {
     const run = G.run;
     collectAll();
     run.stagesCleared++;
     track('stagesCleared');
     track('clear_' + run.stage.id);
     run.stageNum++;
+    G.mode = 'transition';
+    const next = () => (toShop ? this.enterShop() : this.loadStage());
+    if (G.ui) G.ui.fade(next);
+    else next();
+    sfx('portal');
+  },
+
+  // ------------------------------------------------------------ the Red Market (shop)
+  /** Build the shop map; time is frozen and nothing spawns until you take its portal. */
+  enterShop() {
+    const run = G.run;
+    clearEnemies();
+    clearCombat();
+    clearPickups();
+    clearFx();
+    clearGlyphs();
+    if (G.world && G.world !== this.menuWorld) G.world.dispose();
+    run.inShop = true;
+    run.stage = SHOP_STAGE;
+    G.world = new World(SHOP_STAGE, (Math.random() * 1e9) | 0, run.loop);
+    G.scene.add(G.world.group);
+    this.applyStageLook(SHOP_STAGE);
+    run.boss = null;
+    run.bossDead = false;
+    run.powers = {};
+    run.stageTime = 0;
+    track('shopVisits');
+    run.shopOffer = this.rollShop();
+    // the pedestal crystals show what's on sale
+    const peds = G.world.shopPedestals || [];
+    const normal = peds.filter((p) => !p.mythic), myth = peds.filter((p) => p.mythic);
+    run.shopOffer.items.forEach((o, i) => { if (normal[i]) { normal[i].mesh.material.color.set(RARITY[ITEMS[o.id].rarity].hex); o.ped = normal[i]; } });
+    myth.forEach((p, i) => { const o = run.shopOffer.mythics[i]; if (o) o.ped = p; else p.sold = true; });
+    const p = G.player;
+    p.pos.set(0, G.world.heightAt(0, 2) + 4, 2);
+    p.vel.set(0, -5, 0);
+    p.grounded = false;
+    p.hp = p.stats.maxHp;
+    p.camYaw = 0;
+    for (const m of G.minions) m.pos.copy(p.pos);
+    G.mode = 'playing';
+    G.ui?.onStageStart?.();
+    G.ui?.banner('The Red Market', 'Time stands still. Talk to the merchant — the portal leads on.', true);
+    Input.requestLock();
+  },
+
+  /** 10 wares (buy up to 5) and up to 5 unlocked mythics (buy up to 2), priced like chests. */
+  rollShop() {
+    const base = this.chestCost({ tier: 'normal' });
+    const mult = { common: 1.5, rare: 2.6, epic: 4.5, legendary: 8 };
+    const items = [], seen = new Set();
+    for (let k = 0; k < 80 && items.length < 10; k++) {
+      const id = rollItem(rollRarity('large'));
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      items.push({ id, price: Math.ceil(base * mult[ITEMS[id].rarity]), sold: false });
+    }
+    const mythics = shuffle(ITEM_LIST.filter((it) => it.rarity === 'mythic' && isItemUnlocked(it.id)).map((it) => it.id)).slice(0, 5)
+      .map((id) => ({ id, price: Math.ceil(base * 6), sold: false }));
+    return { items, mythics, boughtItems: 0, boughtMythics: 0, maxItems: 5, maxMythics: 2 };
+  },
+
+  openShop() {
+    if (!G.run.shopOffer) return;
+    G.mode = 'shop';
+    Input.releaseLock();
+    G.ui?.showShop(G.run.shopOffer);
+    sfx('chest');
+  },
+  closeShop() {
+    if (G.mode !== 'shop') return;
+    G.mode = 'playing';
+    G.ui?.hideShop();
+    Input.requestLock();
+  },
+  /** Buy offer `i` of the wares (`mythic` false) or the mythics. */
+  buyShop(mythic, i) {
+    const run = G.run, offer = run.shopOffer;
+    if (!offer || G.mode !== 'shop') return false;
+    const o = (mythic ? offer.mythics : offer.items)[i];
+    if (!o || o.sold) return false;
+    if (mythic ? offer.boughtMythics >= offer.maxMythics : offer.boughtItems >= offer.maxItems) return false;
+    if (run.coins < o.price) {
+      sfx('deny', 0.3);
+      G.ui?.flashCoins();
+      return false;
+    }
+    run.coins -= o.price;
+    o.sold = true;
+    if (o.ped) o.ped.sold = true;
+    if (mythic) offer.boughtMythics++;
+    else offer.boughtItems++;
+    track('shopBuys');
+    track('coinsSpent', o.price);
+    if (mythic) track('mythicsBought');
+    this.onItemCollected(o.id);
+    G.ui?.showShop(offer);
+    return true;
+  },
+  /** Leave the market: on into the next stage. */
+  exitShop() {
+    const run = G.run;
+    if (G.mode === 'shop') this.closeShop();
+    run.inShop = false;
+    run.shopOffer = null;
     G.mode = 'transition';
     if (G.ui) G.ui.fade(() => this.loadStage());
     else this.loadStage();
@@ -910,7 +1034,7 @@ export const Game = {
    * Tomes: max 4 different per run, each up to Lv 99. Weapons (your 4 skills): up to Lv 50.
    * The rolled rarity scales how much of the effect a pick grants; luck improves the odds.
    */
-  rollUpgrades() {
+  rollUpgrades(force = null) {
     const p = G.player;
     const luck = p.stats.luck;
     const weights = {};
@@ -918,6 +1042,8 @@ export const Game = {
       const o = ['common', 'rare', 'epic', 'legendary'].indexOf(r);
       weights[r] = ROLL_RARITY[r].weight * (o === 0 ? 1 : Math.pow(1 + 0.3 * luck, o));
     }
+    // golden pillar: every choice is legendary
+    if (force) for (const r in weights) weights[r] = r === force ? 1 : 0;
     const owned = Object.keys(p.tomes);
     const tomePool = TOMES.filter((t) => isTomeUnlocked(t) && (p.tomes[t.id] ? p.tomes[t.id].level < TOME_MAX : owned.length < TOME_SLOTS));
     // weapons: level up one you carry, or (with a free slot) pick up a new one
@@ -976,8 +1102,13 @@ export const Game = {
     return shuffle(choices);
   },
 
+  /** The next level-up's choices (golden pillars make them all legendary). */
+  nextChoices() {
+    return this.rollUpgrades(G.player.pendingGolden > 0 ? 'legendary' : null);
+  },
+
   openLevelUp() {
-    this.levelChoices = this.rollUpgrades();
+    this.levelChoices = this.nextChoices();
     if (!this.levelChoices.length) {
       // every tome and weapon is maxed: nothing left to choose
       G.player.pendingLevelUps = 0;
@@ -996,8 +1127,9 @@ export const Game = {
     else if (c.kind === 'weapon') p.levelWeapon(c.slot, c.stat, c.value);
     else if (c.kind === 'newWeapon') p.addWeapon(c.id, c.value);
     p.pendingLevelUps--;
+    if (p.pendingGolden > 0) p.pendingGolden--;
     sfx(c.kind === 'tome' ? 'item' : 'upgrade');
-    if (p.pendingLevelUps > 0) this.levelChoices = this.rollUpgrades();
+    if (p.pendingLevelUps > 0) this.levelChoices = this.nextChoices();
     if (p.pendingLevelUps > 0 && this.levelChoices.length) {
       G.ui.showLevelUp(this.levelChoices, p.level - p.pendingLevelUps + 1);
     } else {

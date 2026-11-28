@@ -159,12 +159,13 @@ export class Player {
     }
     const s = this.stats;
     const oldMax = s.maxHp || 0;
-    s.maxHp = (b.hp * (1 + 0.11 * lvl) + m.maxHpFlat + this.infusionHp) * (1 + m.maxHpPct);
-    s.damage = b.damage * (1 + 0.07 * lvl) * (1 + m.damage);
-    s.attackSpeed = 1 + m.attackSpeed;
-    s.moveSpeed = b.speed * (1 + m.moveSpeed);
+    // (mythic items have downsides: penalties are clamped so nothing goes below a sane floor)
+    s.maxHp = Math.max(10, (b.hp * (1 + 0.11 * lvl) + m.maxHpFlat + this.infusionHp) * Math.max(0.1, 1 + m.maxHpPct));
+    s.damage = b.damage * (1 + 0.07 * lvl) * Math.max(0.1, 1 + m.damage);
+    s.attackSpeed = Math.max(0.2, 1 + m.attackSpeed);
+    s.moveSpeed = b.speed * Math.max(0.3, 1 + m.moveSpeed);
     s.armor = b.armor + m.armor;
-    s.regen = (b.regen + m.regen) * (1 + 0.1 * lvl);
+    s.regen = Math.max(0, (b.regen + m.regen) * (1 + 0.1 * lvl));
     const rawCrit = 0.05 + m.crit;
     s.critRaw = rawCrit;
     s.critMultBase = 2 + m.critMult;
@@ -172,12 +173,12 @@ export class Player {
     s.critMult = s.critMultBase + Math.max(0, rawCrit - 1); // overflow crit chance becomes crit damage
     s.cdMult = m.cdr;
     s.ultCdMult = m.cdr * m.ultCdr;
-    s.jumps = b.jumps + m.jumps;
+    s.jumps = Math.max(1, b.jumps + m.jumps);
     s.jumpPower = 12.5 * (1 + m.jumpPower);
     s.pickup = 4.5 + m.pickup;
     s.luck = m.luck;
     s.xpMult = 1 + m.xp;
-    s.coinMult = 1 + m.coins;
+    s.coinMult = Math.max(0.1, 1 + m.coins);
     s.area = 1 + m.area;
     s.lifeOnHit = m.lifeOnHit;
     // item dodge and tome evasion stack with diminishing returns: no cap, but never 100%

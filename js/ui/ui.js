@@ -93,6 +93,7 @@ export const UI = {
     $('#btn-start').addEventListener('click', () => this.startRun());
     $('#btn-resume').addEventListener('click', () => Game.resume());
     $('#btn-items-resume').addEventListener('click', () => Game.resume());
+    $('#btn-shop-close').addEventListener('click', () => Game.closeShop());
     $('#btn-abilities').addEventListener('click', () => {
       sfx('ui');
       this.itemsTab = 'survivor';
@@ -595,8 +596,8 @@ export const UI = {
       body.querySelectorAll('.chip').forEach((c) => c.addEventListener('click', () => { f.mode = c.dataset.mode; this.renderLogbook('ach'); }));
     } else if (tab === 'items') {
       let html = '';
-      for (const r of RARITY_ORDER) {
-        html += `<h3 class="r-${r}">${RARITY[r].name}</h3><div class="item-grid">`;
+      for (const r of [...RARITY_ORDER, 'mythic']) {
+        html += `<h3 class="r-${r}">${RARITY[r].name}${r === 'mythic' ? ' <small>(Red Market only)</small>' : ''}</h3><div class="item-grid">`;
         for (const it of ITEM_LIST.filter((x) => x.rarity === r)) {
           const unlocked = isItemUnlocked(it.id);
           const src = unlockSourceFor('item', it.id);
@@ -782,6 +783,33 @@ export const UI = {
     this.showScreen('moai');
   },
   hideMoai() {
+    this.showScreen('none');
+  },
+
+  // ------------------------------------------------------------ Red Market
+  showShop(offer) {
+    const coins = G.run.coins;
+    $('#shop-gold').innerHTML = `${icon(UI_ICONS.coin)} ${Math.floor(coins).toLocaleString('en-US')}`;
+    $('#shop-n-items').textContent = `${offer.boughtItems}/${offer.maxItems} bought`;
+    $('#shop-n-myth').textContent = `${offer.boughtMythics}/${offer.maxMythics} bought`;
+    const card = (o, i, mythic) => {
+      const it = ITEMS[o.id], r = RARITY[it.rarity];
+      const full = mythic ? offer.boughtMythics >= offer.maxMythics : offer.boughtItems >= offer.maxItems;
+      const can = !o.sold && !full && coins >= o.price;
+      const body = mythic
+        ? `<div class="ds up">✚ ${esc(it.up)}</div><div class="ds down">✖ ${esc(it.down)}</div>`
+        : `<div class="ds">${esc(it.desc)}</div>`;
+      return `<div class="shop-card ${o.sold ? 'sold' : ''} ${mythic ? 'mythic' : ''}" style="--c:${r.color}">
+        <div class="ic">${it.icon}</div><div class="sc-body"><div class="nm">${esc(it.name)}</div><div class="rr">${r.name}</div>${body}</div>
+        <button class="btn small buy" data-m="${mythic ? 1 : 0}" data-i="${i}" ${can ? '' : 'disabled'}>${o.sold ? 'SOLD' : `${icon(UI_ICONS.coin)} ${o.price.toLocaleString('en-US')}`}</button></div>`;
+    };
+    $('#shop-items').innerHTML = offer.items.map((o, i) => card(o, i, false)).join('');
+    $('#shop-myth').innerHTML = offer.mythics.length ? offer.mythics.map((o, i) => card(o, i, true)).join('')
+      : `<p class="lb-empty">No Mythic items unlocked yet — check the Logbook for how to unlock them.</p>`;
+    $$('#screen-shop .buy').forEach((b) => b.addEventListener('click', () => Game.buyShop(b.dataset.m === '1', +b.dataset.i)));
+    if (this.screen !== 'shop') this.showScreen('shop');
+  },
+  hideShop() {
     this.showScreen('none');
   },
 
@@ -1173,7 +1201,8 @@ export const UI = {
     const run = G.run, p = G.player, s = p.stats;
     const stg = run.stageTime || 0;
     const timerEl = $('#hud-timer');
-    if (run.stage.final) timerEl.textContent = formatTime(stg);
+    if (run.inShop) timerEl.textContent = '⏸ Time stands still';
+    else if (run.stage.final) timerEl.textContent = formatTime(stg);
     else if (stg > STAGE_TIME) timerEl.textContent = `OVERTIME +${formatTime(stg - STAGE_TIME)}`;
     else timerEl.textContent = `${formatTime(stg)} / ${formatTime(STAGE_TIME)}`;
     timerEl.classList.toggle('ot', stg > STAGE_TIME && !run.stage.final);
@@ -1341,7 +1370,10 @@ export const UI = {
         text = it.obj.state === 'idle' ? `<span class="k">${key}</span>Activate portal <span class="cant">(summons ${n > 1 ? n + ' bosses' : 'the boss'}!)</span>` : `<span class="k">${key}</span>Enter portal`;
       } else {
         const T = {
-          heal: 'Shrine of Healing — restore 50% HP', pillar: it.obj?.state === 'charging' ? `Pillar — charging ${Math.round((it.obj.charge || 0) * 100)}% (stay in the ring)` : 'Pillar of Ascension — charge it for a free tome / weapon upgrade', combat: 'Shrine of Combat — summon challengers for loot',
+          heal: 'Shrine of Healing — restore 50% HP',
+          redportal: G.world.portal.state === 'ready' ? "Red Portal — visit the Red Market on the way (uses a Devil's Trademark)" : 'Red Portal — sealed until the stage portal is charged',
+          shop: 'Red Market — trade with the merchant',
+          pillar: it.obj?.state === 'charging' ? `Pillar — charging ${Math.round((it.obj.charge || 0) * 100)}% (stay in the ring)` : (it.obj?.golden ? 'GOLDEN Pillar — charge it for a LEGENDARY upgrade' : 'Pillar of Ascension — charge it for a free tome / weapon upgrade'), combat: 'Shrine of Combat — summon challengers for loot',
           boss: `Shrine of the Mountain — ${Math.min(8, (run.bossCount || 1) * 2)}x portal bosses (more loot)`, moai: 'Moai — choose a gift',
           magnet: 'Magnet Statue — pull every coin and XP orb to you for 20s',
         };

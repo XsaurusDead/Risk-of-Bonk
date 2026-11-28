@@ -812,9 +812,9 @@ export function buildMoai() {
  * Charge pillar: a tall stone obelisk ringed with four rune stones, a floating crystal on top,
  * and a ground zone that fills while you stand in it.
  */
-export function buildPillar() {
+export function buildPillar(golden = false) {
   const g = new THREE.Group();
-  const stone = 0x8c8a96, dark = 0x5c5a66;
+  const stone = golden ? 0xe0b040 : 0x8c8a96, dark = golden ? 0xa07818 : 0x5c5a66;
   g.add(mesh('cyl', dark, [0, 0.25, 0], [3.4, 0.5, 3.4]));
   g.add(mesh('cyl', stone, [0, 0.65, 0], [2.6, 0.4, 2.6]));
   g.add(mesh('box', stone, [0, 2.6, 0], [1.1, 3.8, 1.1], [0, Math.PI / 4, 0]));
@@ -828,7 +828,7 @@ export function buildPillar() {
     g.add(r);
     runes.push(r);
   }
-  const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.55), new THREE.MeshBasicMaterial({ color: 0x7fd6ff }));
+  const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(golden ? 0.8 : 0.55), new THREE.MeshBasicMaterial({ color: golden ? 0xffd700 : 0x7fd6ff }));
   crystal.scale.set(1, 1.6, 1);
   crystal.position.y = 6.3;
   g.add(crystal);
@@ -841,6 +841,12 @@ export function buildPillar() {
   fill.visible = false;
   g.add(zone, fill);
   g.traverse((o) => { if (o.isMesh && o !== zone && o !== fill) o.castShadow = true; });
+  if (golden) {
+    // a golden beacon so the rare golden pillar can be spotted from far away
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 40, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending }));
+    beam.position.y = 20;
+    g.add(beam);
+  }
   return { group: g, crystal, crystalY: crystal.position.y, runes, zone, fill, state: 'idle', charge: 0 };
 }
 

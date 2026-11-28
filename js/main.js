@@ -98,7 +98,8 @@ function loop() {
   Input.update(dt);
 
   if (G.hitStop > 0) G.hitStop -= dt;
-  if (Input.pressed.pause && G.mode !== 'chest') {
+  if (Input.pressed.pause && G.mode === 'shop') Game.closeShop();
+  else if (Input.pressed.pause && G.mode !== 'chest') {
     if (Minimap.bigOpen) {
       // Escape with the big map open: close the map and everything that's open with it
       Minimap.toggleBig(false);
