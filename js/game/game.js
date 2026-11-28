@@ -753,14 +753,16 @@ export const Game = {
     sfx('roar');
   },
 
-  /** Charge pillars: activate, then stand in the ring until it's full for a free level-up choice. */
+  /** Charge pillars: no interaction — step into the ring and it starts charging; stay until it's full for a free level-up choice. */
   activatePillar(o) {
     if (o.used || o.state === 'charging') return;
     o.state = 'charging';
-    o.charge = 0;
+    o.charge = o.charge || 0;
     sfx('portal');
     ring(o.pos, PILLAR_RADIUS, 0xffc040, 0.6);
-    G.ui?.banner('Pillar awakened', `Stay in the ring to charge it — it grants a tome or weapon upgrade`);
+    if (!o.woke) G.ui?.toastText(o.golden ? 'Golden pillar charging — stay in the ring for a LEGENDARY upgrade' : 'Pillar charging — stay in the ring for a free upgrade');
+    if (o.woke) return;
+    o.woke = true;
     // its glow draws a pack of enemies
     this.director?.spawnGroup(4 + Math.floor((G.run.stageTime || 0) / 90), { far: true });
   },
@@ -768,8 +770,13 @@ export const Game = {
   updatePillars(dt) {
     const p = G.player;
     for (const o of G.world.interactables) {
-      if (o.kind !== 'pillar' || o.state !== 'charging' || o.used) continue;
+      if (o.kind !== 'pillar' || o.used) continue;
       const inZone = !p.dead && Math.hypot(p.pos.x - o.pos.x, p.pos.z - o.pos.z) < PILLAR_RADIUS && Math.abs(p.pos.y - o.pos.y) < 8;
+      // charging starts by itself as soon as you step into the ring
+      if (o.state !== 'charging') {
+        if (!inZone) continue;
+        this.activatePillar(o);
+      }
       // charges while you stand in it, drains slowly when you leave
       o.charge = Math.max(0, Math.min(1, o.charge + (inZone ? dt / PILLAR_TIME : -dt / (PILLAR_TIME * 3))));
       const q = Math.floor(o.charge * 4);

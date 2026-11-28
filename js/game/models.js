@@ -815,39 +815,24 @@ export function buildMoai() {
 export function buildPillar(golden = false) {
   const g = new THREE.Group();
   const stone = golden ? 0xe0b040 : 0x8c8a96, dark = golden ? 0xa07818 : 0x5c5a66;
-  g.add(mesh('cyl', dark, [0, 0.25, 0], [3.4, 0.5, 3.4]));
+  // the base reaches 1.5 m below the ground so it sits cleanly on slopes
+  g.add(mesh('cyl', dark, [0, -0.5, 0], [3.4, 2.0, 3.4]));
   g.add(mesh('cyl', stone, [0, 0.65, 0], [2.6, 0.4, 2.6]));
   g.add(mesh('box', stone, [0, 2.6, 0], [1.1, 3.8, 1.1], [0, Math.PI / 4, 0]));
   g.add(mesh('cone', dark, [0, 4.9, 0], [1.0, 0.9, 1.0], [0, Math.PI / 4, 0]));
-  const runes = [];
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2;
-    g.add(mesh('box', dark, [Math.cos(a) * 2.3, 0.9, Math.sin(a) * 2.3], [0.5, 1.0, 0.5]));
-    const r = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), new THREE.MeshBasicMaterial({ color: 0x335577 }));
-    r.position.set(Math.cos(a) * 2.3, 1.75, Math.sin(a) * 2.3);
-    g.add(r);
-    runes.push(r);
-  }
   const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(golden ? 0.8 : 0.55), new THREE.MeshBasicMaterial({ color: golden ? 0xffd700 : 0x7fd6ff }));
   crystal.scale.set(1, 1.6, 1);
   crystal.position.y = 6.3;
   g.add(crystal);
-  // charge zone: an outline ring and a disc that grows with the charge (scaled to the radius in world.js)
-  const zone = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffc040, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
-  zone.position.y = 0.15;
-  zone.visible = false;
-  const fill = new THREE.Mesh(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffc040, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending }));
-  fill.position.y = 0.12;
-  fill.visible = false;
-  g.add(zone, fill);
-  g.traverse((o) => { if (o.isMesh && o !== zone && o !== fill) o.castShadow = true; });
+  // (the charge zone ring + fill disc are built by the world, following the terrain)
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   if (golden) {
     // a golden beacon so the rare golden pillar can be spotted from far away
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 40, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending }));
     beam.position.y = 20;
     g.add(beam);
   }
-  return { group: g, crystal, crystalY: crystal.position.y, runes, zone, fill, state: 'idle', charge: 0 };
+  return { group: g, crystal, crystalY: crystal.position.y, state: 'idle', charge: 0 };
 }
 
 /** Magnet statue: stone plinth holding a big red horseshoe magnet. */

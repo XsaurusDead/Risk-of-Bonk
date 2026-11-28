@@ -776,46 +776,54 @@ export class Player {
     let speed = s.moveSpeed * (this.slowT > 0 ? 0.6 : 1) * (inLiquid ? 1 - w.stage.liquid.slow : 1);
     if (this.charId === 'bulwark' && this.cs.spin > 0.3) speed *= 0.8;
 
-    // ---- bunny hop: jumping right as you land keeps and builds speed
-    this.bhop = this.bhop || 1;
+    // ---- bunny hop (Source-style). Jump (Space or mouse wheel up) right as you land and
+    // you skip ground friction, so you keep your speed, and every perfect hop adds a bit.
+    // In the air, strafing (A / D while turning the mouse the same way) accelerates you
+    // further. A press up to HOP_BUFFER s before touching down counts as perfect.
+    const HOP_WINDOW = 0.12, HOP_BUFFER = 0.16, HOP_GAIN = 0.08, HOP_CAP = 2.4;
+    const base = speed;
+    const hv = Math.hypot(this.vel.x, this.vel.z);
     this.landT = this.grounded ? (this.landT || 0) + dt : 0;
-    this.jumpBuf = Input.pressed.jump ? 0.15 : Math.max(0, (this.jumpBuf || 0) - dt);
-    if (this.grounded && this.landT > 0.22) this.bhop += (1 - this.bhop) * Math.min(1, dt * 6);
-    speed *= this.bhop;
+    const press = Input.pressed.jump || Input.pressed.jumpWheel;
+    this.jumpBuf = press ? HOP_BUFFER : Math.max(0, (this.jumpBuf || 0) - dt);
 
     // jumping
     if (this.grounded) {
       this.coyote = 0.12;
       this.jumpsLeft = s.jumps;
     } else this.coyote -= dt;
-    const wantJump = Input.pressed.jump || (this.grounded && this.jumpBuf > 0 && this.landT < 0.05);
-    if (wantJump && !this.dashS) {
-      if (this.grounded || this.coyote > 0) {
-        // perfect timing (within ~0.12s of landing, or buffered just before) = hop
-        if (this.grounded && this.landT < 0.12 && this.hopReady && Math.hypot(this.vel.x, this.vel.z) > 3) {
-          this.bhop = Math.min(1.9, this.bhop + 0.12);
-          this.hops = (this.hops || 0) + 1;
-          if (this.hops % 5 === 0) track('bhops', 5);
-          particles(this.pos, 0x9ff5ff, 6, 4, 0.3, 0.22);
-          sfx('dash', 0.08);
-        } else this.hops = 0;
-        this.vel.y = s.jumpPower;
-        this.sqv += 4;
-        track('jumps');
-        this.jumpsLeft = s.jumps - 1;
-        this.grounded = false;
-        this.coyote = 0;
-        this.jumpBuf = 0;
-        this.hopReady = false;
-        sfx('jump');
-      } else if (this.jumpsLeft > 0 && Input.pressed.jump && !(this.vel.y < 0 && this.pos.y - w.groundAt(this.pos.x, this.pos.z, this.pos.y) < 0.9)) {
-        // (a press just before touching down is buffered as a bunny hop instead)
-        this.jumpsLeft--;
-        this.vel.y = s.jumpPower * 0.95;
-        this.sqv += 3;
-        particles(this.pos, 0xffffff, 6, 3, 0.3, 0.25);
-        sfx('jump');
-      }
+    let hopped = false;
+    if (!this.dashS && (this.grounded || this.coyote > 0) && this.jumpBuf > 0) {
+      if (this.grounded && this.landT <= HOP_WINDOW && this.hopReady && hv > 3) {
+        // perfect hop: no friction this landing, plus a little extra speed
+        hopped = true;
+        const nv = Math.min(base * HOP_CAP, Math.max(hv, base) + base * HOP_GAIN);
+        this.vel.x *= nv / hv;
+        this.vel.z *= nv / hv;
+        this.hops = (this.hops || 0) + 1;
+        if (this.hops % 5 === 0) track('bhops', 5);
+        particles(this.pos, 0x9ff5ff, 6, 4, 0.3, 0.22);
+        sfx('dash', 0.08);
+      } else this.hops = 0;
+      this.vel.y = s.jumpPower;
+      this.sqv += 4;
+      track('jumps');
+      this.jumpsLeft = s.jumps - 1;
+      this.grounded = false;
+      this.coyote = 0;
+      this.jumpBuf = 0;
+      this.hopReady = false;
+      this.leapS = null;
+      sfx('jump');
+    } else if (!this.dashS && !this.grounded && Input.pressed.jump && this.jumpsLeft > 0 && !(this.vel.y < 0 && this.pos.y - w.groundAt(this.pos.x, this.pos.z, this.pos.y) < 0.9)) {
+      // extra (double) jumps: Space only, so spamming the mouse wheel for hops doesn't
+      // burn them; a press just before touching down is buffered as a hop instead
+      this.jumpsLeft--;
+      this.jumpBuf = 0;
+      this.vel.y = s.jumpPower * 0.95;
+      this.sqv += 3;
+      particles(this.pos, 0xffffff, 6, 3, 0.3, 0.25);
+      sfx('jump');
       this.leapS = null;
     }
 
@@ -841,15 +849,51 @@ export class Player {
       const ls = this.leapS;
       this.vel.x = ls.h.x + this.moveDir.x * speed * 0.3;
       this.vel.z = ls.h.z + this.moveDir.z * speed * 0.3;
-    } else {
-      // in the air you keep your momentum (that's what makes hopping fast)
-      const accel = this.grounded ? 70 : 22;
-      const tx = this.moveDir.x * speed, tz = this.moveDir.z * speed;
-      const k = Math.min(1, accel * dt / Math.max(1, speed));
-      const keep = !this.grounded && this.moveDir.lengthSq() < 0.01 ? 0.15 : 1;
-      this.vel.x += (tx - this.vel.x) * Math.min(1, k * 4 * keep);
-      this.vel.z += (tz - this.vel.z) * Math.min(1, k * 4 * keep);
+    } else if (this.grounded || hv < base * 0.95) {
+      // walking (ground friction) and normal-speed air control. Right after landing
+      // (the hop window) extra speed isn't scrubbed yet, so a timed jump keeps it.
+      if (!(this.grounded && hv > base && this.landT <= HOP_WINDOW)) {
+        const accel = this.grounded ? 70 : 22;
+        const tx = this.moveDir.x * speed, tz = this.moveDir.z * speed;
+        const k = Math.min(1, accel * dt / Math.max(1, speed));
+        const keep = !this.grounded && this.moveDir.lengthSq() < 0.01 ? 0.15 : 1;
+        this.vel.x += (tx - this.vel.x) * Math.min(1, k * 4 * keep);
+        this.vel.z += (tz - this.vel.z) * Math.min(1, k * 4 * keep);
+      }
+    } else if (this.moveDir.lengthSq() > 0.01) {
+      // faster than running, in the air: Quake/Source air acceleration. Only the part of
+      // the wish direction that isn't already along your velocity adds speed, so you gain
+      // by strafing sideways while turning, not by holding forward.
+      const wl = this.moveDir.length(), wx = this.moveDir.x / wl, wz = this.moveDir.z / wl;
+      const cur = this.vel.x * wx + this.vel.z * wz;
+      const add = base * 0.12 - cur;
+      if (add > 0) {
+        const a = Math.min(add, 14 * base * dt);
+        this.vel.x += wx * a;
+        this.vel.z += wz * a;
+      }
+      // holding (mostly) forward still steers gently, without changing speed
+      if (Math.abs(Input.move.y) > Math.abs(Input.move.x)) {
+        const sp = Math.hypot(this.vel.x, this.vel.z);
+        const cross = this.vel.x * wz - this.vel.z * wx;
+        const ang = Math.atan2(cross, this.vel.x * wx + this.vel.z * wz);
+        const turn = Math.sign(ang) * Math.min(Math.abs(ang), 1.6 * dt);
+        const c = Math.cos(turn), sn = Math.sin(turn);
+        const vx = this.vel.x * c - this.vel.z * sn, vz = this.vel.x * sn + this.vel.z * c;
+        this.vel.x = vx;
+        this.vel.z = vz;
+        const sp2 = Math.hypot(vx, vz) || 1;
+        this.vel.x *= sp / sp2;
+        this.vel.z *= sp / sp2;
+      }
+      const sp = Math.hypot(this.vel.x, this.vel.z);
+      if (sp > base * HOP_CAP) {
+        this.vel.x *= (base * HOP_CAP) / sp;
+        this.vel.z *= (base * HOP_CAP) / sp;
+      }
     }
+    // shown on the HUD (🐇 x% speed)
+    this.bhop = Math.max(1, Math.hypot(this.vel.x, this.vel.z) / Math.max(0.1, base));
 
     // gravity & glide
     const g = 32;
@@ -901,7 +945,13 @@ export class Player {
     } else if (this.pos.y > gh + 0.15) {
       this.grounded = false;
     } else if (this.vel.y <= 0) {
+      // snapped onto the ground (e.g. landing on a downhill slope): still a landing
+      if (!this.grounded) {
+        this.hopReady = true;
+        this.landT = 0;
+      }
       this.pos.y = gh;
+      this.vel.y = 0;
       this.grounded = true;
     }
 

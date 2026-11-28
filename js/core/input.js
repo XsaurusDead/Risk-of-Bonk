@@ -103,6 +103,11 @@ export const Input = {
     });
     window.addEventListener('mouseup', (e) => (this.mouseDown[e.button] = false));
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    // mouse wheel up also jumps (every notch is a press: spam it for bunny hops)
+    window.addEventListener('wheel', (e) => {
+      if (G.mode !== 'playing' || !this.pointerLocked) return;
+      if (e.deltaY < 0) this.pressed.jumpWheel = true;
+    }, { passive: true });
     window.addEventListener('mousemove', (e) => {
       if (!this.pointerLocked) return;
       const s = (G.save?.settings.sensitivity ?? 1) * 0.0022;
@@ -369,6 +374,7 @@ export const Input = {
   endFrame() {
     for (const a of ACTIONS) this.pressed[a] = false;
     this.pressed.click = false;
+    this.pressed.jumpWheel = false;
     this.look.x = this.look.y = 0;
     this.numberPressed = 0;
     for (const m in this.menu) this.menu[m] = false;

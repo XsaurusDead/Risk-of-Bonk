@@ -636,18 +636,6 @@ export class World {
     roof.castShadow = MAT.high;
     this.group.add(roof);
     this.disposables.push(roofGeo, roofMat);
-    // stalactites hanging from the roof (hidden with it while you're inside)
-    for (let i = 0; i < 7; i++) {
-      const t = (this.rng() - 0.5) * (s.len - 4), side = (this.rng() - 0.5) * (s.w - 2);
-      const st = new THREE.Mesh(prim('cone'), roofMat);
-      const k = 0.4 + this.rng() * 0.5;
-      st.scale.set(k, 1.2 + this.rng() * 1.4, k);
-      st.rotation.x = Math.PI;
-      st.position.set(s.x + dx * t + px * side, s.y + 7 - st.scale.y * 0.5, s.z + dz * t + pz * side);
-      roof.add(st);
-      st.position.sub(roof.position);
-      st.position.y /= roof.scale.y;
-    }
     // big textured rocks from the nature pack framing both mouths of the tunnel
     for (const name of ['Rock_Medium_1', 'Rock_Medium_2', 'Rock_Medium_3']) {
       const model = getModel(name);
@@ -710,10 +698,22 @@ export class World {
         const golden = this.rng() < GOLDEN_PILLAR_CHANCE;
         built = buildPillar(golden);
         built.golden = golden;
-        built.zone.scale.setScalar(PILLAR_RADIUS);
       }
       else built = buildShrine(kind);
       if (kind !== 'chest' && !built.golden) stoneify(built.group, rockTexFor(this.stage.id));
+      if (kind !== 'chest') {
+        // sit on the lowest point of the footprint, so no edge floats above a slope
+        let low = this.heightAt(pos.x, pos.z);
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          low = Math.min(low, this.heightAt(pos.x + Math.cos(a) * 1.7, pos.z + Math.sin(a) * 1.7));
+        }
+        pos = pos.clone();
+        // pillars have a deep footing, so they can sit at the centre height (no edge ever
+        // floats by more than the 1.5 m footing hides); other shrines sit on the lowest point
+        const y = kind === 'pillar' ? Math.min(this.heightAt(pos.x, pos.z) - 0.1, low + 1.4) : low;
+        pos.y = Math.max(y, this.liquidLevel ?? -1e9);
+      }
       built.group.position.copy(pos);
       built.group.rotation.y = this.rng() * Math.PI * 2;
       this.group.add(built.group);
@@ -723,6 +723,7 @@ export class World {
         const top = new THREE.Box3().setFromObject(built.group).max.y - pos.y;
         it.glyph = attachGlyph(built.group, SHRINE_GLYPH[kind][0], SHRINE_GLYPH[kind][1], 1.8, top + 0.2, { opacity: 0.9 });
       }
+      if (kind === 'pillar') this.buildPillarZone(it);
       this.interactables.push(it);
       built.group.updateMatrixWorld(true);
       // chests: just the box (not the floating gem, glow pillar or beam) is solid
@@ -747,6 +748,61 @@ export class World {
         if (p) add(kind, p);
       }
     }
+  }
+
+  /** Charge zone of a pillar: an outline ring and a fill disc that hug the terrain. */
+  buildPillarZone(it) {
+    const SEG = 72, R = PILLAR_RADIUS;
+    const ringPos = new Float32Array((SEG + 1) * 2 * 3), idx = [];
+    for (let i = 0; i <= SEG; i++) {
+      const a = (i / SEG) * Math.PI * 2;
+      for (let k = 0; k < 2; k++) {
+        const r = k ? R : R - 0.35;
+        const x = it.pos.x + Math.cos(a) * r, z = it.pos.z + Math.sin(a) * r;
+        ringPos.set([x, this.zoneHeight(x, z) + 0.12, z], (i * 2 + k) * 3);
+      }
+      if (i < SEG) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+    }
+    const rg = new THREE.BufferGeometry();
+    rg.setAttribute('position', new THREE.BufferAttribute(ringPos, 3));
+    rg.setIndex(idx);
+    const rm = new THREE.MeshBasicMaterial({ color: it.golden ? 0xffd700 : 0xffc040, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 });
+    it.zone = new THREE.Mesh(rg, rm);
+    // fill disc: polar grid, re-fitted to the terrain whenever its radius changes
+    const RINGS = 8, n = (RINGS + 1) * (SEG + 1);
+    const fg = new THREE.BufferGeometry();
+    fg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    const fi = [];
+    for (let r = 0; r < RINGS; r++) for (let i = 0; i < SEG; i++) {
+      const a = r * (SEG + 1) + i, b = a + SEG + 1;
+      fi.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+    fg.setIndex(fi);
+    const fm = new THREE.MeshBasicMaterial({ color: it.golden ? 0xffd700 : 0xffc040, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -1 });
+    it.fill = new THREE.Mesh(fg, fm);
+    it.fill.visible = false;
+    it.fill.frustumCulled = false;
+    it.fillR = -1;
+    this.group.add(it.zone, it.fill);
+    this.disposables.push(rg, rm, fg, fm);
+  }
+
+  /** Ground height for flat markers: the terrain, or the water surface above it. */
+  zoneHeight(x, z) {
+    const h = this.heightAt(x, z);
+    return this.stage.liquid ? Math.max(h, this.liquidLevel) : h;
+  }
+
+  fitPillarFill(it, R) {
+    if (Math.abs(R - it.fillR) < 0.05) return;
+    it.fillR = R;
+    const SEG = 72, RINGS = 8, arr = it.fill.geometry.attributes.position.array;
+    for (let r = 0; r <= RINGS; r++) for (let i = 0; i <= SEG; i++) {
+      const a = (i / SEG) * Math.PI * 2, rr = (r / RINGS) * R;
+      const x = it.pos.x + Math.cos(a) * rr, z = it.pos.z + Math.sin(a) * rr;
+      arr.set([x, this.zoneHeight(x, z) + 0.1, z], (r * (SEG + 1) + i) * 3);
+    }
+    it.fill.geometry.attributes.position.needsUpdate = true;
   }
 
   /** A chest that appears during play (elite drop). `free` chests cost nothing to open. */
@@ -1088,7 +1144,7 @@ export class World {
   findInteractable(pos) {
     let best = null, bd = Infinity;
     for (const it of this.interactables) {
-      if (it.used) continue;
+      if (it.used || it.kind === 'pillar') continue; // pillars charge on their own: just stand in the ring
       const d = Math.hypot(it.pos.x - pos.x, it.pos.z - pos.z);
       const reach = it.kind === 'chest' ? 3.6 : 4.2;
       if (d < reach && d < bd && Math.abs(it.pos.y - pos.y) < 3.5) {
@@ -1154,16 +1210,11 @@ export class World {
         c.crystal.rotation.y += dt * (c.used ? 0.3 : 1.4 + (c.charge || 0) * 4);
         c.crystal.position.y = c.crystalY + Math.sin(this.t * 2 + c.pos.x) * 0.2;
         c.crystal.material.color.set(c.used ? 0x55ff99 : c.golden ? 0xffd700 : c.state === 'charging' ? 0xffc040 : 0x7fd6ff);
-        c.runes.forEach((r, i) => {
-          const lit = c.used || (c.charge || 0) >= (i + 1) / c.runes.length;
-          r.material.color.set(lit ? 0xffd060 : c.golden ? 0x8a6a10 : 0x335577);
-        });
-        c.zone.visible = c.state === 'charging';
-        c.fill.visible = c.state === 'charging';
-        if (c.state === 'charging') {
-          c.fill.scale.setScalar(Math.max(0.01, c.charge) * PILLAR_RADIUS);
-          c.zone.material.opacity = 0.45 + Math.sin(this.t * 5) * 0.2;
-        }
+        // the zone is always shown until it's charged; the disc fills from the middle
+        c.zone.visible = !c.used;
+        c.fill.visible = !c.used && (c.charge || 0) > 0.005;
+        if (c.fill.visible) this.fitPillarFill(c, Math.max(0.3, c.charge) * PILLAR_RADIUS);
+        c.zone.material.opacity = c.state === 'charging' ? 0.5 + Math.sin(this.t * 5) * 0.2 : 0.35;
         if (c.glyph) c.glyph.visible = !c.used;
       } else if (c.emblem) {
         c.emblem.rotation.y += dt * (c.used ? 0.2 : 1.2);
