@@ -8,6 +8,7 @@ import { UI } from './ui/ui.js';
 import { Minimap } from './ui/minimap.js';
 import { initMaterials } from './game/models.js';
 import { Music } from './core/music.js';
+import { saveRun } from './core/runsave.js';
 import { preloadAssets } from './game/assets.js';
 import { applyIcons, preloadIcons } from './data/icons.js';
 import { preloadCharacterModels } from './game/charmodels.js';
@@ -75,9 +76,15 @@ async function boot() {
     G.camera.aspect = window.innerWidth / window.innerHeight;
     G.camera.updateProjectionMatrix();
   });
+  // closing / hiding the tab saves the run at this exact moment (stage clock included)
+  const saveNow = () => {
+    if (G.run && G.player && ['playing', 'paused', 'levelup', 'shop'].includes(G.mode)) saveRun();
+  };
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && G.mode === 'playing') Game.pause();
+    if (document.hidden) saveNow();
   });
+  window.addEventListener('pagehide', saveNow);
 
   Input.init(canvas);
   Music.init();

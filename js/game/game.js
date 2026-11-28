@@ -315,7 +315,10 @@ export const Game = {
     p.markDirty();
     p.recalcStats();
     G.time = run.time;
-    this.loadStage();
+    if (d.stage?.shop) {
+      // quit inside the Red Market: back into it, with the same offer
+      this.enterShop(d.stage.offer);
+    } else this.loadStage(d.stage && d.stage.stageId === STAGES[run.stageNum % STAGES.length]?.id ? d.stage : null);
     if (G.ui) G.ui.toastText('Run resumed — welcome back!');
     return true;
   },
@@ -341,7 +344,8 @@ export const Game = {
     G.minions = [];
   },
 
-  loadStage() {
+  /** Build the current stage. `restore`: a saved stage snapshot (resume) to put back exactly. */
+  loadStage(restore = null) {
     const run = G.run;
     clearEnemies();
     clearCombat();
@@ -355,10 +359,14 @@ export const Game = {
     run.stage = stage;
     this.updateDifficulty();
     run.chestScale = Math.pow(run.diff, 0.85);
-    G.world = new World(stage, (Math.random() * 1e9) | 0, run.loop);
+    // the seed is saved with the run, so a resumed run rebuilds exactly this map
+    run.stageSeed = restore?.seed ?? ((Math.random() * 1e9) | 0);
+    G.world = new World(stage, run.stageSeed, run.loop);
+    G.world.baseInteractables = G.world.interactables.length;
     G.scene.add(G.world.group);
     this.applyStageLook(stage);
     this.director = new Director(stage);
+    G.director = this.director;
     run.boss = null;
     run.bossDead = false;
     run.bossCount = 1;
@@ -366,6 +374,7 @@ export const Game = {
     run.finalSpawnT = 0;
     run.powers = {};
     run.saveT = 0;
+    run.bossSpawned = false;
     if (stage.final) {
       // no portal on the final stage: the Apex Sovereign comes to you
       G.world.portal.state = 'none';
@@ -396,7 +405,56 @@ export const Game = {
     Input.requestLock();
     Music.duck(false);
     Music.playStage(!!stage.final);
+    if (restore) this.restoreStage(restore);
     saveRun();
+  },
+
+  /** Put a resumed stage back exactly as it was saved (same map from the same seed). */
+  restoreStage(st) {
+    const run = G.run, w = G.world, p = G.player, d = this.director;
+    run.stageTime = st.stageTime || 0;
+    if (st.dir) {
+      for (const k in st.dir) if (k !== 'events' && typeof d[k] === typeof st.dir[k]) d[k] = st.dir[k];
+      d.events = new Set(st.dir.events || []);
+    }
+    run.bossCount = st.bossCount || 1;
+    run.finalSpawnT = st.finalSpawnT || 0;
+    // the world was built from the same seed, so its interactables line up one to one
+    const base = w.interactables.slice();
+    (st.its || []).forEach((s, i) => {
+      const it = base[i];
+      if (!it || it.kind !== s[0]) return;
+      if (s[1]) {
+        it.used = true;
+        if (it.kind === 'pillar') it.state = 'done';
+      } else if (it.kind === 'pillar') {
+        it.charge = s[3] || 0;
+        it.woke = !!s[4];
+        it.quarter = s[5] || 0;
+        if (s[2]) it.state = 'charging';
+      }
+    });
+    for (const c of st.drops || []) w.spawnChest(new THREE.Vector3(c.x, c.y, c.z), c.tier, c.free);
+    // portal / boss: a boss fight in progress starts again (bosses come back at full HP)
+    const P = w.portal;
+    if (st.portal && P.state !== 'none') {
+      if (st.portal.state === 'ready') P.state = 'ready';
+      else if (st.portal.state === 'charging') {
+        if (st.bossDead) {
+          P.state = 'charging';
+          run.bossDead = true;
+        } else this.activatePortal();
+        P.charge = st.portal.charge || 0;
+      }
+    }
+    if (run.stage.final && st.bossSpawned && !st.bossDead) run.finalSpawnT = 3;
+    if (st.hp > 0) p.hp = Math.min(p.stats.maxHp, st.hp);
+    if (st.pos) {
+      p.pos.set(st.pos[0], st.pos[1] + 0.5, st.pos[2]);
+      p.vel.set(0, 0, 0);
+      if (typeof st.yaw === 'number') p.camYaw = st.yaw;
+      for (const m of G.minions) m.pos.copy(p.pos);
+    }
   },
 
   updateDifficulty() {
@@ -822,6 +880,7 @@ export const Game = {
   /** The final boss is re-scaled to the player's current power so it is never a pushover. */
   spawnFinalBoss() {
     const run = G.run, p = G.player, s = p.stats;
+    run.bossSpawned = true;
     const fx = -Math.sin(p.camYaw), fz = -Math.cos(p.camYaw);
     const pos = p.pos.clone().add(new THREE.Vector3(fx * 26, 0, fz * 26));
     G.world.clampBounds(pos);
@@ -933,7 +992,7 @@ export const Game = {
 
   // ------------------------------------------------------------ the Red Market (shop)
   /** Build the shop map; time is frozen and nothing spawns until you take its portal. */
-  enterShop() {
+  enterShop(saved = null) {
     const run = G.run;
     clearEnemies();
     clearCombat();
@@ -950,13 +1009,20 @@ export const Game = {
     run.bossDead = false;
     run.powers = {};
     run.stageTime = 0;
-    track('shopVisits');
-    run.shopOffer = this.rollShop();
+    if (saved) {
+      // resumed inside the market: the same offer, minus anything that no longer exists
+      const keep = (l) => (l || []).filter((x) => ITEMS[x.id]).map((x) => ({ id: x.id, price: x.price, sold: !!x.sold }));
+      run.shopOffer = { items: keep(saved.items), mythics: keep(saved.mythics), boughtItems: saved.boughtItems || 0, boughtMythics: saved.boughtMythics || 0, maxItems: 5, maxMythics: 2 };
+    } else {
+      track('shopVisits');
+      run.shopOffer = this.rollShop();
+    }
     // the pedestal crystals show what's on sale
     const peds = G.world.shopPedestals || [];
     const normal = peds.filter((p) => !p.mythic), myth = peds.filter((p) => p.mythic);
     run.shopOffer.items.forEach((o, i) => { if (normal[i]) { normal[i].mesh.material.color.set(RARITY[ITEMS[o.id].rarity].hex); o.ped = normal[i]; } });
     myth.forEach((p, i) => { const o = run.shopOffer.mythics[i]; if (o) o.ped = p; else p.sold = true; });
+    for (const o of [...run.shopOffer.items, ...run.shopOffer.mythics]) if (o.sold && o.ped) o.ped.sold = true;
     const p = G.player;
     p.pos.set(0, G.world.heightAt(0, 2) + 4, 2);
     p.vel.set(0, -5, 0);

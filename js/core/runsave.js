@@ -1,7 +1,9 @@
 // Run checkpoint save: lets a run be continued later (from the title screen).
-// The run is stored at every stage start, every 15s while playing, and on
-// "Save & Quit". Resuming regenerates the current stage's map but keeps the
-// character, level, items, upgrades, coins, timer and run stats.
+// The run is stored at every stage start, every 15s while playing, on "Save & Quit"
+// and when the tab is hidden / closed. Resuming rebuilds the SAME stage map (same seed)
+// and restores it exactly as it was: stage timer + wave schedule, portal and boss
+// state, which chests / shrines / pillars / Moai were used, HP and position — so
+// quitting and resuming can never reset the stage clock.
 import { G } from './state.js';
 import { CHARACTERS } from '../data/characters.js';
 import { ITEMS } from '../data/items.js';
@@ -18,10 +20,42 @@ export function saveRun() {
     level: p.level, xp: p.xp, pendingLevelUps: p.pendingLevelUps, items: p.items, itemOrder: p.itemOrder, upgrades: p.upgrades,
     tomes: p.tomes, weapons: p.weapons, weaponOrder: p.weaponOrder,
     infusionHp: p.infusionHp, eaterDmg: p.eaterDmg || 0, chestsOpened: r.chestsOpened || 0, devilMarks: r.devilMarks || 0,
+    stage: captureStage(),
   };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch (_) {}
+}
+
+/** Everything about the current stage needed to put it back exactly as it is now. */
+function captureStage() {
+  const r = G.run, p = G.player, w = G.world, d = G.director;
+  if (!w || !r.stage) return null;
+  if (r.inShop) {
+    const o = r.shopOffer;
+    return {
+      shop: true,
+      offer: o && {
+        items: o.items.map((x) => ({ id: x.id, price: x.price, sold: x.sold })),
+        mythics: o.mythics.map((x) => ({ id: x.id, price: x.price, sold: x.sold })),
+        boughtItems: o.boughtItems, boughtMythics: o.boughtMythics,
+      },
+    };
+  }
+  const dir = {};
+  if (d) {
+    for (const k in d) if (typeof d[k] === 'number' || typeof d[k] === 'boolean') dir[k] = d[k];
+    dir.events = [...d.events];
+  }
+  const base = w.baseInteractables ?? w.interactables.length;
+  return {
+    seed: r.stageSeed, stageId: r.stage.id, stageTime: r.stageTime || 0, dir,
+    bossCount: r.bossCount || 1, bossDead: !!r.bossDead, finalSpawnT: r.finalSpawnT || 0, bossSpawned: !!r.bossSpawned,
+    portal: { state: w.portal.state, charge: w.portal.charge || 0 },
+    its: w.interactables.slice(0, base).map((it) => [it.kind, it.used ? 1 : 0, it.state === 'charging' ? 1 : 0, +(it.charge || 0).toFixed(4), it.woke ? 1 : 0, it.quarter || 0]),
+    drops: w.interactables.slice(base).filter((it) => it.kind === 'chest' && !it.used).map((it) => ({ x: it.pos.x, y: it.pos.y, z: it.pos.z, tier: it.tier, free: !!it.free })),
+    hp: p.hp, pos: [p.pos.x, p.pos.y, p.pos.z], yaw: p.camYaw,
+  };
 }
 
 export function loadRunData() {
