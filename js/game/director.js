@@ -13,7 +13,7 @@ import { ENEMIES, ELITES } from '../data/enemies.js';
 import { spawnEnemy, aliveCount, killEnemy } from './enemies.js';
 import { weightedPick, rand, pick } from '../core/util.js';
 import { sfx } from '../core/audio.js';
-import { shake, particles } from './fx.js';
+import { shake, particles, ring } from './fx.js';
 import { track } from '../core/save.js';
 
 /** Enemies farther than this from the player (for 5 s) are brought back near the player. */
@@ -39,14 +39,21 @@ export class Director {
     this.otWaveT = 0;
     this.final = !!stage.final;
     this.surgeUntil = 0;
+    this.target = 4;
     this.surgeT = 0;
     this.surgeMult = 1;
   }
 
   /** Hard limit on living enemies (performance safety net; the spawn targets are far below it). */
   get cap() {
-    const base = G.quality === 'low' ? 220 : 400;
-    return this.t > STAGE_TIME ? base + (G.quality === 'low' ? 80 : 150) : base;
+    const base = G.quality === 'low' ? 320 : 650;
+    return this.t > STAGE_TIME ? base + (G.quality === 'low' ? 120 : 250) : base;
+  }
+
+  /** Spawn multiplier from difficulty: x(1 + bonus) and a little from the time-based difficulty. */
+  get spawnMult() {
+    const run = G.run;
+    return (1 + (run.diffBonus || 0) * 0.9) * Math.pow(Math.max(1, run.diff / (1 + (run.diffBonus || 0))), 0.2);
   }
 
   /** Seconds spent in overtime (past 10:00). */
@@ -85,13 +92,13 @@ export class Director {
     // --- scripted events (not on the final arena, which has its own boss)
     if (!this.final) {
       this.event(175, 'warn3', () => G.ui?.banner('HUGE WAVE INCOMING', 'Get ready…', true));
-      this.event(180, 'wave3', () => this.startSurge(1));
+      this.event(180, 'wave3', () => this.startSurge(0.45)); // the first wave is a warning shot
       this.event(295, 'warn5', () => G.ui?.banner('A CHAMPION APPROACHES', 'A mini-boss is coming for you', true));
-      this.event(300, 'mini5', () => this.champion());
+      this.event(300, 'mini5', () => this.champions());
       this.event(355, 'warn6', () => G.ui?.banner('HUGE WAVE INCOMING', 'Even bigger this time…', true));
-      this.event(360, 'wave6', () => this.startSurge(1.4));
+      this.event(360, 'wave6', () => this.startSurge(1.2));
       this.event(475, 'warn8', () => G.ui?.banner('A CHAMPION APPROACHES', 'This one is angrier', true));
-      this.event(480, 'mini8', () => this.champion(true));
+      this.event(480, 'mini8', () => this.champions(true));
       this.event(STAGE_TIME, 'ot', () => {
         G.ui?.banner('OVERTIME', 'The dead are coming for you — reach the portal!', true);
         sfx('roar');
@@ -111,14 +118,16 @@ export class Director {
     }
 
     // --- steady trickle: target population grows each minute
-    const target = Math.min(this.cap, 4 + min * 9 + run.stagesCleared * 6 + run.loop * 12);
+    // more enemies the harder it gets: time, stages, loops and the difficulty bonus all count
+    const target = Math.min(this.cap, Math.round((4 + min * 9 + run.stagesCleared * 6 + run.loop * 12) * this.spawnMult));
+    this.target = target;
     this.trickleT -= dt;
     if (this.trickleT <= 0) {
       this.trickleT = rand(0.6, 1.05) / (1 + run.stagesCleared * 0.08);
       // only enemies that are actually near you count, so a few stuck somewhere far away
       // can never stop the spawns
       const alive = activeCount();
-      if (alive < target) this.spawnGroup(Math.min(target - alive, 2 + Math.floor(min / 2.5) + Math.floor(run.stagesCleared * 0.7) + Math.floor(Math.random() * 3)));
+      if (alive < target) this.spawnGroup(Math.min(target - alive, Math.round((2 + Math.floor(min / 2.5) + Math.floor(run.stagesCleared * 0.7) + Math.floor(Math.random() * 3)) * Math.sqrt(this.spawnMult))));
     }
 
     // --- leash: enemies left far behind (stuck on terrain, lost in a cave...) come back to you
@@ -129,8 +138,9 @@ export class Director {
       this.surgeT -= dt;
       if (this.surgeT <= 0) {
         this.surgeT = rand(0.35, 0.6) / this.surgeMult;
-        const room = this.cap + 45 - aliveCount();
-        const size = Math.round((5 + min * 0.7 + run.stagesCleared * 1.2) * this.surgeMult + Math.random() * 3);
+        // a surge roughly doubles the normal crowd (it must not just fill the hard cap)
+        const room = Math.min(this.cap, Math.round(this.target * 1.9 + 20)) - activeCount();
+        const size = Math.round((5 + min * 0.7 + run.stagesCleared * 1.2) * this.surgeMult * Math.sqrt(this.spawnMult) + Math.random() * 3);
         if (room > 0) this.spawnGroup(Math.min(room, size), { far: true });
       }
       if (this.t + dt >= this.surgeUntil) G.ui?.banner('Wave survived', 'The swarm thins out… for now');
@@ -196,7 +206,29 @@ export class Director {
         killEnemy(e, { noReward: true });
         continue;
       }
-      if (e.isBoss || e.champion) continue;
+      if (e.isBoss || e.champion) {
+        // bosses never get lost: past 55 m for 3 s they blink back next to you
+        const farB = Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > 55 && e.spawnT <= 0 && e.state !== 'attack';
+        e.farT = farB ? (e.farT || 0) + 0.5 : 0;
+        if (e.farT >= 3) {
+          const c = this.spawnCenter(16, 24, e.flying);
+          if (c) {
+            particles(e.pos, 0xff3355, 30, 8, 0.7, 0.6);
+            e.farT = 0;
+            e.pos.x = c.x;
+            e.pos.z = c.z;
+            e.pos.y = G.world.heightAt(c.x, c.z) + (e.flying ? e.hover || 0 : 0);
+            e.vy = 0;
+            e.lastX = e.pos.x;
+            e.lastZ = e.pos.z;
+            ring(e.pos, 6, 0xff3355, 0.5);
+            particles(e.pos, 0xff3355, 40, 10, 0.8, 0.7);
+            shake(0.3);
+            sfx('portal');
+          }
+        }
+        continue;
+      }
       const far = Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > LEASH_DIST;
       e.farT = far ? (e.farT || 0) + 0.5 : 0;
       if (e.farT < 5) continue;
@@ -252,7 +284,7 @@ export class Director {
   hugeWave(mult = 1) {
     const run = G.run;
     const total = Math.round((G.quality === 'low' ? 26 : 42) * mult + run.stagesCleared * 4);
-    const room = Math.max(0, this.cap + 30 - aliveCount());
+    const room = Math.max(0, Math.min(this.cap, Math.round(this.target * 2.3 + 40)) - activeCount());
     const n = Math.min(total, room);
     const ids = Object.keys(this.stage.enemies);
     const dirs = 4;
@@ -270,13 +302,20 @@ export class Director {
   }
 
   /** A huge, tanky version of the stage's toughest regular enemy. */
-  champion(angry = false) {
+  /** Mini-boss event: one champion per boss (the Shrine of the Mountain doubles both). */
+  champions(angry = false) {
+    const n = Math.max(1, G.run.bossCount || 1);
+    for (let i = 0; i < n; i++) this.champion(angry, i > 0);
+    if (n > 1) G.ui?.banner(`${n} CHAMPIONS`, 'The Shrine of the Mountain called more of them', true);
+  }
+
+  champion(angry = false, extra = false) {
     const ids = Object.keys(this.stage.enemies).sort((a, b) => ENEMIES[b].hp - ENEMIES[a].hp);
     const id = ids[0];
-    const c = this.spawnCenter(15, 22);
+    const c = this.spawnCenter(15, 26);
     if (!c) return;
     const e = spawnEnemy(id, c, { champion: true, elite: angry ? pick(Object.keys(ELITES)) : null });
-    if (e) {
+    if (e && !extra) {
       G.ui?.setBoss(e, `Champion ${ENEMIES[id].name}`);
       shake(0.5);
       sfx('roar');

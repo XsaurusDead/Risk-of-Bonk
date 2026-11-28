@@ -10,7 +10,7 @@ import { TOMES, TOME_SLOTS, TOME_MAX, WEAPON_MAX, WEAPON_SLOTS, WEAPON_STATS, PR
 import { WEAPONS, WEAPON_IDS } from '../data/weapons.js';
 import { icon } from '../data/icons.js';
 import { CHARACTERS } from '../data/characters.js';
-import { World } from './world.js';
+import { World, PILLAR_RADIUS, PILLAR_TIME } from './world.js';
 import { Player, xpFor } from './player.js';
 import { Director } from './director.js';
 import { initEnemies, updateEnemies, clearEnemies, spawnEnemy } from './enemies.js';
@@ -28,17 +28,21 @@ function preloadStageModels(stage) {
   const ids = Object.keys(stage.enemies || {});
   const boss = BOSSES[stage.boss];
   if (boss?.summon) ids.push(boss.summon);
+  ids.push('reaper'); // overtime wraiths
   for (const def of [boss, ...ids.map((id) => ENEMIES[id])]) {
     if (def?.glb) loadEnemyModel(def.glb);
     if (def?.vox) loadVoxModel(def.vox);
   }
 }
 import { sfx } from '../core/audio.js';
-import { track, trackMax, commitRunBests, persist, selectedCostume } from '../core/save.js';
+import { track, trackMax, commitRunBests, persist, selectedCostume, isTomeUnlocked } from '../core/save.js';
 import { weightedPick, shuffle, rand } from '../core/util.js';
 import { saveRun, clearRun, loadRunData } from '../core/runsave.js';
 import { Music } from '../core/music.js';
 import { recordRun } from '../core/leaderboard.js';
+
+/** Share of Moai that also offer the Devil's Trademark. */
+const MOAI_DEVIL_CHANCE = 0.25;
 import { updateGlyphs, clearGlyphs, glyphRing } from './glyphs.js';
 
 const _v = new THREE.Vector3();
@@ -400,7 +404,9 @@ export const Game = {
     const minutes = run.time / 60;
     // Exponential in both time and stages cleared (Megabonk-style: enemies mostly scale with
     // time, so a good build really feels strong). Overtime keeps the old, much harsher curve.
-    run.diff = Math.pow(1.045, minutes) * Math.pow(1.25, run.stagesCleared);
+    // the Tome of Chaos (and anything else that adds `difficulty`) turns everything up by its %
+    run.diffBonus = G.player?.stats.difficulty || 0;
+    run.diff = Math.pow(1.06, minutes) * Math.pow(1.35, run.stagesCleared) * (1 + run.diffBonus);
     run.diffHard = Math.pow(1.055, minutes) * Math.pow(1.3, run.stagesCleared);
     // Enemies keep up with YOU: their health follows your damage per second, their damage
     // follows how much punishment you can take (HP, armor, shield). Updated twice a second.
@@ -420,15 +426,16 @@ export const Game = {
       const dps = Math.max(formula, Math.min(run.dpsAvg || 0, formula * 3));
       run.playerDps = dps;
       // only a gentle nudge from your build (strong builds should feel strong)...
-      run.hpScale = Math.pow(Math.max(1, dps / 150), 0.35);
+      // later stages follow very strong builds a bit more closely (no endless snowball)
+      run.hpScale = Math.pow(Math.max(1, dps / 150), Math.min(0.72, 0.45 + 0.035 * run.stagesCleared));
       const ehp = s.maxHp * (1 + Math.max(0, s.armor) / 100) + (s.maxShield || 0);
       run.playerEhp = ehp;
-      run.dmgScale = Math.pow(Math.max(1, ehp / 250), 0.35);
+      run.dmgScale = Math.pow(Math.max(1, ehp / 250), 0.4);
       // ...except in overtime, which still hunts you down whatever you built
       run.hpScaleHard = Math.pow(Math.max(1, dps / 50), 0.75);
       run.dmgScaleHard = Math.pow(Math.max(1, ehp / 110), 0.7);
     }
-    run.coinScale = Math.pow(run.diff, 0.5);
+    run.coinScale = Math.pow(run.diff, 0.45);
     run.xpScale = Math.pow(run.diff, 0.65);
   },
 
@@ -487,6 +494,7 @@ export const Game = {
     updateGlyphs(dt);
     updateHpBars();
     this.updatePortal(dt);
+    this.updatePillars(dt);
     this.updateShrines();
     if (run.finalSpawnT > 0) {
       run.finalSpawnT -= dt;
@@ -540,9 +548,10 @@ export const Game = {
     if (c.free) return 0;
     const p = G.player;
     const n = G.run.chestsOpened || 0;
-    const base = 10 * (1 + 0.25 * n + 0.02 * n * n);
+    const base = 10 * (1 + 0.25 * n + 0.035 * n * n);
     const tierMult = { normal: 1, large: 2, epic: 4, legendary: 8 }[c.tier] || 1;
-    return Math.ceil(base * tierMult * (1 - p.stats.chestDiscount));
+    // prices also follow the difficulty (like gold does), so late-game gold doesn't buy hundreds of chests
+    return Math.ceil(base * tierMult * Math.pow(Math.max(1, G.run.diff || 1), 0.45) * (1 - p.stats.chestDiscount));
   },
 
   interact(it) {
@@ -561,13 +570,7 @@ export const Game = {
         floatText(p.pos.clone().setY(p.pos.y + 2.5), '+50% HP', '#88ff99', true);
         sfx('levelup');
       });
-      case 'xp': return this.useShrine(o, () => {
-        const p = G.player;
-        const amt = p.xpNext * rand(0.4, 1.4);
-        floatText(p.pos.clone().setY(p.pos.y + 2.5), `+${Math.round(amt)} XP`, '#55e6ff', true);
-        particles(p.pos, 0x55e6ff, 30, 6, 0.8);
-        p.addXp(amt);
-      });
+      case 'pillar': return this.activatePillar(o);
       case 'boss': return this.useShrine(o, () => {
         const run = G.run;
         if (G.world.portal.state !== 'idle') return false;
@@ -635,10 +638,12 @@ export const Game = {
       const id = rollItem(rollRarity(kind));
       if (!seen.has(id)) { seen.add(id); choices.push(id); }
     }
-    this.moaiState = { o, choices };
+    // the red Devil's Trademark is only offered by some Moai (1 in 4)
+    const devil = Math.random() < MOAI_DEVIL_CHANCE;
+    this.moaiState = { o, choices, devil };
     G.mode = 'moai';
     Input.releaseLock();
-    G.ui?.showMoai(choices);
+    G.ui?.showMoai(choices, devil);
     sfx('portal');
   },
   chooseMoai(i) {
@@ -647,6 +652,7 @@ export const Game = {
     const run = G.run;
     st.o.used = true;
     track('shrinesUsed');
+    if (i === 3 && !st.devil) return;
     if (i === 3) {
       run.devilMarks = (run.devilMarks || 0) + 1;
       track('devilMarks');
@@ -733,6 +739,45 @@ export const Game = {
     Music.playBoss();
     shake(0.6);
     sfx('roar');
+  },
+
+  /** Charge pillars: activate, then stand in the ring until it's full for a free level-up choice. */
+  activatePillar(o) {
+    if (o.used || o.state === 'charging') return;
+    o.state = 'charging';
+    o.charge = 0;
+    sfx('portal');
+    ring(o.pos, PILLAR_RADIUS, 0xffc040, 0.6);
+    G.ui?.banner('Pillar awakened', `Stay in the ring to charge it — it grants a tome or weapon upgrade`);
+    // its glow draws a pack of enemies
+    this.director?.spawnGroup(4 + Math.floor((G.run.stageTime || 0) / 90), { far: true });
+  },
+
+  updatePillars(dt) {
+    const p = G.player;
+    for (const o of G.world.interactables) {
+      if (o.kind !== 'pillar' || o.state !== 'charging' || o.used) continue;
+      const inZone = !p.dead && Math.hypot(p.pos.x - o.pos.x, p.pos.z - o.pos.z) < PILLAR_RADIUS && Math.abs(p.pos.y - o.pos.y) < 8;
+      // charges while you stand in it, drains slowly when you leave
+      o.charge = Math.max(0, Math.min(1, o.charge + (inZone ? dt / PILLAR_TIME : -dt / (PILLAR_TIME * 3))));
+      const q = Math.floor(o.charge * 4);
+      if (q > (o.quarter || 0) && q < 4) {
+        o.quarter = q;
+        floatText(o.pos.clone().setY(o.pos.y + 7), `${q * 25}%`, '#ffd060', true);
+        sfx('tick', 0.5);
+      }
+      if (o.charge >= 1) {
+        o.used = true;
+        o.state = 'done';
+        track('shrinesUsed');
+        track('pillarsCharged');
+        p.pendingLevelUps++;
+        particles(o.pos.clone().setY(o.pos.y + 5), 0xffd060, 50, 10, 1, 0.6);
+        ring(o.pos, PILLAR_RADIUS, 0x55ff99, 0.8);
+        floatText(p.pos.clone().setY(p.pos.y + 2.6), 'UPGRADE!', '#ffd060', true);
+        sfx('levelup');
+      }
+    }
   },
 
   updatePortal(dt) {
@@ -874,7 +919,7 @@ export const Game = {
       weights[r] = ROLL_RARITY[r].weight * (o === 0 ? 1 : Math.pow(1 + 0.3 * luck, o));
     }
     const owned = Object.keys(p.tomes);
-    const tomePool = TOMES.filter((t) => (p.tomes[t.id] ? p.tomes[t.id].level < TOME_MAX : owned.length < TOME_SLOTS));
+    const tomePool = TOMES.filter((t) => isTomeUnlocked(t) && (p.tomes[t.id] ? p.tomes[t.id].level < TOME_MAX : owned.length < TOME_SLOTS));
     // weapons: level up one you carry, or (with a free slot) pick up a new one
     const ownedW = p.weaponOrder.filter((id) => p.weapons[id].level < WEAPON_MAX);
     const newW = p.weaponOrder.length < WEAPON_SLOTS ? WEAPON_IDS.filter((id) => !p.weapons[id]) : [];

@@ -20,6 +20,7 @@ export const ACHIEVEMENTS = [
   { id: 'into_the_void', name: 'Into the Void', desc: 'Reach stage 6 (Void Sanctum).', cond: { scope: 'run', stat: 'stageReached', value: 6 }, reward: { character: 'nyx' } },
 
   // ---------- Generic item unlocks ----------
+  { id: 'chaos_seeker', name: 'Chaos Seeker', desc: 'Defeat 2 stage bosses (all runs).', cond: { scope: 'life', stat: 'bossKills', value: 2 }, reward: { tome: 'chaos' } },
   { id: 'big_spender', name: 'Big Spender', desc: 'Spend 5000 coins on chests (all runs).', cond: { scope: 'life', stat: 'coinsSpent', value: 5000 }, reward: { item: 'piggy_bank' } },
   { id: 'treasure_hunter', name: 'Treasure Hunter', desc: 'Open 60 chests (all runs).', cond: { scope: 'life', stat: 'chests', value: 60 }, reward: { item: 'golden_idol' } },
   { id: 'first_boss', name: 'Bigger They Are', desc: 'Defeat your first stage boss.', cond: { scope: 'life', stat: 'bossKills', value: 1 }, reward: { item: 'phoenix_feather' } },
@@ -42,7 +43,7 @@ export const ACHIEVEMENTS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Generated achievements (404 in total).
+// Generated achievements (405 in total, incl. the hand-written ones).
 //
 // Rewards for the expansion content are handed out here. Every reward is
 // placed on an achievement that can be completed with content unlocked earlier
@@ -50,7 +51,7 @@ export const ACHIEVEMENTS = [
 // survivor), and validateUnlockGraph() in save.js re-checks the whole chain at
 // boot, so the save can never get stuck.
 // ---------------------------------------------------------------------------
-export const TOTAL_ACHIEVEMENTS = 404;
+export const TOTAL_ACHIEVEMENTS = 405;
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
 const fmtN = (v) => v.toLocaleString('en-US');
 const LABEL = {
@@ -71,8 +72,11 @@ const LABEL = {
 };
 const RUN_LABEL = { kills: (v) => `Defeat ${fmtN(v)} enemies in a single run` };
 
+let generated = false;
 export function buildAchievements({ items, characters, charNames, enemies, bosses, stages }) {
-  if (ACHIEVEMENTS.length > 25) return ACHIEVEMENTS;
+  // only once (the hand-written list above can grow freely)
+  if (generated) return ACHIEVEMENTS;
+  generated = true;
   const gen = [];
   const add = (id, name, cond, tier, descOverride) => {
     let d = descOverride || (cond.scope === 'run' && RUN_LABEL[cond.stat] ? RUN_LABEL[cond.stat](cond.value) : LABEL[cond.stat] ? LABEL[cond.stat](cond.value) : `${cond.stat} ${cond.value}`);
@@ -152,7 +156,7 @@ export function buildAchievements({ items, characters, charNames, enemies, bosse
   fam('specialChests', 'life', [3, 15], 'Rarity Hunter');
   fam('devilMarks', 'life', [5, 25], "Devil's Due");
 
-  // pad / trim to exactly 404 total
+  // pad / trim to exactly TOTAL_ACHIEVEMENTS
   const pad = [['abilitiesUsed', 'life', 60000], ['jumps', 'life', 40000], ['kills', 'life', 90000], ['chests', 'life', 900], ['crits', 'life', 150000], ['damageDealt', 'life', 10000000000]];
   let k = 0;
   while (ACHIEVEMENTS.length + gen.length < TOTAL_ACHIEVEMENTS && k < pad.length) {

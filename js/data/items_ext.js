@@ -107,23 +107,23 @@ export const EXT_ITEMS = [
   S('leather_gloves', 'Leather Gloves', 'common', '🥊', { damage: 0.05, attackSpeed: 0.05 }),
   S('herbal_tea', 'Herbal Tea', 'common', '🍵', { regen: 1, maxHpFlat: 10 }),
   S('whetstone', 'Whetstone', 'common', '⚒️', { damage: 0.08, critMult: 0.1 }),
-  S('focus_crystal', 'Focus Crystal', 'common', '🔮', { cdr: 0.04, damage: 0.04 }),
+  S('focus_crystal', 'Focus Crystal', 'common', '🔮', { cdr: 0.05, damage: 0.06 }),
   S('bubble_wrap', 'Bubble Wrap', 'common', '🫧', { dodge: 0.04 }),
   S('old_compass', 'Old Compass', 'common', '🧭', { pickup: 2, moveSpeed: 0.05 }),
   S('wax_candle', 'Wax Candle', 'common', '🕯️', { area: 0.06 }),
-  S('pirate_patch', 'Pirate Patch', 'common', '🏴‍☠️', { crit: 0.07 }),
+  S('pirate_patch', 'Pirate Patch', 'common', '🏴‍☠️', { crit: 0.09 }),
   S('protein_bar', 'Protein Bar', 'common', '🍫', { maxHpFlat: 25 }),
   S('ankle_weights', 'Ankle Weights', 'common', '🏋️', { armor: 10 }),
   S('stopwatch', 'Stopwatch', 'common', '⏱️', { cdr: 0.05 }),
   S('bellows', 'Bellows', 'common', '💨', { area: 0.08, damage: 0.04 }),
-  S('four_leaf', 'Four-Leaf Clover', 'common', '🍀', { luck: 0.2 }),
-  S('rollerblades', 'Rollerblades', 'common', '🛼', { moveSpeed: 0.14 }),
+  S('four_leaf', 'Four-Leaf Clover', 'common', '🍀', { luck: 0.3 }),
+  S('rollerblades', 'Rollerblades', 'common', '🛼', { moveSpeed: 0.18 }),
   S('knit_mittens', 'Knit Mittens', 'common', '🧶', { armor: 5, regen: 1 }),
   S('cookie', 'Cookie', 'common', '🍪', { maxHpFlat: 15, regen: 0.5 }),
   S('thermos', 'Thermos', 'common', '☕', { regen: 2 }),
   S('slingshot', 'Slingshot', 'common', '🪃', { damage: 0.08 }),
   S('ski_goggles', 'Ski Goggles', 'common', '🥽', { crit: 0.05, attackSpeed: 0.05 }),
-  S('scholar_cap', "Scholar's Cap", 'common', '🎓', { xp: 0.1, coins: 0.1 }),
+  S('scholar_cap', "Scholar's Cap", 'common', '🎓', { xp: 0.15, coins: 0.12 }),
   S('paper_kite', 'Paper Kite', 'common', '🪁', { moveSpeed: 0.08, jumpPower: 0.08 }),
   X('static_glove', 'Static Glove', 'common', '🌩️', '6% chance on hit to zap 2 enemies for 60% damage.', {
     onHit: (n, h) => { if (roll(0.06, h)) chainLightning(h.enemy, 1 + n, 15, D() * 0.6, { procCoef: 0.1 }); },
@@ -149,10 +149,10 @@ export const EXT_ITEMS = [
   }),
   C('first_aid', 'First Aid Kit', 'common', '🧰', 'lowHp', { regen: 4 }),
   C('war_paint', 'War Paint', 'common', '🎨', 'fullHp', { damage: 0.12 }),
-  C('tortoise_shell', 'Tortoise Shell', 'common', '🐢', 'still', { armor: 20 }),
+  C('tortoise_shell', 'Tortoise Shell', 'common', '🐢', 'still', { armor: 35 }, { armor: 5 }),
   C('jump_rope', 'Jump Rope', 'common', '🪢', 'airborne', { damage: 0.1 }),
-  X('pocket_sand', 'Pocket Sand', 'common', '🏜️', '8% chance on hit to stun an enemy for 0.7s.', {
-    onHit: (n, h) => { if (roll(0.08 * n, h)) applyStun(h.enemy, 0.7); },
+  X('pocket_sand', 'Pocket Sand', 'common', '🏜️', '10% chance on hit to stun an enemy for 0.8s.', {
+    onHit: (n, h) => { if (roll(0.1 * n, h)) applyStun(h.enemy, 0.8); },
   }),
   X('venom_vial', 'Venom Vial', 'common', '🧪', '10% chance on hit to apply 2 poison stacks.', {
     onHit: (n, h) => { if (roll(0.1, h)) applyPoison(h.enemy, 2 * n); },
@@ -181,7 +181,7 @@ export const EXT_ITEMS = [
   S('spyglass', 'Spyglass', 'rare', '🔭', { crit: 0.12, critMult: 0.2 }),
   S('flywheel', 'Flywheel', 'rare', '🛞', { attackSpeed: 0.2 }),
   S('war_horn', 'War Horn', 'rare', '📯', { damage: 0.15, area: 0.1 }),
-  S('sage_robe', 'Sage Robe', 'rare', '👘', { cdr: 0.15 }),
+  S('sage_robe', 'Sage Robe', 'rare', '👘', { cdr: 0.18, damage: 0.06 }),
   S('heart_locket', 'Heart Locket', 'rare', '💝', { maxHpFlat: 60, regen: 1.5 }),
   S('smoke_cloak', 'Smoke Cloak', 'rare', '🌫️', { dodge: 0.12 }),
   S('treasure_scroll', 'Treasure Scroll', 'rare', '📜', { luck: 0.5, coins: 0.25 }),
@@ -321,7 +321,7 @@ export const EXT_ITEMS = [
     }),
   }),
 
-  S('rabbit_foot', "Rabbit's Foot", 'rare', '🐇', { crit: 0.08, luck: 0.3, dodge: 0.05 }),
+  S('rabbit_foot', "Rabbit's Foot", 'rare', '🐇', { crit: 0.1, luck: 0.4, dodge: 0.07 }),
 
   // =========================================================== EPIC (35)
   X('colossus_fist', 'Colossus Fist', 'epic', '✊', '10% chance on hit to cause a shockwave for 400% damage.', {

@@ -139,6 +139,11 @@ export function isCharacterUnlocked(id) {
   const a = sourceMap('character').get(id);
   return !!(a && G.save?.achievements[a.id]);
 }
+/** Tomes with an `unlock` achievement only show up in level-ups once it's done. */
+export function isTomeUnlocked(tome) {
+  if (!tome.unlock) return true;
+  return !!G.save?.achievements[tome.unlock];
+}
 export function isCostumeUnlocked(charId, idx) {
   if (!idx) return true;
   const a = sourceMap('costume').get(`${charId}:${idx}`);

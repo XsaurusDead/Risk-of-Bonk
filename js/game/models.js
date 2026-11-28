@@ -2,10 +2,11 @@
 // into a single vertex-coloured geometry (1-2 draw calls each); characters are
 // kept as a hierarchy so limbs can animate.
 import * as THREE from 'three';
+import { addTriplanar } from './stone.js';
 import { G } from '../core/state.js';
 
 const PRIMS = {};
-function prim(shape) {
+export function prim(shape) {
   if (PRIMS[shape]) return PRIMS[shape];
   let g;
   switch (shape) {
@@ -108,12 +109,35 @@ export function initMaterials() {
   MAT.high = high;
   MAT.vc = litMaterial({ vertexColors: true });
   MAT.glow = glowMaterial({ vertexColors: true });
+  // vertex-coloured stone with the nature pack's rock texture (ruins, caves) — see stone.js
+  MAT.stone = addTriplanar(litMaterial({ vertexColors: true, roughness: 0.92 }), { tex: 'rock', scale: 0.32, strength: 0.9 });
+  MAT.stoneDesert = addTriplanar(litMaterial({ vertexColors: true, roughness: 0.92 }), { tex: 'desert', scale: 0.32, strength: 0.9 });
 }
 /** PBR material on high quality, cheap Lambert on phones. */
 export function litMaterial(params = {}) {
   if (MAT.high) return new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0.02, ...params });
   const { roughness, metalness, ...rest } = params;
   return new THREE.MeshLambertMaterial(rest);
+}
+const stoneCache = new Map();
+/** A plain-coloured material turned into textured stone (shrines, Moai, pillars, portal). */
+export function stoneColorMaterial(color, tex = 'rock') {
+  const k = color.getHex() + tex;
+  if (!stoneCache.has(k)) stoneCache.set(k, addTriplanar(litMaterial({ color: color.clone(), roughness: 0.9 }), { tex, scale: 0.45, strength: 0.85 }));
+  return stoneCache.get(k);
+}
+/** Swap the grey/brown (low-saturation) parts of a built group to textured stone. */
+export function stoneify(group, tex = 'rock') {
+  const hsl = {};
+  group.traverse((o) => {
+    if (!o.isMesh || !o.material || Array.isArray(o.material) || o.material.map || o.material.vertexColors) return;
+    const m = o.material;
+    if (!(m.isMeshStandardMaterial || m.isMeshLambertMaterial) || m.transparent || m.metalness > 0.3) return;
+    m.color.getHSL(hsl);
+    if (hsl.s > 0.38 || hsl.l > 0.85) return; // coloured / glowing bits stay as they are
+    o.material = stoneColorMaterial(m.color, tex);
+  });
+  return group;
 }
 export function glowMaterial(params = {}) {
   const m = new THREE.MeshBasicMaterial(params);
@@ -782,6 +806,42 @@ export function buildMoai() {
   g.add(eyes);
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return { group: g, emblem: eyes };
+}
+
+/**
+ * Charge pillar: a tall stone obelisk ringed with four rune stones, a floating crystal on top,
+ * and a ground zone that fills while you stand in it.
+ */
+export function buildPillar() {
+  const g = new THREE.Group();
+  const stone = 0x8c8a96, dark = 0x5c5a66;
+  g.add(mesh('cyl', dark, [0, 0.25, 0], [3.4, 0.5, 3.4]));
+  g.add(mesh('cyl', stone, [0, 0.65, 0], [2.6, 0.4, 2.6]));
+  g.add(mesh('box', stone, [0, 2.6, 0], [1.1, 3.8, 1.1], [0, Math.PI / 4, 0]));
+  g.add(mesh('cone', dark, [0, 4.9, 0], [1.0, 0.9, 1.0], [0, Math.PI / 4, 0]));
+  const runes = [];
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    g.add(mesh('box', dark, [Math.cos(a) * 2.3, 0.9, Math.sin(a) * 2.3], [0.5, 1.0, 0.5]));
+    const r = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), new THREE.MeshBasicMaterial({ color: 0x335577 }));
+    r.position.set(Math.cos(a) * 2.3, 1.75, Math.sin(a) * 2.3);
+    g.add(r);
+    runes.push(r);
+  }
+  const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.55), new THREE.MeshBasicMaterial({ color: 0x7fd6ff }));
+  crystal.scale.set(1, 1.6, 1);
+  crystal.position.y = 6.3;
+  g.add(crystal);
+  // charge zone: an outline ring and a disc that grows with the charge (scaled to the radius in world.js)
+  const zone = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffc040, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
+  zone.position.y = 0.15;
+  zone.visible = false;
+  const fill = new THREE.Mesh(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffc040, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending }));
+  fill.position.y = 0.12;
+  fill.visible = false;
+  g.add(zone, fill);
+  g.traverse((o) => { if (o.isMesh && o !== zone && o !== fill) o.castShadow = true; });
+  return { group: g, crystal, crystalY: crystal.position.y, runes, zone, fill, state: 'idle', charge: 0 };
 }
 
 /** Magnet statue: stone plinth holding a big red horseshoe magnet. */

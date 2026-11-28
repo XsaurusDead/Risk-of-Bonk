@@ -6,15 +6,16 @@ import { G } from '../core/state.js';
 import { makeNoise2D, fbm, smoothstep, mulberry32, SpatialHash, lerp, clamp } from '../core/util.js';
 import {
   buildMerged, decorParts, MAT, buildChest, buildPortal, litMaterial, swayMaterial, setGlowColor,
-  buildShrine, buildMoai, buildMagnetStatue, buildJumpPad, structureParts,
+  buildShrine, buildMoai, buildMagnetStatue, buildPillar, stoneify, prim, buildJumpPad, structureParts,
 } from './models.js';
 import { terrainDetailTexture } from './textures.js';
 import { assetsReady, getModel, desertRockTexture } from './assets.js';
 import { attachGlyph, recolorGlyph } from './glyphs.js';
 import { createLootFx, updateLootFx } from './lootfx.js';
+import { addTriplanar, rockTexFor } from './stone.js';
 
 // animated rune pillars (spell pack) floating above shrines: colour + design per kind
-const SHRINE_GLYPH = { heal: ['D', 17], combat: ['H', 24], boss: ['K', 29], xp: ['C', 20], moai: ['E', 10], magnet: ['H', 20] };
+const SHRINE_GLYPH = { heal: ['D', 17], combat: ['H', 24], boss: ['K', 29], moai: ['E', 10], magnet: ['H', 20] };
 
 export const SIZE = 520;
 const SEGS = 220;
@@ -43,7 +44,10 @@ function desertVariant(mat) {
 const SWAY = { grass: 0.32, dry_grass: 0.32, flower: 0.25, tree: 0.0035, pine: 0.003, dead_tree: 0.004, giant_mushroom: 0.002, glow_shroom: 0.08, cactus: 0.0008 };
 
 // how many of each interactable a stage rolls (min..max)
-const COUNTS = { chest: [15, 20], heal: [1, 2], combat: [1, 3], boss: [1, 3], xp: [2, 5], moai: [3, 7], magnet: [0, 3] };
+const COUNTS = { chest: [15, 20], heal: [1, 2], combat: [1, 3], boss: [1, 3], pillar: [2, 4], moai: [3, 7], magnet: [0, 3] };
+/** Charge pillars: radius of the zone you stand in, and seconds of standing to fill it. */
+export const PILLAR_RADIUS = 9;
+export const PILLAR_TIME = 18;
 // chest tier odds
 const CHEST_TIERS = { normal: 82, large: 13, epic: 4, legendary: 1 };
 
@@ -209,6 +213,8 @@ export class World {
     this.terrainGeo.setIndex(new THREE.BufferAttribute(idx, 1));
     const tex = terrainDetailTexture(this.stage.id);
     this.terrainMat = litMaterial({ vertexColors: true, roughness: 0.96, map: tex, bumpMap: MAT.high ? tex : null, bumpScale: 0.6 });
+    // cliffs and steep slopes get the nature pack's rock texture (triplanar, so no stretching)
+    addTriplanar(this.terrainMat, { tex: rockTexFor(this.stage.id), scale: 0.11, strength: 0.95, slopeOnly: true });
     this.terrain = new THREE.Mesh(this.terrainGeo, this.terrainMat);
     this.terrain.receiveShadow = true;
     this.group.add(this.terrain);
@@ -349,6 +355,7 @@ export class World {
 
   buildStructures() {
     const tint = this.stage.ruinTint;
+    this.stoneMat = this.stage.id === 'dunes' ? MAT.stoneDesert : MAT.stone;
     const geoCache = {};
     const addMerged = (kind, x, y, z, rot, scale = 1, tintOverride) => {
       const key = kind + (tintOverride || tint || '');
@@ -369,43 +376,7 @@ export class World {
     };
     for (const s of this.structures) {
       if (s.type === 'ruins') {
-        const c = Math.cos(s.rot), sn = Math.sin(s.rot);
-        const local = (lx, lz) => [s.x + lx * c - lz * sn, s.z + lx * sn + lz * c];
-        addMerged('ruin_floor', s.x, s.y, s.z, s.rot);
-        // two broken walls and an arch around a paved floor; colliders follow the real
-        // wall segments (missing ones stay open) and are as tall as the stones
-        const wallColliders = (wx, wz, rot) => {
-          const by = this.heightAt(wx, wz);
-          const m = addMerged('ruin_wall', wx, by, wz, rot);
-          const parts = geoCache['ruin_wall' + (tint || '')].parts;
-          const c = Math.cos(rot), sn = Math.sin(rot);
-          for (const p of parts) {
-            if (p[0] !== 'box' || p[3][1] < 1) continue; // skip the low base slab
-            const lx = p[2][0], hgt = p[3][1];
-            // two circles per 2.2 m segment so the wall has no see-through seams
-            for (const off of [-0.55, 0.55]) {
-              const x = wx + (lx + off) * c, z = wz + (lx + off) * sn * -1;
-              this.addCollider(x, z, 0.75, by - 1, by + hgt, true);
-            }
-          }
-          return m;
-        };
-        const [w1x, w1z] = local(0, -8);
-        wallColliders(w1x, w1z, s.rot);
-        const [w2x, w2z] = local(-8, 0);
-        wallColliders(w2x, w2z, s.rot + Math.PI / 2);
-        const [ax, az] = local(6, 6);
-        const ay = this.heightAt(ax, az);
-        addMerged('ruin_arch', ax, ay, az, s.rot + Math.PI / 4);
-        const ca = Math.cos(s.rot + Math.PI / 4), sa = Math.sin(s.rot + Math.PI / 4);
-        // arch columns (5.2 m) with the lintel on top: you can walk through the arch
-        this.addCollider(ax + ca * 2.6, az - sa * 2.6, 0.85, ay - 1, ay + 6.1, true);
-        this.addCollider(ax - ca * 2.6, az + sa * 2.6, 0.85, ay - 1, ay + 6.1, true);
-        // the two standing columns on the floor (3 m and 1.6 m), placed with the mesh's own rotation
-        const meshPt = (lx, lz) => [s.x + lx * c + lz * sn, s.z - lx * sn + lz * c];
-        this.addCollider(...meshPt(-4.5, -4.5), 0.6, s.y - 1, s.y + 3, true);
-        this.addCollider(...meshPt(4.5, 4.5), 0.6, s.y - 1, s.y + 1.6, true);
-      } else if (s.type === 'cave') {
+        this.buildRuin(s, tint);      } else if (s.type === 'cave') {
         this.buildCave(s);
       } else if (s.type === 'island') {
         const m = addMerged('island', s.x, s.top, s.z, this.rng() * 6, 1, this.stage.ground.mid);
@@ -419,6 +390,162 @@ export class World {
     }
   }
 
+  /**
+   * One ruin, picked from six layouts with random broken heights, so no two look alike.
+   * Every solid stone becomes a walkable collider (you can climb broken walls and steps).
+   */
+  buildRuin(s, tint) {
+    const rng = this.rng;
+    const stone = new THREE.Color(tint || 0xbdb4a2);
+    const parts = [], cols = [];
+    const shadeHex = (k) => {
+      const c = stone.clone().multiplyScalar(k * (0.92 + rng() * 0.16));
+      return c.getHex();
+    };
+    const col = () => shadeHex(0.85 + rng() * 0.3);
+    // a box block: [x, z] centre, w (x) / d (z) footprint, h height, y bottom, yaw
+    const block = (x, z, w, d, h, y = 0, yaw = 0, solid = true) => {
+      parts.push(['box', col(), [x, y + h / 2, z], [w, h, d], [0, yaw, 0]]);
+      if (!solid || h < 0.5) return;
+      // colliders: circles along the long side
+      const long = Math.max(w, d), short = Math.min(w, d);
+      const along = w >= d ? 0 : Math.PI / 2;
+      const n = Math.max(1, Math.round(long / 1.1));
+      const r = Math.max(0.55, short / 2 + 0.15);
+      for (let i = 0; i < n; i++) {
+        const t = (i + 0.5) / n - 0.5;
+        const a = yaw + along;
+        cols.push([x + Math.cos(a) * t * long, z - Math.sin(a) * t * long, r, y + h]);
+      }
+    };
+    const column = (x, z, h, rad = 0.55, y = 0) => {
+      parts.push(['cyl', col(), [x, y + h / 2, z], [rad * 2, h, rad * 2]]);
+      if (h > 3.5) parts.push(['box', col(), [x, y + h + 0.2, z], [rad * 2.6, 0.4, rad * 2.6]]); // capital
+      cols.push([x, z, rad + 0.1, y + h + (h > 3.5 ? 0.4 : 0)]);
+    };
+    const fallen = (x, z, len, rad, yaw) => {
+      parts.push(['cyl', col(), [x, rad, z], [rad * 2, len, rad * 2], [Math.PI / 2, yaw, 0]]);
+      for (let i = -1; i <= 1; i++) cols.push([x + Math.sin(yaw) * i * len / 3, z + Math.cos(yaw) * i * len / 3, rad + 0.1, rad * 2]);
+    };
+    const rubble = (x, z, n = 4) => {
+      for (let i = 0; i < n; i++) {
+        const k = 0.4 + rng() * 0.7;
+        parts.push(['dodeca', col(), [x + (rng() - 0.5) * 3, k * 0.5, z + (rng() - 0.5) * 3], [k, k * 0.8, k], [rng() * 3, rng() * 3, 0]]);
+      }
+    };
+    const tiles = (w, d, size = 2.9) => {
+      for (let x = -w / 2 + size / 2; x < w / 2; x += size) {
+        for (let z = -d / 2 + size / 2; z < d / 2; z += size) {
+          if (rng() < 0.15) continue;
+          parts.push(['box', col(), [x, 0.12 + rng() * 0.08, z], [size - 0.1, 0.25, size - 0.1], [0, (rng() - 0.5) * 0.08, 0]]);
+        }
+      }
+    };
+    let loot = [0, 0, 0];
+    const type = Math.floor(rng() * 6);
+    s.layout = ['gate', 'colonnade', 'hall', 'tower', 'altar', 'court'][type];
+    switch (s.layout) {
+      case 'gate': { // arch gate with two broken walls in an L
+        tiles(9, 9);
+        for (let i = 0; i < 5; i++) if (rng() > 0.2) block(i * 2.2 - 4.4, -6.5, 2.2, 1.1, 1.5 + rng() * 3.5);
+        for (let i = 0; i < 4; i++) if (rng() > 0.2) block(-6.5, i * 2.2 - 3.3, 1.1, 2.2, 1.2 + rng() * 3);
+        block(4.4, 4.4, 1.2, 1.2, 5.2, 0, Math.PI / 4);
+        block(1.3, 7.1, 1.2, 1.2, 5.2, 0, Math.PI / 4);
+        parts.push(['box', col(), [2.85, 5.7, 5.75], [5.4, 1.0, 1.3], [0, Math.PI / 4, 0]]);
+        fallen(-2, 2.5, 3.5, 0.5, rng() * 3);
+        rubble(5, -3);
+        break;
+      }
+      case 'colonnade': { // ring of columns around a round floor, some fallen
+        parts.push(['cyl', col(), [0, 0.15, 0], [15, 0.3, 15]]);
+        cols.push([0, 0, 0.1, 0.3]);
+        const n = 8;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          const x = Math.cos(a) * 6.2, z = Math.sin(a) * 6.2;
+          const r = rng();
+          if (r < 0.15) continue;
+          if (r < 0.3) fallen(x * 0.8, z * 0.8, 4, 0.5, a + Math.PI / 2 + (rng() - 0.5));
+          else column(x, z, r > 0.7 ? 5.2 : 1 + rng() * 3.2, 0.55, 0.3);
+        }
+        block(0, 0, 2.2, 1.4, 1.1, 0.3); // altar
+        loot = [0, 0.3, 2.2];
+        break;
+      }
+      case 'hall': { // rectangular hall: broken walls with gaps and windows
+        tiles(12, 8);
+        const wall = (x0, z0, x1, z1) => {
+          const len = Math.hypot(x1 - x0, z1 - z0), n = Math.round(len / 2.2);
+          const yaw = -Math.atan2(z1 - z0, x1 - x0);
+          for (let i = 0; i < n; i++) {
+            if (rng() < 0.22) continue; // gaps / doors
+            const t = (i + 0.5) / n;
+            const h = 1 + rng() * 4;
+            const x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t;
+            block(x, z, 2.15, 0.9, h, 0, yaw);
+            if (h > 3.6 && rng() < 0.5) parts.push(['box', col(), [x, h + 0.15, z], [2.3, 0.3, 1.1], [0, yaw, 0]]); // lintel
+          }
+        };
+        wall(-7, -4.5, 7, -4.5);
+        wall(-7, 4.5, 7, 4.5);
+        wall(-7, -4.5, -7, 4.5);
+        rubble(4, 0, 6);
+        loot = [-3, 0, 0];
+        break;
+      }
+      case 'tower': { // collapsed round tower: the wall gets lower on one side, door gap
+        parts.push(['cyl', col(), [0, 0.15, 0], [9.5, 0.3, 9.5]]);
+        const n = 14, fall = rng() * Math.PI * 2;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          if (Math.abs(Math.sin((a - fall) / 2)) < 0.12) continue; // the doorway
+          const h = 0.8 + (1 + Math.cos(a - fall)) * 3.2 + rng() * 0.8;
+          block(Math.cos(a) * 4.6, Math.sin(a) * 4.6, 2.2, 0.9, h, 0, -a + Math.PI / 2);
+        }
+        rubble(Math.cos(fall + Math.PI) * 7, Math.sin(fall + Math.PI) * 7, 8);
+        break;
+      }
+      case 'altar': { // stepped platform with an obelisk and corner posts (climb the steps)
+        block(0, 0, 10, 10, 0.7);
+        block(0, 0, 7, 7, 0.7, 0.7);
+        block(0, 0, 4, 4, 0.7, 1.4);
+        parts.push(['box', col(), [0, 4.6, -1], [1.1, 5, 1.1]], ['cone', col(), [0, 7.6, -1], [1.0, 1.0, 1.0], [0, Math.PI / 4, 0]]);
+        cols.push([0, -1, 0.75, 7.1]);
+        for (const [x, z] of [[-4.6, -4.6], [4.6, -4.6], [-4.6, 4.6], [4.6, 4.6]]) column(x, z, 1.5 + rng() * 2.5, 0.45, 0.7);
+        loot = [0, 2.1, 1];
+        break;
+      }
+      default: { // statue court: plinths with broken statues, a toppled head, low hedge walls
+        tiles(9, 9);
+        for (const [x, z] of [[-4, -3], [4, -3], [0, 4]]) {
+          block(x, z, 1.8, 1.8, 1.2);
+          const legs = rng() < 0.5;
+          parts.push(['box', col(), [x - 0.35, 1.2 + 0.8, z], [0.45, 1.6, 0.5]], ['box', col(), [x + 0.35, 1.2 + (legs ? 0.8 : 0.4), z], [0.45, legs ? 1.6 : 0.8, 0.5]]);
+          if (rng() < 0.5) parts.push(['box', col(), [x, 3.6, z], [1.4, 1.6, 0.8]]);
+          cols.push([x, z, 1.1, rng() < 0.5 ? 3.6 : 2.8]);
+        }
+        parts.push(['sphere', col(), [2.5, 0.8, 1.5], [1.7, 1.6, 1.7]]);
+        cols.push([2.5, 1.5, 0.9, 1.6]);
+        for (let i = 0; i < 6; i++) if (rng() > 0.35) block(-6.6, i * 2.2 - 5.5, 0.8, 2.1, 0.9 + rng() * 0.7);
+        loot = [-1, 0, -0.5];
+      }
+    }
+    const merged = buildMerged(parts);
+    if (merged.geo) {
+      this.disposables.push(merged.geo);
+      const mesh = new THREE.Mesh(merged.geo, this.stoneMat);
+      mesh.position.set(s.x, s.y, s.z);
+      mesh.rotation.y = s.rot;
+      mesh.castShadow = MAT.high;
+      mesh.receiveShadow = true;
+      this.group.add(mesh);
+    }
+    // colliders, rotated with the ruin (mesh rotation convention: x' = x c + z s, z' = -x s + z c)
+    const c = Math.cos(s.rot), sn = Math.sin(s.rot);
+    for (const [lx, lz, r, top] of cols) this.addCollider(s.x + lx * c + lz * sn, s.z - lx * sn + lz * c, r, s.y - 1, s.y + top, true);
+    s.loot = new THREE.Vector3(s.x + loot[0] * c + loot[2] * sn, s.y + loot[1], s.z - loot[0] * sn + loot[2] * c);
+  }
+
   buildCave(s) {
     const dx = Math.cos(s.rot), dz = Math.sin(s.rot);
     const px = -dz, pz = dx; // perpendicular
@@ -426,7 +553,7 @@ export class World {
     const rockGeo = buildMerged(structureParts('boulder', rockCol)).geo;
     this.disposables.push(rockGeo);
     const half = s.len / 2;
-    const rocks = new THREE.InstancedMesh(rockGeo, MAT.vc, 80);
+    const rocks = new THREE.InstancedMesh(rockGeo, this.stoneMat || MAT.vc, 80);
     const dummy = new THREE.Object3D();
     let n = 0;
     for (let t = -half; t <= half; t += 2.6) {
@@ -467,17 +594,71 @@ export class World {
     rocks.castShadow = MAT.high;
     rocks.receiveShadow = true;
     this.group.add(rocks);
-    // the roof: a half-tube of rock that hides itself when you walk inside
-    const roofGeo = new THREE.CylinderGeometry(s.w / 2 + 2.4, s.w / 2 + 2.4, s.len + 4, 14, 1, true, 0, Math.PI);
+    // the roof: a craggy half-tube of textured rock with moss on top; it fades while you're inside
+    const roofGeo = new THREE.CylinderGeometry(s.w / 2 + 2.4, s.w / 2 + 2.4, s.len + 4, 22, 10, true, 0, Math.PI);
+    {
+      const pos = roofGeo.attributes.position, colors = new Float32Array(pos.count * 3);
+      const rock = new THREE.Color(rockCol), moss = new THREE.Color(this.stage.ground.mid);
+      const tmp = new THREE.Color();
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        // bumpy, uneven surface (not on the open ends so the tunnel mouth stays round)
+        const endFade = Math.min(1, (s.len / 2 + 2 - Math.abs(y)) / 2);
+        const bump = 1 + (this.noise(x * 0.4 + s.x, y * 0.35 + z * 0.4) * 0.16 + this.noise(y * 1.3, z * 1.3 + x) * 0.05) * endFade;
+        pos.setXYZ(i, x * bump, y, z * bump);
+        // moss where the surface faces up (the top of the arch: large x before the rotation)
+        const up = Math.max(0, x / (s.w / 2 + 2.4));
+        tmp.copy(rock).lerp(moss, Math.max(0, up - 0.55) * 1.8 * (0.7 + this.noise(y * 0.5, z * 0.5) * 0.3));
+        colors.set([tmp.r, tmp.g, tmp.b], i * 3);
+      }
+      roofGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      roofGeo.computeVertexNormals();
+    }
     roofGeo.rotateZ(Math.PI / 2);
     roofGeo.rotateY(-s.rot);
-    const roofMat = litMaterial({ color: rockCol, roughness: 1, side: THREE.DoubleSide, transparent: true, opacity: 1 });
+    const roofMat = addTriplanar(litMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide, transparent: true, opacity: 1 }), { tex: rockTexFor(this.stage.id), scale: 0.3, strength: 0.9 });
     const roof = new THREE.Mesh(roofGeo, roofMat);
     roof.position.set(s.x, s.y + 4.2, s.z);
     roof.scale.y = 0.9;
     roof.castShadow = MAT.high;
     this.group.add(roof);
     this.disposables.push(roofGeo, roofMat);
+    // stalactites hanging from the roof (hidden with it while you're inside)
+    for (let i = 0; i < 7; i++) {
+      const t = (this.rng() - 0.5) * (s.len - 4), side = (this.rng() - 0.5) * (s.w - 2);
+      const st = new THREE.Mesh(prim('cone'), roofMat);
+      const k = 0.4 + this.rng() * 0.5;
+      st.scale.set(k, 1.2 + this.rng() * 1.4, k);
+      st.rotation.x = Math.PI;
+      st.position.set(s.x + dx * t + px * side, s.y + 7 - st.scale.y * 0.5, s.z + dz * t + pz * side);
+      roof.add(st);
+      st.position.sub(roof.position);
+      st.position.y /= roof.scale.y;
+    }
+    // big textured rocks from the nature pack framing both mouths of the tunnel
+    for (const name of ['Rock_Medium_1', 'Rock_Medium_2', 'Rock_Medium_3']) {
+      const model = getModel(name);
+      if (!model) continue;
+      for (const end of [-1, 1]) {
+        if (this.rng() < 0.35) continue;
+        const side = this.rng() < 0.5 ? -1 : 1;
+        const t = end * (half + 1.5), off = side * (s.w / 2 + 3.5);
+        const g = new THREE.Group();
+        for (const part of model.parts) {
+          const desert = this.stage.id === 'dunes' && desertRockTexture();
+          const m = new THREE.Mesh(part.geometry, desert ? desertVariant(part.material) : part.material);
+          m.castShadow = MAT.high;
+          g.add(m);
+        }
+        const k = 5.5 / Math.max(model.height, 0.1);
+        g.scale.set(k, k * (0.8 + this.rng() * 0.4), k);
+        g.rotation.y = this.rng() * Math.PI * 2;
+        const x = s.x + dx * t + px * off, z = s.z + dz * t + pz * off;
+        g.position.set(x, Math.max(s.y, this.heightAt(x, z)) - 0.4, z);
+        this.group.add(g);
+        this.addCollider(x, z, 2.4, g.position.y - 1, g.position.y + 4.5, true);
+      }
+    }
     // glowing crystals inside
     for (let i = 0; i < 4; i++) {
       const t = (i / 3 - 0.5) * (s.len - 6);
@@ -511,7 +692,12 @@ export class World {
       if (kind === 'chest') built = withChestGlow(buildChest(extra.tier));
       else if (kind === 'moai') built = buildMoai();
       else if (kind === 'magnet') built = buildMagnetStatue();
+      else if (kind === 'pillar') {
+        built = buildPillar();
+        built.zone.scale.setScalar(PILLAR_RADIUS);
+      }
       else built = buildShrine(kind);
+      if (kind !== 'chest') stoneify(built.group, rockTexFor(this.stage.id));
       built.group.position.copy(pos);
       built.group.rotation.y = this.rng() * Math.PI * 2;
       this.group.add(built.group);
@@ -529,24 +715,16 @@ export class World {
       return it;
     };
     const spot = (minSep = 14) => this.randomSpot(16, 24, 50, 0.45, this.occupied(), minSep);
-    // rewards in special places first: inside caves and on top of islands
-    for (const c of this.caves) add('chest', new THREE.Vector3(c.x, c.y, c.z), { tier: this.rng() < 0.5 ? 'large' : 'normal' });
-    for (const s of this.structures) {
-      if (s.type !== 'island') continue;
-      const r = this.rng();
-      const pos = new THREE.Vector3(s.x + 1.5, s.top, s.z);
-      if (r < 0.5) add('chest', pos, { tier: this.rollChestTier(2) });
-      else if (r < 0.75) add('moai', pos);
-      else add('xp', pos);
-    }
-    for (const s of this.structures) if (s.type === 'ruins' && this.rng() < 0.6) add('chest', new THREE.Vector3(s.x, s.y, s.z), { tier: this.rollChestTier(1.5) });
+    // rewards in special places first: inside caves
+    for (const c of this.caves) c.chest = add('chest', new THREE.Vector3(c.x, c.y, c.z), { tier: this.rng() < 0.5 ? 'large' : 'normal' });
+    for (const s of this.structures) if (s.type === 'ruins' && this.rng() < 0.6) add('chest', s.loot ? s.loot.clone() : new THREE.Vector3(s.x, s.y, s.z), { tier: this.rollChestTier(1.5) });
     const total = (k) => this.rangeRoll(COUNTS[k]) + (k === 'chest' ? Math.min(4, this.loop) : 0);
     const chestsWanted = total('chest') - this.interactables.filter((i) => i.kind === 'chest').length;
     for (let i = 0; i < chestsWanted; i++) {
       const p = spot();
       if (p) add('chest', p, { tier: this.rollChestTier(1) });
     }
-    for (const kind of ['heal', 'magnet', 'combat', 'boss', 'xp', 'moai']) {
+    for (const kind of ['heal', 'magnet', 'pillar', 'combat', 'boss', 'moai']) {
       const have = this.interactables.filter((i) => i.kind === kind).length;
       for (let i = have; i < total(kind); i++) {
         const p = spot(18);
@@ -725,6 +903,7 @@ export class World {
 
   buildPortalMesh() {
     const p = buildPortal();
+    stoneify(p.group, rockTexFor(this.stage.id));
     p.group.position.copy(this.portalPos);
     this.group.add(p.group);
     this.portal = { pos: this.portalPos, state: 'idle', charge: 0, ...p };
@@ -843,6 +1022,22 @@ export class World {
           c.gem.rotation.y += dt * 1.5;
           c.gem.position.y = c.gemY + Math.sin(this.t * 2 + c.pos.x) * 0.15;
         }
+      } else if (c.kind === 'pillar') {
+        // the runes light up one by one as it charges; the zone fills from the middle
+        c.crystal.rotation.y += dt * (c.used ? 0.3 : 1.4 + (c.charge || 0) * 4);
+        c.crystal.position.y = c.crystalY + Math.sin(this.t * 2 + c.pos.x) * 0.2;
+        c.crystal.material.color.set(c.used ? 0x55ff99 : c.state === 'charging' ? 0xffc040 : 0x7fd6ff);
+        c.runes.forEach((r, i) => {
+          const lit = c.used || (c.charge || 0) >= (i + 1) / c.runes.length;
+          r.material.color.set(lit ? 0xffd060 : 0x335577);
+        });
+        c.zone.visible = c.state === 'charging';
+        c.fill.visible = c.state === 'charging';
+        if (c.state === 'charging') {
+          c.fill.scale.setScalar(Math.max(0.01, c.charge) * PILLAR_RADIUS);
+          c.zone.material.opacity = 0.45 + Math.sin(this.t * 5) * 0.2;
+        }
+        if (c.glyph) c.glyph.visible = !c.used;
       } else if (c.emblem) {
         c.emblem.rotation.y += dt * (c.used ? 0.2 : 1.2);
         if (c.glyph) c.glyph.visible = !c.used;

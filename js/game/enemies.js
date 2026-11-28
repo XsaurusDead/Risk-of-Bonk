@@ -54,9 +54,9 @@ export function spawnEnemy(id, pos, opts = {}) {
   const bossHp = opts.boss ? (hard ? Math.pow(d, 0.08) : 1.5) : 1; // portal bosses: a real fight, not a wall
   const champHp = champ ? (hard ? 32 : 10) : 1;
   const hpMult = d * bossHp * loopMult * (elite ? elite.hpMult : 1) * champHp * ot * hpScale;
-  // the first minutes of a run (stage 1, first loop) hit softer: 45% -> 100% over 5 minutes
-  const warmup = hard || run.stagesCleared || run.loop ? 1 : 0.45 + 0.55 * Math.min(1, run.time / 300);
-  const dmgMult = warmup * Math.pow(d, hard ? 0.8 : 0.7) * (1 + run.loop * 0.25) * (elite ? elite.dmgMult : 1) * (champ ? (hard ? 2.4 : 1.8) : 1) * Math.pow(ot, 0.9) * dmgScale;
+  // the first minutes of a run (stage 1, first loop) hit softer: 45% -> 100% over 6 minutes
+  const warmup = hard || run.stagesCleared || run.loop ? 1 : 0.45 + 0.55 * Math.min(1, run.time / 360);
+  const dmgMult = warmup * Math.pow(d, hard ? 0.8 : 0.78) * (1 + run.loop * 0.25) * (elite ? elite.dmgMult : 1) * (champ ? (hard ? 2.4 : 1.8) : 1) * Math.pow(ot, 0.9) * dmgScale;
 
   // animated GLB model if there is one (and it's loaded), else the procedural model
   const glb = def.glb ? buildEnemyModel(def.glb, def.height) : null;
@@ -75,7 +75,8 @@ export function spawnEnemy(id, pos, opts = {}) {
   // rim light makes enemies pop off the background; colour hints at elites/champions
   const rimCol = elite ? elite.color : champ ? 0xffcc55 : opts.boss ? 0xff5577 : 0xfff1dd;
   // textured (GLB) models keep their own look: just a faint rim
-  addRimLight(mat, rimCol, glb ? 0.3 : vox ? (elite || champ ? 0.7 : 0.25) : elite || champ || opts.boss ? 0.9 : 0.45);
+  if (def.rim) addRimLight(mat, def.rim[0], def.rim[1]);
+  else addRimLight(mat, rimCol, glb ? 0.3 : vox ? (elite || champ ? 0.7 : 0.25) : elite || champ || opts.boss ? 0.9 : 0.45);
   // a little individual variety in tint
   if (!opts.boss && !vox) mat.color.setRGB(0.9 + Math.random() * 0.2, 0.9 + Math.random() * 0.2, 0.9 + Math.random() * 0.2);
   const group = new THREE.Group();

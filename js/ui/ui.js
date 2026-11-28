@@ -51,6 +51,10 @@ function rewardText(a) {
     return `Unlocks costume <b style="color:${COSTUMES[+i].swatch || CHARACTERS[cid].color}">${COSTUMES[+i].name} ${CHARACTERS[cid].name}</b>`;
   }
   if (a.reward.character) return `Unlocks <b style="color:${CHARACTERS[a.reward.character].color}">${CHARACTERS[a.reward.character].name}</b>`;
+  if (a.reward.tome) {
+    const t = TOME_BY_ID[a.reward.tome];
+    return `Unlocks ${icon(t.icon)} <b style="color:#c070ff">${t.name}</b>`;
+  }
   if (a.reward.item) {
     const it = ITEMS[a.reward.item];
     return `Unlocks ${it.icon} <b class="r-${it.rarity}">${it.name}</b>`;
@@ -573,7 +577,7 @@ export const UI = {
           const isDone = !!G.save.achievements[a.id];
           if (f.mode === 'todo' && isDone) return false;
           if (f.mode === 'done' && !isDone) return false;
-          if (f.mode === 'reward' && !a.reward.item && !a.reward.character) return false;
+          if (f.mode === 'reward' && !a.reward.item && !a.reward.character && !a.reward.tome) return false;
           if (q && !(a.name + ' ' + a.desc + ' ' + rewardText(a)).toLowerCase().includes(q)) return false;
           return true;
         });
@@ -767,12 +771,12 @@ export const UI = {
   },
 
   // ------------------------------------------------------------ Moai
-  showMoai(choices) {
+  showMoai(choices, devil = true) {
     const cards = choices.map((id, i) => {
       const it = ITEMS[id];
       return `<button class="up-card" data-i="${i}" style="--c:${RARITY[it.rarity].color}"><div class="ic">${it.icon}</div><div><div class="rr">${RARITY[it.rarity].name}</div><div class="nm">${esc(it.name)}</div><div class="tx">${esc(it.desc)}</div></div><div class="key">[${i + 1}]</div></button>`;
     });
-    cards.push(`<button class="up-card devil" data-i="3"><div class="ic">${icon(UI_ICONS.devil)}</div><div><div class="rr">DEVIL'S TRADEMARK</div><div class="nm">Take the Mark</div><div class="tx">A rare currency. What it buys… you'll find out.</div></div><div class="key">[4]</div></button>`);
+    if (devil) cards.push(`<button class="up-card devil" data-i="3"><div class="ic">${icon(UI_ICONS.devil)}</div><div><div class="rr">DEVIL'S TRADEMARK</div><div class="nm">Take the Mark</div><div class="tx">A rare currency. What it buys… you'll find out.</div></div><div class="key">[4]</div></button>`);
     $('#moai-cards').innerHTML = cards.join('');
     $$('#moai-cards .up-card').forEach((b) => b.addEventListener('click', () => Game.chooseMoai(+b.dataset.i)));
     this.showScreen('moai');
@@ -1015,6 +1019,7 @@ export const UI = {
       ['Cooldowns', pct(s.cdMult)], ['Jumps', s.jumps], ['Area', pct(s.area)], ['Luck', s.luck.toFixed(2)], ['Pickup range', s.pickup.toFixed(1) + 'm'],
       ['XP gain', pct(s.xpMult)], ['Coin gain', pct(s.coinMult)], ['Dodge', pct(s.dodge)],
       ['Projectiles', '+' + (Math.round(s.projectiles * 100) / 100)], ['Life steal', pct(s.lifesteal)], ['Shield', Math.round(s.maxShield)],
+      ['Difficulty', `+${pct(s.difficulty || 0)}`],
     ];
     const out = { stats: '', tomes: '', weapons: '', items: '' };
     out.stats = `<h3>Stats — Level ${p.level}</h3><div class="st-grid">${rows.map(([a, b]) => `<span>${a} <b>${b}</b></span>`).join('')}</div>`;
@@ -1336,7 +1341,7 @@ export const UI = {
         text = it.obj.state === 'idle' ? `<span class="k">${key}</span>Activate portal <span class="cant">(summons ${n > 1 ? n + ' bosses' : 'the boss'}!)</span>` : `<span class="k">${key}</span>Enter portal`;
       } else {
         const T = {
-          heal: 'Shrine of Healing — restore 50% HP', xp: 'Shrine of Wisdom — gain experience', combat: 'Shrine of Combat — summon challengers for loot',
+          heal: 'Shrine of Healing — restore 50% HP', pillar: it.obj?.state === 'charging' ? `Pillar — charging ${Math.round((it.obj.charge || 0) * 100)}% (stay in the ring)` : 'Pillar of Ascension — charge it for a free tome / weapon upgrade', combat: 'Shrine of Combat — summon challengers for loot',
           boss: `Shrine of the Mountain — ${Math.min(8, (run.bossCount || 1) * 2)}x portal bosses (more loot)`, moai: 'Moai — choose a gift',
           magnet: 'Magnet Statue — pull every coin and XP orb to you for 20s',
         };

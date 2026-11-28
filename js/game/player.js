@@ -136,7 +136,7 @@ export class Player {
       cdr: 1, ultCdr: 1, jumps: 0, jumpPower: 0, pickup: 0, luck: 0, xp: 0, coins: 0, area: 0, lifeOnHit: 0, dodge: 0,
       shield: 0, chestDiscount: 0, execute: 0, kbImmune: false, glide: false, burnVuln: 0,
       dmgTakenMult: 1, procMult: 0, extraCharges: 0, burnImmune: false, poisonCap: 0,
-      tomeDodge: 0, projectiles: 0, lifesteal: 0,
+      tomeDodge: 0, projectiles: 0, lifesteal: 0, difficulty: 0,
     };
     m.damage += this.eaterDmg || 0;
     if (this.char.passive.mods) this.char.passive.mods(m, this);
@@ -185,6 +185,7 @@ export class Player {
     s.dodge = 1 - (1 - Math.max(0, itemDodge)) / (1 + m.tomeDodge);
     s.projectiles = m.projectiles;
     s.lifesteal = m.lifesteal;
+    s.difficulty = m.difficulty;
     s.maxShield = s.maxHp * m.shield;
     s.chestDiscount = m.chestDiscount;
     s.execute = m.execute;

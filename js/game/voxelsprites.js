@@ -80,6 +80,14 @@ export const VOX_MODELS = {
       death: { src: S + 'fantasy/spirit.png', cell: [112, 112], row: 4, n: 9, fps: 10, loop: false },
     },
   },
+  // overtime ghosts: the Cursed Spirit recoloured into a pale, spectral cyan
+  ghost: {
+    height: 2.6, depth: 1.1, recolor: 'ghost',
+    anims: {
+      idle: { src: S + 'fantasy/spirit.png', cell: [112, 112], row: 0, frames: range(14, 2), fps: 10 },
+      attack: { src: S + 'fantasy/spirit.png', cell: [112, 112], row: 1, frames: range(14, 2), fps: 12, loop: false },
+    },
+  },
   // one pose each in three colours: animated by the game (waddle, bob, lean, squash)
   skeleton_teal: { height: 2.1, depth: 1.0, anims: { idle: { src: [S + 'monsters/skeleton1.png'] } } },
   skeleton_gold: { height: 2.1, depth: 1.0, anims: { idle: { src: [S + 'monsters/skeleton2.png'] } } },
@@ -117,7 +125,15 @@ function loadImageData(url) {
 }
 
 /** Cut frame `i` out of an anim spec: { w, h, px: Uint8ClampedArray RGBA }. */
-async function frameData(spec, i, px) {
+const RECOLOR = {
+  // greyscale lifted into icy cyan, brightest parts nearly white
+  ghost: (r, g, b) => {
+    const l = 0.3 * r + 0.59 * g + 0.11 * b;
+    return [Math.min(255, l * 0.55 + 40), Math.min(255, l * 0.95 + 70), Math.min(255, l * 1.05 + 95)];
+  },
+};
+
+async function frameData(spec, i, px, recolor) {
   let data, x0 = 0, y0 = 0, w, h;
   if (Array.isArray(spec.src)) {
     data = await loadImageData(spec.src[i]);
@@ -142,7 +158,14 @@ async function frameData(spec, i, px) {
           if (data.data[si + 3] > best) { best = data.data[si + 3]; bi = si; }
         }
       }
-      out.set(data.data.subarray(bi, bi + 4), (y * ow + x) * 4);
+      const o = (y * ow + x) * 4;
+      out.set(data.data.subarray(bi, bi + 4), o);
+      if (recolor) {
+        const [r, g, b] = recolor(out[o], out[o + 1], out[o + 2]);
+        out[o] = r;
+        out[o + 1] = g;
+        out[o + 2] = b;
+      }
     }
   }
   return { w: ow, h: oh, px: out };
@@ -288,7 +311,7 @@ export function loadVoxModel(key) {
     const pxs = def.px || 1;
     const raw = {};
     for (const [name, spec] of Object.entries(def.anims)) {
-      raw[name] = await Promise.all(frameList(spec).map((i) => frameData(spec, i, pxs)));
+      raw[name] = await Promise.all(frameList(spec).map((i) => frameData(spec, i, pxs, RECOLOR[def.recolor])));
     }
     // pivot and scale from the idle frames: centred, feet at the bottom of the art
     let x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;

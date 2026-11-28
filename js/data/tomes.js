@@ -38,6 +38,9 @@ export const TOMES = [
   { id: 'giant', name: 'Tome of the Giant', icon: 1047, base: 0.05, stat: 'area', fmt: (v) => `+${pct(v)} size` },
   { id: 'magnet', name: 'Tome of Attraction', icon: 117, base: 0.6, stat: 'pickup', fmt: (v) => `+${Math.round(v * 10) / 10}m pickup range` },
   { id: 'vitality', name: 'Tome of Vitality', icon: 1042, base: 0.08, stat: 'maxHp', fmt: (v) => `+${pct(v)} max HP` },
+  // unlockable (achievement "Chaos Seeker"): turns the whole game up. Common 7%, rare 11.2%,
+  // epic 16.8%, legendary 28% per pick; no cap.
+  { id: 'chaos', name: 'Tome of Chaos', icon: 1049, base: 0.07, stat: 'difficulty', fmt: (v) => `+${pct(v)} difficulty`, note: 'Stronger AND more enemies — more kills, more XP, more gold. No cap.', unlock: 'chaos_seeker' },
   { id: 'agility', name: 'Tome of Agility', icon: 1170, base: 0.04, stat: 'moveSpeed', fmt: (v) => `+${pct(v)} movement speed`, note: 'Counts half past +100%.' },
 ];
 export const TOME_BY_ID = Object.fromEntries(TOMES.map((t) => [t.id, t]));
@@ -64,6 +67,7 @@ export function applyTomes(m, tomes) {
       case 'area': m.area += v; break;
       case 'pickup': m.pickup += v; break;
       case 'maxHp': m.maxHpPct += v; break;
+      case 'difficulty': m.difficulty += v; break;
       case 'moveSpeed': m.moveSpeed += v <= 1 ? v : 1 + (v - 1) * 0.5; break;
     }
   }

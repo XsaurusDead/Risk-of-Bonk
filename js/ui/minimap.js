@@ -14,7 +14,7 @@ const MARK = {
   heal: { icon: '💚', col: '#55ff88', label: 'Healing shrine' },
   combat: { icon: '⚔️', col: '#ff4433', label: 'Combat shrine' },
   boss: { icon: '💀', col: '#b455ff', label: 'Boss shrine' },
-  xp: { icon: '📘', col: '#55e6ff', label: 'Wisdom shrine' },
+  pillar: { icon: '🗼', col: '#ffd060', label: 'Charge pillar' },
   moai: { icon: '🗿', col: '#ff8070', label: 'Moai' },
   magnet: { icon: '🧲', col: '#ff5566', label: 'Magnet statue' },
   portal: { icon: '🌀', col: '#ff3355', label: 'Portal' },
@@ -111,7 +111,7 @@ export const Minimap = {
       out.push({ x: it.pos.x, z: it.pos.z, m: MARK[it.kind === 'chest' ? 'chest_' + it.tier : it.kind] });
     }
     for (const p of w.jumpPads) out.push({ x: p.x, z: p.z, m: MARK.pad });
-    for (const c of w.caves) out.push({ x: c.x, z: c.z, m: MARK.cave });
+    for (const c of w.caves) if (!c.chest?.used) out.push({ x: c.x, z: c.z, m: MARK.cave }); // looted caves vanish
     if (w.portal && w.portal.state !== 'none') out.push({ x: w.portal.pos.x, z: w.portal.pos.z, m: MARK.portal, always: true });
     return out;
   },

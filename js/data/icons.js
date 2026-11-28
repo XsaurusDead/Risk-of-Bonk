@@ -91,7 +91,7 @@ export const UI_ICONS = {
 // minimap markers (also used in the big map legend)
 export const MAP_ICONS = {
   chest_normal: 1270, chest_large: 1138, chest_epic: 1204, chest_legendary: 1344, heal: 1073, combat: 1005,
-  boss: 1049, xp: 101, moai: 17, portal: 1145, pad: 1039, cave: 16, magnet: 117,
+  boss: 1049, pillar: 1144, moai: 17, portal: 1145, pad: 1039, cave: 16, magnet: 117,
 };
 
 const STAGE_ICONS = { meadows: 1110, dunes: 17, peaks: 1014, hollow: 1069, caldera: 1000, void: 1050, throne: 1040 };
