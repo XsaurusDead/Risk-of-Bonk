@@ -780,7 +780,7 @@ export class Player {
     // you skip ground friction, so you keep your speed, and every perfect hop adds a bit.
     // In the air, strafing (A / D while turning the mouse the same way) accelerates you
     // further. A press up to HOP_BUFFER s before touching down counts as perfect.
-    const HOP_WINDOW = 0.12, HOP_BUFFER = 0.16, HOP_GAIN = 0.08, HOP_CAP = 2.4;
+    const HOP_WINDOW = 0.12, HOP_BUFFER = 0.16, HOP_GAIN = 0.08, HOP_CAP = 3.0;
     const base = speed;
     const hv = Math.hypot(this.vel.x, this.vel.z);
     this.landT = this.grounded ? (this.landT || 0) + dt : 0;

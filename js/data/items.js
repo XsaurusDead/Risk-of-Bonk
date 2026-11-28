@@ -97,8 +97,8 @@ const list = [
     onHit: (n, h) => { if (h.crit) G.player.heal(6 * n * Math.max(0.3, h.procCoef)); },
   },
   {
-    id: 'volatile_core', name: 'Volatile Core', rarity: 'rare', icon: '💥', desc: 'Enemies explode on death for 250% damage.',
-    onKill: (n, e) => explode(e.pos, 3.5 + n * 0.8, G.player.stats.damage * 2.5, { color: 0xff7733, procCoef: 0 }),
+    id: 'volatile_core', name: 'Volatile Core', rarity: 'rare', icon: '💥', desc: 'Enemies explode on death for 70% damage. Stacks increase the blast radius.',
+    onKill: (n, e) => explode(e.pos, 3.5 + n * 0.8, G.player.stats.damage * 0.7, { color: 0xff7733, procCoef: 0 }),
   },
   { id: 'wind_sigil', name: 'Wind Sigil', rarity: 'rare', icon: '🌀', desc: '+1 jump, +10% movement speed, +10% jump height.', mods: (m, n) => { m.jumps += n; m.moveSpeed += 0.1 * n; m.jumpPower += 0.1 * n; } },
   { id: 'shield_gen', name: 'Shield Generator', rarity: 'rare', icon: '🔋', desc: 'Gain a shield equal to 12% max HP. Recharges after 4s without damage.', mods: (m, n) => (m.shield += 0.12 * n) },
