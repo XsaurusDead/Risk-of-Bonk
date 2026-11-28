@@ -818,7 +818,7 @@ export const Game = {
     o.charge = o.charge || 0;
     sfx('portal');
     ring(o.pos, PILLAR_RADIUS, 0xffc040, 0.6);
-    if (!o.woke) G.ui?.toastText(o.golden ? 'Golden pillar charging — stay in the ring for a LEGENDARY upgrade' : 'Pillar charging — stay in the ring for a free upgrade');
+    if (!o.woke) G.ui?.toastText(o.golden ? 'Golden pillar charging — stay in the ring for a LEGENDARY upgrade (leaving resets it)' : 'Pillar charging — stay in the ring for a free upgrade (leaving resets it)');
     if (o.woke) return;
     o.woke = true;
     // its glow draws a pack of enemies
@@ -835,8 +835,17 @@ export const Game = {
         if (!inZone) continue;
         this.activatePillar(o);
       }
-      // charges while you stand in it, drains slowly when you leave
-      o.charge = Math.max(0, Math.min(1, o.charge + (inZone ? dt / PILLAR_TIME : -dt / (PILLAR_TIME * 3))));
+      // charges while you stand in it; step out and the charge is lost completely
+      if (!inZone) {
+        if (o.charge > 0.02) {
+          floatText(o.pos.clone().setY(o.pos.y + 7), 'CHARGE LOST', '#ff6a6a', true);
+          sfx('deny', 0.3);
+        }
+        o.charge = 0;
+        o.quarter = 0;
+        continue;
+      }
+      o.charge = Math.min(1, o.charge + dt / PILLAR_TIME);
       const q = Math.floor(o.charge * 4);
       if (q > (o.quarter || 0) && q < 4) {
         o.quarter = q;
