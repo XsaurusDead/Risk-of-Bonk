@@ -1,6 +1,6 @@
 // Run checkpoint save: lets a run be continued later (from the title screen).
-// The run is stored at every stage start, every 15s while playing, on "Save & Quit"
-// and when the tab is hidden / closed. Resuming rebuilds the SAME stage map (same seed)
+// The run is stored at every stage start, every 3s while playing, on "Save & Quit"
+// and when the tab is hidden, reloaded or closed. Resuming rebuilds the SAME stage map (same seed)
 // and restores it exactly as it was: stage timer + wave schedule, portal and boss
 // state, which chests / shrines / pillars / Moai were used, HP and position — so
 // quitting and resuming can never reset the stage clock.

@@ -559,7 +559,7 @@ export const Game = {
       if (run.finalSpawnT <= 0) this.spawnFinalBoss();
     }
     if (!run.inShop) run.saveT += dt;
-    if (run.saveT > 15 && !p.dead) {
+    if (run.saveT > 3 && !p.dead) {
       run.saveT = 0;
       saveRun();
     }

@@ -85,6 +85,8 @@ async function boot() {
     if (document.hidden) saveNow();
   });
   window.addEventListener('pagehide', saveNow);
+  window.addEventListener('beforeunload', saveNow);
+  document.addEventListener('freeze', saveNow); // mobile browsers suspending the tab
 
   Input.init(canvas);
   Music.init();
@@ -94,6 +96,7 @@ async function boot() {
   Game.init();
   UI.init();
   document.getElementById('loading').classList.add('hidden');
+  try { sessionStorage.removeItem('rb_reload'); } catch (_) {}
   requestAnimationFrame(loop);
 }
 

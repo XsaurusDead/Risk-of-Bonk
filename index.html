@@ -328,6 +328,7 @@
     <div id="loading">Loading…</div>
   </div>
 
-  <script type="module" src="js/main.js"></script>
+  <!-- if a stale cached page points at an old code folder (after an update), reload once for the fresh one -->
+  <script type="module" src="js/main.js" onerror="try{if(!sessionStorage.getItem('rb_reload')){sessionStorage.setItem('rb_reload','1');location.reload();}}catch(e){}"></script>
 </body>
 </html>

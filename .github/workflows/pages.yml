@@ -37,6 +37,12 @@ jobs:
           cp -r assets/packs/stylized-nature/web _site/assets/packs/stylized-nature/
           cp -r assets/models/game _site/assets/models/
           cp assets/models/fox/fox.glb _site/assets/models/fox/
+          # cache busting: every deploy serves the code from a new folder (js-<commit>), so
+          # a reload after an update never mixes old cached modules with new ones
+          V=${GITHUB_SHA::8}
+          mv _site/js _site/js-$V
+          sed -i "s#src=\"js/main.js\"#src=\"js-$V/main.js\"#; s#href=\"css/style.css\"#href=\"css/style.css?v=$V\"#" _site/index.html
+          grep -n "js-$V/main.js" _site/index.html
           du -sh _site
       - uses: actions/upload-pages-artifact@v3
         with:
